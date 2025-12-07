@@ -1,0 +1,16 @@
+{
+  "name": "ぬるぬる",
+  "short_name": "ぬるぬる",
+  "description": "Nostr Client",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#06C755",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
