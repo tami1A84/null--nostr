@@ -1,0 +1,590 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { 
+  shortenPubkey, 
+  formatTimestamp, 
+  parseNostrLink, 
+  fetchEvents, 
+  parseProfile,
+  verifyNip05,
+  encodeNpub,
+  RELAYS 
+} from '@/lib/nostr'
+
+// NIP-05 verified badge component
+function Nip05Badge({ nip05, pubkey }) {
+  const [verified, setVerified] = useState(false)
+  const [checking, setChecking] = useState(true)
+
+  useEffect(() => {
+    if (!nip05 || !pubkey) {
+      setChecking(false)
+      return
+    }
+
+    let mounted = true
+    verifyNip05(nip05, pubkey).then(result => {
+      if (mounted) {
+        setVerified(result)
+        setChecking(false)
+      }
+    })
+
+    return () => { mounted = false }
+  }, [nip05, pubkey])
+
+  if (!nip05 || checking) return null
+  if (!verified) return null
+
+  const display = nip05.startsWith('_@') ? nip05.slice(1) : nip05
+
+  return (
+    <span className="inline-flex items-center gap-0.5 text-xs text-[var(--line-green)]" title={`NIP-05: ${nip05}`}>
+      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+      </svg>
+      <span className="truncate max-w-[120px]">{display}</span>
+    </span>
+  )
+}
+
+// Embedded note component for nostr:note1... and nostr:nevent1...
+function EmbeddedNote({ noteId, relays }) {
+  const [note, setNote] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+    
+    const loadNote = async () => {
+      try {
+        const events = await fetchEvents(
+          { ids: [noteId], limit: 1 },
+          relays?.length ? relays : RELAYS
+        )
+        
+        if (!mounted) return
+        
+        if (events.length > 0) {
+          setNote(events[0])
+          
+          const profileEvents = await fetchEvents(
+            { kinds: [0], authors: [events[0].pubkey], limit: 1 },
+            RELAYS
+          )
+          if (mounted && profileEvents.length > 0) {
+            setProfile(parseProfile(profileEvents[0]))
+          }
+        } else {
+          setError(true)
+        }
+      } catch (e) {
+        if (mounted) setError(true)
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    loadNote()
+    return () => { mounted = false }
+  }, [noteId, relays])
+
+  if (loading) {
+    return (
+      <div className="border border-[var(--border-color)] rounded-lg p-3 my-2 bg-[var(--bg-secondary)]">
+        <div className="animate-pulse flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full bg-[var(--bg-tertiary)]" />
+          <div className="h-3 w-24 bg-[var(--bg-tertiary)] rounded" />
+        </div>
+        <div className="animate-pulse mt-2 h-4 w-full bg-[var(--bg-tertiary)] rounded" />
+      </div>
+    )
+  }
+
+  if (error || !note) {
+    return (
+      <div className="border border-[var(--border-color)] rounded-lg p-3 my-2 bg-[var(--bg-secondary)] text-[var(--text-tertiary)] text-sm">
+        📝 引用ノートを読み込めませんでした
+      </div>
+    )
+  }
+
+  return (
+    <div className="border border-[var(--border-color)] rounded-lg p-3 my-2 bg-[var(--bg-secondary)]">
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className="w-5 h-5 rounded-full overflow-hidden bg-[var(--bg-tertiary)] flex-shrink-0">
+          {profile?.picture ? (
+            <img src={profile.picture} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <svg className="w-3 h-3 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+            </div>
+          )}
+        </div>
+        <span className="text-xs font-medium text-[var(--text-primary)] truncate">
+          {profile?.name || shortenPubkey(note.pubkey, 6)}
+        </span>
+        {profile?.nip05 && (
+          <Nip05Badge nip05={profile.nip05} pubkey={note.pubkey} />
+        )}
+        <span className="text-xs text-[var(--text-tertiary)]">
+          · {formatTimestamp(note.created_at)}
+        </span>
+      </div>
+      <p className="text-sm text-[var(--text-primary)] whitespace-pre-wrap break-words line-clamp-4">
+        {note.content?.slice(0, 280)}{note.content?.length > 280 ? '...' : ''}
+      </p>
+    </div>
+  )
+}
+
+// Embedded profile component for nostr:npub1... and nostr:nprofile1...
+function EmbeddedProfile({ pubkey, relays }) {
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    
+    const loadProfile = async () => {
+      try {
+        const events = await fetchEvents(
+          { kinds: [0], authors: [pubkey], limit: 1 },
+          relays?.length ? relays : RELAYS
+        )
+        if (mounted && events.length > 0) {
+          setProfile(parseProfile(events[0]))
+        }
+      } catch (e) {
+        console.log('Failed to load profile:', e)
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    loadProfile()
+    return () => { mounted = false }
+  }, [pubkey, relays])
+
+  const npub = encodeNpub(pubkey)
+
+  if (loading) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[var(--line-green)]">
+        @...
+      </span>
+    )
+  }
+
+  return (
+    <span className="inline-flex items-center gap-0.5 text-[var(--line-green)] hover:underline cursor-pointer" title={npub}>
+      @{profile?.name || shortenPubkey(pubkey, 6)}
+    </span>
+  )
+}
+
+// Main PostItem component
+export default function PostItem({ 
+  post, 
+  profile, 
+  profiles, 
+  likeCount = 0, 
+  hasLiked = false, 
+  hasReposted = false,
+  myReactionId = null,
+  myRepostId = null,
+  isLiking = false, 
+  isZapping = false, 
+  onLike, 
+  onUnlike,
+  onRepost,
+  onUnrepost, 
+  onZap,
+  onZapLongPress,
+  onZapLongPressEnd,
+  onAvatarClick,
+  onMute,
+  onDelete,
+  isOwnPost = false,
+  isRepost = false, 
+  repostedBy = null,
+  showActions = true 
+}) {
+  const [showMenu, setShowMenu] = useState(false)
+  const displayProfile = isRepost ? profiles?.[post.pubkey] : profile
+  
+  // Check if this is a reply
+  const isReply = post.tags?.some(t => t[0] === 'e')
+  
+  // Get reply target pubkey
+  const replyTargetPubkey = isReply ? post.tags?.find(t => t[0] === 'p')?.[1] : null
+  const replyTargetProfile = replyTargetPubkey ? profiles?.[replyTargetPubkey] : null
+  
+  // Extract custom emoji map from tags (NIP-30)
+  const customEmojiMap = {}
+  if (post.tags) {
+    for (const tag of post.tags) {
+      if (tag[0] === 'emoji' && tag[1] && tag[2]) {
+        customEmojiMap[tag[1]] = tag[2]
+      }
+    }
+  }
+  
+  // Replace custom emoji shortcodes with images
+  const emojifyContent = (text) => {
+    if (!text || Object.keys(customEmojiMap).length === 0) return text
+    
+    // Match :shortcode: pattern
+    const emojiRegex = /:([a-zA-Z0-9_]+):/g
+    const parts = []
+    let lastIndex = 0
+    let match
+    
+    while ((match = emojiRegex.exec(text)) !== null) {
+      const shortcode = match[1]
+      const emojiUrl = customEmojiMap[shortcode]
+      
+      // Add text before this match
+      if (match.index > lastIndex) {
+        parts.push(text.slice(lastIndex, match.index))
+      }
+      
+      // Add emoji image or keep original text
+      if (emojiUrl) {
+        parts.push(
+          <img 
+            key={`emoji-${match.index}`}
+            src={emojiUrl} 
+            alt={`:${shortcode}:`}
+            title={`:${shortcode}:`}
+            className="inline-block w-5 h-5 align-middle mx-0.5"
+            loading="lazy"
+          />
+        )
+      } else {
+        parts.push(match[0])
+      }
+      
+      lastIndex = match.index + match[0].length
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex))
+    }
+    
+    return parts.length > 0 ? parts : text
+  }
+  
+  // Render content with nostr: links, URLs, images, and custom emoji
+  const renderContent = (content) => {
+    if (!content) return null
+    
+    // Use non-capturing group (?:...) to avoid duplicate parts in split result
+    const combinedRegex = /(https?:\/\/[^\s]+|nostr:(?:note1|nevent1|npub1|nprofile1|naddr1)[a-z0-9]+)/gi
+    
+    const parts = content.split(combinedRegex).filter(Boolean)
+    
+    return parts.map((part, i) => {
+      // Check for nostr: links
+      if (part.startsWith('nostr:')) {
+        const bech32 = part.slice(6) // Remove 'nostr:' prefix
+        const parsed = parseNostrLink(bech32)
+        
+        if (parsed) {
+          if (parsed.type === 'note') {
+            return <EmbeddedNote key={i} noteId={parsed.id} />
+          }
+          if (parsed.type === 'nevent') {
+            return <EmbeddedNote key={i} noteId={parsed.id} relays={parsed.relays} />
+          }
+          if (parsed.type === 'npub') {
+            return <EmbeddedProfile key={i} pubkey={parsed.pubkey} />
+          }
+          if (parsed.type === 'nprofile') {
+            return <EmbeddedProfile key={i} pubkey={parsed.pubkey} relays={parsed.relays} />
+          }
+        }
+        
+        // Fallback: show as link
+        return (
+          <span key={i} className="text-[var(--line-green)]">
+            {part}
+          </span>
+        )
+      }
+      
+      // Check for image URLs
+      if (part.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i)) {
+        return (
+          <img 
+            key={i} 
+            src={part} 
+            alt="" 
+            className="mt-2 rounded-lg max-h-72 w-full object-cover"
+            loading="lazy"
+          />
+        )
+      }
+      
+      // Check for video URLs
+      if (part.match(/^https?:\/\/.*\.(mp4|webm|mov)(\?.*)?$/i)) {
+        return (
+          <video 
+            key={i} 
+            src={part} 
+            controls
+            className="mt-2 rounded-lg max-h-72 w-full"
+          />
+        )
+      }
+      
+      // Check for regular URLs
+      if (part.match(/^https?:\/\//)) {
+        return (
+          <a 
+            key={i} 
+            href={part} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-[var(--line-green)] hover:underline break-all"
+          >
+            {part.length > 50 ? part.slice(0, 50) + '...' : part}
+          </a>
+        )
+      }
+      
+      // Apply custom emoji to text parts
+      const emojified = emojifyContent(part)
+      return <span key={i}>{emojified}</span>
+    })
+  }
+
+  const handleAvatarClick = (e) => {
+    e.stopPropagation()
+    if (onAvatarClick) {
+      onAvatarClick(post.pubkey, displayProfile)
+    }
+  }
+
+  const handleMute = () => {
+    setShowMenu(false)
+    if (onMute) {
+      onMute(post.pubkey)
+    }
+  }
+
+  const handleDelete = () => {
+    setShowMenu(false)
+    if (onDelete) {
+      onDelete(post.id)
+    }
+  }
+
+  const handleLikeClick = () => {
+    if (hasLiked && myReactionId && onUnlike) {
+      onUnlike(post, myReactionId)
+    } else if (!hasLiked && onLike) {
+      onLike(post)
+    }
+  }
+
+  const handleRepostClick = () => {
+    if (hasReposted && myRepostId && onUnrepost) {
+      onUnrepost(post, myRepostId)
+    } else if (!hasReposted && onRepost) {
+      onRepost(post)
+    }
+  }
+
+  return (
+    <article className="px-4 py-3 relative">
+      {/* Repost indicator */}
+      {isRepost && repostedBy && (
+        <div className="flex items-center gap-2 mb-2 text-[var(--text-tertiary)] text-xs">
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="17 1 21 5 17 9"/>
+            <path d="M3 11V9a4 4 0 014-4h14"/>
+            <polyline points="7 23 3 19 7 15"/>
+            <path d="M21 13v2a4 4 0 01-4 4H3"/>
+          </svg>
+          <span>{repostedBy.name || shortenPubkey(repostedBy.pubkey, 6)} がリポスト</span>
+        </div>
+      )}
+      
+      {/* Reply indicator */}
+      {isReply && !isRepost && (
+        <div className="flex items-center gap-2 mb-2 text-[var(--text-tertiary)] text-xs">
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
+          </svg>
+          <span>
+            {replyTargetPubkey ? (
+              <>
+                <span className="text-[var(--line-green)]">
+                  @{replyTargetProfile?.name || shortenPubkey(replyTargetPubkey, 6)}
+                </span>
+                <span> への返信</span>
+              </>
+            ) : (
+              'リプライ'
+            )}
+          </span>
+        </div>
+      )}
+      
+      <div className="flex items-start gap-3">
+        {/* Avatar - clickable */}
+        <button 
+          onClick={handleAvatarClick}
+          className="w-10 h-10 rounded-full overflow-hidden bg-[var(--bg-tertiary)] flex-shrink-0 hover:opacity-80 transition-opacity"
+        >
+          {displayProfile?.picture ? (
+            <img 
+              src={displayProfile.picture} 
+              alt="" 
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <svg className="w-5 h-5 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+            </div>
+          )}
+        </button>
+        
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+            <button 
+              onClick={handleAvatarClick}
+              className="font-semibold text-[var(--text-primary)] text-sm truncate max-w-[150px] hover:underline"
+            >
+              {displayProfile?.name || 'Anonymous'}
+            </button>
+            {/* NIP-05 badge */}
+            {displayProfile?.nip05 && (
+              <Nip05Badge nip05={displayProfile.nip05} pubkey={post.pubkey} />
+            )}
+            <span className="text-xs text-[var(--text-tertiary)]">
+              · {formatTimestamp(post.created_at)}
+            </span>
+            
+            {/* Menu button */}
+            {(onMute || (isOwnPost && onDelete)) && (
+              <div className="relative ml-auto">
+                <button
+                  onClick={() => setShowMenu(!showMenu)}
+                  className="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] action-btn"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="5" r="2"/>
+                    <circle cx="12" cy="12" r="2"/>
+                    <circle cx="12" cy="19" r="2"/>
+                  </svg>
+                </button>
+                
+                {/* Dropdown menu */}
+                {showMenu && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setShowMenu(false)}
+                    />
+                    <div className="absolute right-0 top-6 z-50 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[140px]">
+                      {isOwnPost && onDelete && (
+                        <button
+                          onClick={handleDelete}
+                          className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                            <line x1="10" y1="11" x2="10" y2="17"/>
+                            <line x1="14" y1="11" x2="14" y2="17"/>
+                          </svg>
+                          削除
+                        </button>
+                      )}
+                      {onMute && !isOwnPost && (
+                        <button
+                          onClick={handleMute}
+                          className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                          </svg>
+                          ミュート
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <div className="text-[var(--text-primary)] text-sm whitespace-pre-wrap break-words">
+            {renderContent(post.content)}
+          </div>
+          
+          {/* Actions */}
+          {showActions && (
+            <div className="flex items-center gap-8 mt-3">
+              {/* Like - Thumbs Up */}
+              <button
+                onClick={handleLikeClick}
+                className={`action-btn flex items-center gap-1.5 text-sm ${
+                  hasLiked ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'
+                } ${isLiking ? 'like-animation' : ''}`}
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill={hasLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8">
+                  <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
+                </svg>
+                {likeCount > 0 && <span>{likeCount}</span>}
+              </button>
+
+              {/* Repost */}
+              <button
+                onClick={handleRepostClick}
+                className={`action-btn flex items-center gap-1.5 text-sm ${
+                  hasReposted ? 'text-green-500' : 'text-[var(--text-tertiary)]'
+                }`}
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="17 1 21 5 17 9"/>
+                  <path d="M3 11V9a4 4 0 014-4h14"/>
+                  <polyline points="7 23 3 19 7 15"/>
+                  <path d="M21 13v2a4 4 0 01-4 4H3"/>
+                </svg>
+              </button>
+
+              {/* Zap */}
+              <button
+                onClick={() => onZap?.(post)}
+                onTouchStart={() => onZapLongPress?.(post)}
+                onTouchEnd={() => onZapLongPressEnd?.()}
+                onMouseDown={() => onZapLongPress?.(post)}
+                onMouseUp={() => onZapLongPressEnd?.()}
+                onMouseLeave={() => onZapLongPressEnd?.()}
+                className={`action-btn flex items-center gap-1.5 text-sm text-[var(--text-tertiary)] ${
+                  isZapping ? 'zap-animation text-yellow-500' : ''
+                }`}
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill={isZapping ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </article>
+  )
+}
