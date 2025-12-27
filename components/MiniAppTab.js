@@ -261,7 +261,7 @@ const UPLOAD_SERVERS = [
   { id: 'blossom.nostr', name: 'Blossom (nostr.build)', url: 'https://blossom.nostr.build' },
 ]
 
-export default function MiniAppTab({ pubkey }) {
+export default function MiniAppTab({ pubkey, onLogout }) {
   const [defaultZap, setDefaultZap] = useState(21)
   const [muteList, setMuteList] = useState({ pubkeys: [], eventIds: [], hashtags: [], words: [] })
   const [mutedProfiles, setMutedProfiles] = useState({})
@@ -269,30 +269,31 @@ export default function MiniAppTab({ pubkey }) {
   const [removing, setRemoving] = useState(null)
   const [showZapInput, setShowZapInput] = useState(false)
   const [customZap, setCustomZap] = useState('')
-  
+
   // Relay settings - simplified to single relay
   const [currentRelay, setCurrentRelay] = useState('wss://yabu.me')
   const [showRelaySettings, setShowRelaySettings] = useState(false)
   const [relaySearch, setRelaySearch] = useState('')
   const [customRelayUrl, setCustomRelayUrl] = useState('')
-  
+
   // Upload server settings
   const [uploadServerState, setUploadServerState] = useState('nostr.build')
   const [customBlossomUrl, setCustomBlossomUrl] = useState('')
   const [showUploadSettings, setShowUploadSettings] = useState(false)
-  
+
   // Collapsed section states
+  const [showScheduler, setShowScheduler] = useState(false)
   const [showZapSettings, setShowZapSettings] = useState(false)
   const [showMuteSettings, setShowMuteSettings] = useState(false)
   const [showBadgeSettings, setShowBadgeSettings] = useState(false)
-  
+
   // Badge settings
   const [profileBadges, setProfileBadges] = useState([])
   const [awardedBadges, setAwardedBadges] = useState([])
   const [loadingBadges, setLoadingBadges] = useState(false)
   const [removingBadge, setRemovingBadge] = useState(null)
   const [addingBadge, setAddingBadge] = useState(null)
-  
+
   // Emoji settings
   const [showEmojiSettings, setShowEmojiSettings] = useState(false)
   const [userEmojis, setUserEmojis] = useState([])
@@ -304,6 +305,13 @@ export default function MiniAppTab({ pubkey }) {
   const [searchingEmoji, setSearchingEmoji] = useState(false)
   const [addingEmojiSet, setAddingEmojiSet] = useState(null)
 
+  // My Mini Apps state
+  const [favoriteApps, setFavoriteApps] = useState([])
+  const [showMyApps, setShowMyApps] = useState(true)
+  const [externalAppUrl, setExternalAppUrl] = useState('')
+  const [externalAppName, setExternalAppName] = useState('')
+  const [draggedIndex, setDraggedIndex] = useState(null)
+
   useEffect(() => {
     // Load saved default zap from localStorage
     const saved = localStorage.getItem('defaultZapAmount')
@@ -313,9 +321,19 @@ export default function MiniAppTab({ pubkey }) {
 
     // Load relay setting
     setCurrentRelay(getDefaultRelay())
-    
+
     // Load upload server setting
     setUploadServerState(getUploadServer())
+
+    // Load favorite mini apps
+    const savedFavorites = localStorage.getItem('favoriteMiniApps')
+    if (savedFavorites) {
+      try {
+        setFavoriteApps(JSON.parse(savedFavorites))
+      } catch (e) {
+        console.error('Failed to load favorite apps:', e)
+      }
+    }
 
     if (pubkey) {
       loadMuteList()
@@ -874,6 +892,135 @@ export default function MiniAppTab({ pubkey }) {
     }
   }
 
+  // My Mini Apps management
+  const saveFavoriteApps = (apps) => {
+    setFavoriteApps(apps)
+    localStorage.setItem('favoriteMiniApps', JSON.stringify(apps))
+  }
+
+  const handleAddToFavorites = (appId, appName, appType = 'internal') => {
+    const newApp = { id: appId, name: appName, type: appType }
+    if (!favoriteApps.some(app => app.id === appId)) {
+      saveFavoriteApps([...favoriteApps, newApp])
+    }
+  }
+
+  const handleRemoveFromFavorites = (appId) => {
+    saveFavoriteApps(favoriteApps.filter(app => app.id !== appId))
+  }
+
+  const handleAddExternalApp = () => {
+    const url = externalAppUrl.trim()
+    if (url && url.startsWith('http')) {
+      const appId = 'external_' + Date.now()
+      // Use user-provided name, or fallback to hostname
+      const appName = externalAppName.trim() || new URL(url).hostname
+      const newApp = { id: appId, name: appName, type: 'external', url }
+      saveFavoriteApps([...favoriteApps, newApp])
+      setExternalAppUrl('')
+      setExternalAppName('')
+    }
+  }
+
+  const handleDragStart = (index) => {
+    setDraggedIndex(index)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+  }
+
+  const handleDrop = (dropIndex) => {
+    if (draggedIndex === null) return
+    const newApps = [...favoriteApps]
+    const [removed] = newApps.splice(draggedIndex, 1)
+    newApps.splice(dropIndex, 0, removed)
+    saveFavoriteApps(newApps)
+    setDraggedIndex(null)
+  }
+
+  const handleLogoutClick = () => {
+    if (onLogout && confirm('ログアウトしますか？')) {
+      onLogout()
+    }
+  }
+
+  const handleFavoriteAppClick = (app) => {
+    // For external apps, open in new tab
+    if (app.type === 'external' && app.url) {
+      window.open(app.url, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    // For internal apps, expand the corresponding section
+    switch (app.id) {
+      case 'scheduler':
+        setShowScheduler(true)
+        // Scroll to scheduler section
+        setTimeout(() => {
+          document.querySelector('#scheduler-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'zap':
+        setShowZapSettings(true)
+        setTimeout(() => {
+          document.querySelector('#zap-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'relay':
+        setShowRelaySettings(true)
+        setTimeout(() => {
+          document.querySelector('#relay-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'upload':
+        setShowUploadSettings(true)
+        setTimeout(() => {
+          document.querySelector('#upload-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'mute':
+        setShowMuteSettings(true)
+        setTimeout(() => {
+          document.querySelector('#mute-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'badge':
+        setShowBadgeSettings(true)
+        // Load badges if not already loaded
+        if (profileBadges.length === 0 && awardedBadges.length === 0 && !loadingBadges) {
+          loadBadges()
+        }
+        setTimeout(() => {
+          document.querySelector('#badge-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'emoji':
+        setShowEmojiSettings(true)
+        // Load emojis if not already loaded
+        if (userEmojis.length === 0 && userEmojiSets.length === 0 && !loadingEmojis) {
+          loadUserEmojis()
+        }
+        setTimeout(() => {
+          document.querySelector('#emoji-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      default:
+        break
+    }
+  }
+
+  // Available mini apps that can be added to favorites
+  const availableMiniApps = [
+    { id: 'scheduler', name: '調整くん' },
+    { id: 'zap', name: 'Zap設定' },
+    { id: 'relay', name: 'リレー設定' },
+    { id: 'upload', name: 'アップロード設定' },
+    { id: 'mute', name: 'ミュートリスト' },
+    { id: 'badge', name: 'プロフィールバッジ' },
+    { id: 'emoji', name: 'カスタム絵文字' },
+  ].filter(app => !favoriteApps.some(fav => fav.id === app.id))
+
   return (
     <div className="min-h-screen pb-20">
       {/* Header */}
@@ -884,10 +1031,10 @@ export default function MiniAppTab({ pubkey }) {
       </header>
 
       <div className="p-4 space-y-4">
-        {/* Login Method Display */}
+        {/* Login Method Display with Logout Button */}
         <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[var(--line-green)] flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-[var(--line-green)] flex items-center justify-center flex-shrink-0">
               {getLoginMethod() === 'nosskey' ? (
                 <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2a4 4 0 014 4v2h2a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V10a2 2 0 012-2h2V6a4 4 0 014-4z"/>
@@ -914,9 +1061,9 @@ export default function MiniAppTab({ pubkey }) {
                 </svg>
               )}
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <p className="font-medium text-[var(--text-primary)]">
-                {getLoginMethod() === 'nosskey' ? 'パスキーでログイン中' : 
+                {getLoginMethod() === 'nosskey' ? 'パスキーでログイン中' :
                  getLoginMethod() === 'extension' ? '拡張機能でログイン中' :
                  getLoginMethod() === 'readOnly' ? '読み取り専用モード' :
                  getLoginMethod() === 'local' ? 'ローカルキーでログイン中' :
@@ -924,7 +1071,7 @@ export default function MiniAppTab({ pubkey }) {
                  'ログイン中'}
               </p>
               <p className="text-xs text-[var(--text-tertiary)]">
-                {getLoginMethod() === 'nosskey' ? 'Face ID / Touch ID / Windows Hello' : 
+                {getLoginMethod() === 'nosskey' ? 'Face ID / Touch ID / Windows Hello' :
                  getLoginMethod() === 'extension' ? 'Alby / nos2x' :
                  getLoginMethod() === 'readOnly' ? '投稿・署名はできません' :
                  getLoginMethod() === 'local' ? 'ブラウザに秘密鍵を保存' :
@@ -932,16 +1079,12 @@ export default function MiniAppTab({ pubkey }) {
                  ''}
               </p>
             </div>
-            {getLoginMethod() === 'nosskey' && (
-              <span className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
-                推奨
-              </span>
-            )}
-            {getLoginMethod() === 'readOnly' && (
-              <span className="px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 rounded-full">
-                読取専用
-              </span>
-            )}
+            <button
+              onClick={handleLogoutClick}
+              className="px-3 py-1.5 text-xs bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex-shrink-0"
+            >
+              ログアウト
+            </button>
           </div>
         </section>
 
@@ -950,13 +1093,135 @@ export default function MiniAppTab({ pubkey }) {
           <NosskeySettings pubkey={pubkey} />
         )}
 
-        {/* Scheduler Mini App - 調整くん */}
+        {/* My Mini Apps Section */}
         <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <SchedulerApp pubkey={pubkey} />
+          <button
+            onClick={() => setShowMyApps(!showMyApps)}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+              <h2 className="font-semibold text-[var(--text-primary)]">マイミニアプリ</h2>
+              {favoriteApps.length > 0 && (
+                <span className="text-sm text-[var(--text-tertiary)]">({favoriteApps.length})</span>
+              )}
+            </div>
+            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showMyApps ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          {showMyApps && (
+            <div className="mt-4 space-y-4">
+              {/* Favorited Apps */}
+              {favoriteApps.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">お気に入りアプリ</h3>
+                  <div className="space-y-2">
+                    {favoriteApps.map((app, index) => (
+                      <div
+                        key={app.id}
+                        draggable
+                        onDragStart={() => handleDragStart(index)}
+                        onDragOver={handleDragOver}
+                        onDrop={() => handleDrop(index)}
+                        className="flex items-center justify-between p-3 bg-[var(--bg-tertiary)] rounded-xl hover:bg-[var(--border-color)] transition-colors"
+                      >
+                        <div
+                          className="flex items-center gap-3 flex-1 cursor-pointer"
+                          onClick={() => handleFavoriteAppClick(app)}
+                        >
+                          <svg className="w-4 h-4 text-[var(--text-tertiary)] cursor-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="3" y1="9" x2="21" y2="9"/>
+                            <line x1="3" y1="15" x2="21" y2="15"/>
+                          </svg>
+                          <span className="text-sm text-[var(--text-primary)]">{app.name}</span>
+                          {app.type === 'external' && (
+                            <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">外部</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemoveFromFavorites(app.id)
+                          }}
+                          className="text-xs text-red-400 hover:text-red-500 flex-shrink-0"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-[var(--text-tertiary)] mt-2">ドラッグして並び替えができます</p>
+                </div>
+              )}
+
+              {/* Add Nurunuru Mini App */}
+              {availableMiniApps.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">ぬるぬるミニアプリを追加</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {availableMiniApps.map(app => (
+                      <button
+                        key={app.id}
+                        onClick={() => handleAddToFavorites(app.id, app.name)}
+                        className="px-3 py-1.5 text-sm bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-full hover:bg-[var(--line-green)] hover:text-white transition-colors"
+                      >
+                        + {app.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Add External Mini App */}
+              <div>
+                <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">外部ミニアプリを追加</h3>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={externalAppName}
+                    onChange={(e) => setExternalAppName(e.target.value)}
+                    placeholder="アプリ名(例:おいくらサッツ)"
+                    className="w-full input-line text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={externalAppUrl}
+                      onChange={(e) => setExternalAppUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="flex-1 input-line text-sm"
+                    />
+                    <button
+                      onClick={handleAddExternalApp}
+                      disabled={!externalAppUrl.trim().startsWith('http')}
+                      className="btn-line text-sm px-3 disabled:opacity-50"
+                    >
+                      追加
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-[var(--text-tertiary)] mt-1">名前とURLを入力して外部のミニアプリを追加できます</p>
+              </div>
+
+              {favoriteApps.length === 0 && (
+                <div className="py-6 text-center text-[var(--text-tertiary)]">
+                  <p className="text-sm">お気に入りのミニアプリはありません</p>
+                  <p className="text-xs mt-1">上から追加してください</p>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* Default Zap Amount Setting */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="zap-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => setShowZapSettings(!showZapSettings)}
             className="w-full flex items-center justify-between"
@@ -1030,7 +1295,7 @@ export default function MiniAppTab({ pubkey }) {
         </section>
 
         {/* Relay Settings - Simplified */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="relay-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => setShowRelaySettings(!showRelaySettings)}
             className="w-full flex items-center justify-between"
@@ -1131,7 +1396,7 @@ export default function MiniAppTab({ pubkey }) {
         </section>
 
         {/* Upload Server Settings */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="upload-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => setShowUploadSettings(!showUploadSettings)}
             className="w-full flex items-center justify-between"
@@ -1207,7 +1472,7 @@ export default function MiniAppTab({ pubkey }) {
         </section>
 
         {/* Mute List Management */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="mute-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => setShowMuteSettings(!showMuteSettings)}
             className="w-full flex items-center justify-between"
@@ -1337,7 +1602,7 @@ export default function MiniAppTab({ pubkey }) {
         </section>
 
         {/* Emoji Settings */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="emoji-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => {
               setShowEmojiSettings(!showEmojiSettings)
@@ -1494,7 +1759,7 @@ export default function MiniAppTab({ pubkey }) {
         </section>
 
         {/* Badge Settings */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="badge-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => {
               setShowBadgeSettings(!showBadgeSettings)
@@ -1647,6 +1912,33 @@ export default function MiniAppTab({ pubkey }) {
                   )}
                 </div>
               )}
+            </div>
+          )}
+        </section>
+
+        {/* Scheduler Mini App - 調整くん (Collapsible, at bottom) */}
+        <section id="scheduler-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+          <button
+            onClick={() => setShowScheduler(!showScheduler)}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <h2 className="font-semibold text-[var(--text-primary)]">調整くん</h2>
+            </div>
+            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showScheduler ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          {showScheduler && (
+            <div className="mt-4">
+              <SchedulerApp pubkey={pubkey} />
             </div>
           )}
         </section>

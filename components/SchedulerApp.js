@@ -11,9 +11,10 @@ import {
 } from '@/lib/nostr'
 
 // Chronostr event kinds
-const KIND_CHRONOSTR_EVENT = 31928  // Parent schedule event
+const KIND_CHRONOSTR_EVENT = 31928  // Parent schedule event (date-based calendar)
+const KIND_TIME_BASED_EVENT = 31927 // Time-based calendar event
 const KIND_DATE_CANDIDATE = 31926   // Date candidate (child event)
-const KIND_CALENDAR_RSVP = 31925
+const KIND_CALENDAR_RSVP = 31925    // RSVP to calendar events
 
 // Fast relays for calendar events (Japanese relays only)
 const CALENDAR_RELAYS = [
@@ -288,7 +289,7 @@ function CreateEventForm({ pubkey, onCreated, onCancel }) {
 }
 
 // Event Detail Modal - chronostr style full screen sheet
-function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, onClose, onRsvp, rsvpInProgress }) {
+function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, onClose, onRsvp, rsvpInProgress, onDelete }) {
   const titleTag = event.tags.find(t => t[0] === 'title')?.[1]
   let nameTag = event.tags.find(t => t[0] === 'name')?.[1]
   // chronostr uses name like "イベント名-candidate-dates-N", remove suffix
@@ -601,14 +602,22 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
     navigator.clipboard.writeText(link)
     alert('リンクをコピーしました')
   }
-  
+
+  // Delete event
+  const handleDeleteEvent = async () => {
+    if (!onDelete) return
+    if (!confirm('このイベントを削除しますか？')) return
+    await onDelete(event)
+    onClose()
+  }
+
   // Date range
-  const dateRange = dates.length > 0 
+  const dateRange = dates.length > 0
     ? `${formatDateShort(dates[0])} ~ ${formatDateShort(dates[dates.length - 1])}`
     : ''
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-0 sm:p-4 pb-[60px] sm:pb-4">
       <div className="bg-[var(--bg-primary)] w-full h-full sm:w-[90%] sm:max-w-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl flex flex-col overflow-hidden">
         {/* Header - Fixed */}
         <div className="flex-shrink-0 border-b border-[var(--border-color)] p-4">
@@ -690,7 +699,7 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
           
           {dates.length > 0 && (
             <div className="border border-[var(--border-color)] rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto overflow-y-auto max-h-[400px] -mx-4 px-4 sm:mx-0 sm:px-0">
                 <table className="w-full text-sm min-w-max">
                   <thead>
                     <tr className="bg-[var(--bg-tertiary)]">
@@ -781,6 +790,23 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
             </svg>
             リンクをコピー
           </button>
+
+          {/* Delete button - only show for event creator */}
+          {myPubkey && event.pubkey === myPubkey && (
+            <button
+              type="button"
+              onClick={handleDeleteEvent}
+              className="w-full py-3 rounded-lg border border-red-500/50 text-red-500 text-sm flex items-center justify-center gap-2 hover:bg-red-500/10"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17"/>
+                <line x1="14" y1="11" x2="14" y2="17"/>
+              </svg>
+              イベントを削除
+            </button>
+          )}
         </div>
       </div>
       
@@ -1155,39 +1181,117 @@ export default function SchedulerApp({ pubkey }) {
           CALENDAR_RELAYS
         ),
         fastFetch(
-          { kinds: [KIND_DATE_CANDIDATE], authors: [pubkey], limit: 50 },
+          { kinds: [KIND_DATE_CANDIDATE, KIND_TIME_BASED_EVENT], authors: [pubkey], limit: 50 },
           CALENDAR_RELAYS
         )
       ])
       
       // Fetch my RSVPs
       const myRsvps = await fastFetch(
-        { kinds: [KIND_CALENDAR_RSVP], authors: [pubkey], limit: 50 },
+        { kinds: [KIND_CALENDAR_RSVP], authors: [pubkey], limit: 100 },
         CALENDAR_RELAYS
       )
-      
-      // Get event references from RSVPs
-      const rsvpEventRefs = myRsvps
-        .map(r => r.tags.find(t => t[0] === 'a')?.[1])
-        .filter(Boolean)
-      
-      // Fetch participating events (limit to avoid timeout)
-      let participatingEvents = []
-      const uniqueRefs = [...new Set(rsvpEventRefs)].slice(0, 5)
-      
-      for (const ref of uniqueRefs) {
-        const parts = ref.split(':')
-        if (parts.length >= 3) {
-          const [kind, pk, ...identifierParts] = parts
-          const identifier = identifierParts.join(':')
-          const events = await fastFetch(
-            { kinds: [parseInt(kind)], authors: [pk], '#d': [identifier], limit: 1 },
-            CALENDAR_RELAYS,
-            3000
-          )
-          participatingEvents.push(...events)
+
+      // Participating events: RSVPs can point to either parent events or date candidates
+      // Step 1: Categorize RSVP a-tags by event kind
+      const parentEventDTags = new Set()
+      const dateEventDTags = new Set()
+
+      myRsvps.forEach(rsvp => {
+        const aTag = rsvp.tags.find(t => t[0] === 'a')?.[1]
+        if (!aTag) return
+
+        const parts = aTag.split(':')
+        if (parts.length < 3) return
+
+        const kind = parseInt(parts[0])
+        const dTag = parts.slice(2).join(':')
+
+        // Categorize by kind
+        if (kind === KIND_CHRONOSTR_EVENT) {
+          parentEventDTags.add(dTag)
+        } else if (kind === KIND_DATE_CANDIDATE || kind === KIND_TIME_BASED_EVENT) {
+          dateEventDTags.add(dTag)
         }
+      })
+
+      // Step 2: Fetch parent events directly referenced by RSVPs
+      let directParentEvents = []
+      if (parentEventDTags.size > 0) {
+        directParentEvents = await fastFetch(
+          {
+            kinds: [KIND_CHRONOSTR_EVENT],
+            '#d': [...parentEventDTags],
+            limit: 50
+          },
+          CALENDAR_RELAYS
+        )
       }
+
+      // Step 3: Fetch date candidate events referenced by RSVPs
+      let dateEvents = []
+      if (dateEventDTags.size > 0) {
+        dateEvents = await fastFetch(
+          {
+            kinds: [KIND_DATE_CANDIDATE, KIND_TIME_BASED_EVENT],
+            '#d': [...dateEventDTags],
+            limit: 100
+          },
+          CALENDAR_RELAYS
+        )
+      }
+
+      // Step 4: Extract parent event references from date candidates
+      const parentRefsFromDates = new Set()
+      dateEvents.forEach(ev => {
+        const aTag = ev.tags.find(t => t[0] === 'a')?.[1]
+        if (aTag) {
+          const parts = aTag.split(':')
+          if (parts.length >= 3) {
+            const dTag = parts.slice(2).join(':')
+            parentRefsFromDates.add(dTag)
+          }
+        }
+      })
+
+      // Step 5: Fetch parent events referenced by date candidates
+      let parentEventsFromDates = []
+      if (parentRefsFromDates.size > 0) {
+        parentEventsFromDates = await fastFetch(
+          {
+            kinds: [KIND_CHRONOSTR_EVENT],
+            '#d': [...parentRefsFromDates],
+            limit: 50
+          },
+          CALENDAR_RELAYS
+        )
+      }
+
+      // Step 6: Combine all parent events
+      const allParentEventsMap = new Map()
+      directParentEvents.forEach(e => allParentEventsMap.set(e.id, e))
+      parentEventsFromDates.forEach(e => allParentEventsMap.set(e.id, e))
+      const allParentEvents = Array.from(allParentEventsMap.values())
+
+      // Step 7: Fetch all date events for participating calendars
+      const allParentDTags = allParentEvents.map(e => {
+        const dTag = e.tags.find(t => t[0] === 'd')?.[1]
+        return dTag
+      }).filter(Boolean)
+
+      let allDateEvents = []
+      if (allParentDTags.length > 0) {
+        allDateEvents = await fastFetch(
+          {
+            kinds: [KIND_DATE_CANDIDATE, KIND_TIME_BASED_EVENT],
+            '#d': allParentDTags,
+            limit: 200
+          },
+          CALENDAR_RELAYS
+        )
+      }
+
+      const participatingEvents = [...allParentEvents, ...allDateEvents, ...dateEvents]
       
       // Merge all events
       const allEventsMap = new Map()
@@ -1220,11 +1324,11 @@ export default function SchedulerApp({ pubkey }) {
       
       // Filter out child events that have a parent in the list (for display only)
       const displayEvents = allEvents.filter(e => {
-        // Always show nullnull-style events (kind:31928 with date tags)
-        if (e.kind === 31928) return true
-        
-        // For child events (kind:31926), check if parent exists
-        if (e.kind === 31926) {
+        // Always show parent calendar events (kind:31928)
+        if (e.kind === KIND_CHRONOSTR_EVENT) return true
+
+        // For child events (kind:31926 or 31927), check if parent exists
+        if (e.kind === KIND_DATE_CANDIDATE || e.kind === KIND_TIME_BASED_EVENT) {
           const aTag = e.tags.find(t => t[0] === 'a')?.[1]
           if (aTag) {
             // Extract parent d-tag from a-tag (format: "31928:pubkey:d-tag")
@@ -1238,7 +1342,7 @@ export default function SchedulerApp({ pubkey }) {
             }
           }
         }
-        
+
         return true
       })
       
@@ -1299,12 +1403,12 @@ export default function SchedulerApp({ pubkey }) {
   // Handle RSVP
   const handleRsvp = async (event, status, date) => {
     if (!pubkey || rsvpInProgress) return
-    
+
     setRsvpInProgress(true)
     try {
       const dTag = event.tags.find(t => t[0] === 'd')?.[1]
       const aTag = `${event.kind}:${event.pubkey}:${dTag}`
-      
+
       const rsvpEvent = {
         kind: KIND_CALENDAR_RSVP,
         created_at: Math.floor(Date.now() / 1000),
@@ -1320,10 +1424,10 @@ export default function SchedulerApp({ pubkey }) {
         content: '',
         pubkey
       }
-      
+
       const signed = await signEventNip07(rsvpEvent)
       await publishEvent(signed)
-      
+
       // Update local state
       setRsvps(prev => {
         const filtered = prev.filter(r => {
@@ -1342,18 +1446,122 @@ export default function SchedulerApp({ pubkey }) {
     }
   }
 
+  // Handle event deletion
+  const handleDelete = async (event) => {
+    if (!pubkey || event.pubkey !== pubkey) return
+
+    try {
+      // Create deletion event (NIP-09)
+      const dTag = event.tags.find(t => t[0] === 'd')?.[1]
+      const aTag = dTag ? `${event.kind}:${event.pubkey}:${dTag}` : null
+
+      const deletionEvent = {
+        kind: 5,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['e', event.id]
+        ],
+        content: 'deleted',
+        pubkey
+      }
+
+      // Add 'a' tag if available (for addressable events)
+      if (aTag) {
+        deletionEvent.tags.push(['a', aTag])
+      }
+
+      const signed = await signEventNip07(deletionEvent)
+      await publishEvent(signed)
+
+      // Remove from local state
+      setEvents(prev => prev.filter(e => e.id !== event.id))
+
+      alert('イベントを削除しました')
+    } catch (e) {
+      console.error('Delete failed:', e)
+      alert('削除に失敗しました')
+    }
+  }
+
   // Filter events
   const filteredEvents = events.filter(event => {
-    if (activeTab === 'mine') return event.pubkey === pubkey
-    if (activeTab === 'participating') {
+    // Filter by tab
+    let matchesTab = false
+    if (activeTab === 'mine') {
+      matchesTab = event.pubkey === pubkey
+    } else if (activeTab === 'participating') {
+      // Show all events where user has RSVP'd (excluding own events to avoid duplication)
+      if (event.pubkey === pubkey) return false
+
+      // Check if user has any RSVP for this event
       const dTag = event.tags.find(t => t[0] === 'd')?.[1]
-      const aTag = `${event.kind}:${event.pubkey}:${dTag}`
-      return rsvps.some(r => {
+      const aTag = dTag ? `${event.kind}:${event.pubkey}:${dTag}` : null
+
+      const hasRsvp = rsvps.some(r => {
         if (r.pubkey !== pubkey) return false
-        return r.tags.find(t => t[0] === 'a')?.[1] === aTag
+
+        // Check both 'a' tag and 'e' tag matching
+        const rsvpATag = r.tags.find(t => t[0] === 'a')?.[1]
+        const rsvpETag = r.tags.find(t => t[0] === 'e')?.[1]
+
+        // Match by 'a' tag
+        if (aTag && rsvpATag === aTag) return true
+        // Match by 'e' tag
+        if (rsvpETag === event.id) return true
+
+        return false
       })
+
+      matchesTab = hasRsvp
+    } else {
+      matchesTab = true
     }
-    return true
+
+    if (!matchesTab) return false
+
+    // Filter out past events - check the latest date
+    const dateTags = event.tags.filter(t => t[0] === 'date')
+    const optionTags = event.tags.filter(t => t[0] === 'option')
+    const startTags = event.tags.filter(t => t[0] === 'start')
+    const slotTags = event.tags.filter(t => t[0] === 'slot')
+    const candidateTags = event.tags.filter(t => t[0] === 'candidate')
+
+    let eventDates = []
+    if (dateTags.length > 0) {
+      eventDates = dateTags.map(t => t[1])
+    } else if (optionTags.length > 0) {
+      eventDates = optionTags.map(t => t[2] || t[1])
+    } else if (slotTags.length > 0) {
+      eventDates = slotTags.map(t => t[1])
+    } else if (candidateTags.length > 0) {
+      eventDates = candidateTags.map(t => t[1])
+    } else if (startTags.length > 0) {
+      eventDates = startTags.map(t => {
+        const val = t[1]
+        if (val && val.includes('T')) {
+          return val.split('T')[0]
+        }
+        const ts = parseInt(val)
+        if (!isNaN(ts) && ts > 1000000000) {
+          return new Date(ts * 1000).toISOString().split('T')[0]
+        }
+        return val
+      }).filter(d => d && d !== '1970-01-01')
+    }
+
+    // If no dates found, show the event
+    if (eventDates.length === 0) return true
+
+    // Check if the latest date has passed
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const latestDate = eventDates.sort().reverse()[0]
+    const eventDate = new Date(latestDate)
+    eventDate.setHours(0, 0, 0, 0)
+
+    // Show events with future or today's dates
+    return eventDate >= today
   })
 
   return (
@@ -1528,6 +1736,7 @@ export default function SchedulerApp({ pubkey }) {
           onClose={() => setSelectedEvent(null)}
           onRsvp={handleRsvp}
           rsvpInProgress={rsvpInProgress}
+          onDelete={handleDelete}
         />
       )}
     </div>
