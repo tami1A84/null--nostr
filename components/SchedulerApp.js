@@ -1490,19 +1490,29 @@ export default function SchedulerApp({ pubkey }) {
     if (activeTab === 'mine') {
       matchesTab = event.pubkey === pubkey
     } else if (activeTab === 'participating') {
+      // Show all events where user has RSVP'd (excluding own events to avoid duplication)
+      if (event.pubkey === pubkey) return false
+
+      // Check if user has any RSVP for this event
       const dTag = event.tags.find(t => t[0] === 'd')?.[1]
       const aTag = dTag ? `${event.kind}:${event.pubkey}:${dTag}` : null
-      matchesTab = rsvps.some(r => {
+
+      const hasRsvp = rsvps.some(r => {
         if (r.pubkey !== pubkey) return false
-        // Check both 'a' tag and 'e' tag
+
+        // Check both 'a' tag and 'e' tag matching
         const rsvpATag = r.tags.find(t => t[0] === 'a')?.[1]
         const rsvpETag = r.tags.find(t => t[0] === 'e')?.[1]
-        // Match by 'a' tag if both event and RSVP have it
+
+        // Match by 'a' tag
         if (aTag && rsvpATag === aTag) return true
         // Match by 'e' tag
         if (rsvpETag === event.id) return true
+
         return false
       })
+
+      matchesTab = hasRsvp
     } else {
       matchesTab = true
     }
