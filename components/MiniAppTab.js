@@ -309,6 +309,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
   const [favoriteApps, setFavoriteApps] = useState([])
   const [showMyApps, setShowMyApps] = useState(true)
   const [externalAppUrl, setExternalAppUrl] = useState('')
+  const [externalAppName, setExternalAppName] = useState('')
   const [draggedIndex, setDraggedIndex] = useState(null)
 
   useEffect(() => {
@@ -912,10 +913,12 @@ export default function MiniAppTab({ pubkey, onLogout }) {
     const url = externalAppUrl.trim()
     if (url && url.startsWith('http')) {
       const appId = 'external_' + Date.now()
-      const appName = new URL(url).hostname
+      // Use user-provided name, or fallback to hostname
+      const appName = externalAppName.trim() || new URL(url).hostname
       const newApp = { id: appId, name: appName, type: 'external', url }
       saveFavoriteApps([...favoriteApps, newApp])
       setExternalAppUrl('')
+      setExternalAppName('')
     }
   }
 
@@ -1179,23 +1182,32 @@ export default function MiniAppTab({ pubkey, onLogout }) {
               {/* Add External Mini App */}
               <div>
                 <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">外部ミニアプリを追加</h3>
-                <div className="flex gap-2">
+                <div className="space-y-2">
                   <input
-                    type="url"
-                    value={externalAppUrl}
-                    onChange={(e) => setExternalAppUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="flex-1 input-line text-sm"
+                    type="text"
+                    value={externalAppName}
+                    onChange={(e) => setExternalAppName(e.target.value)}
+                    placeholder="アプリ名（例：おさつサッツ）"
+                    className="w-full input-line text-sm"
                   />
-                  <button
-                    onClick={handleAddExternalApp}
-                    disabled={!externalAppUrl.trim().startsWith('http')}
-                    className="btn-line text-sm px-3 disabled:opacity-50"
-                  >
-                    追加
-                  </button>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={externalAppUrl}
+                      onChange={(e) => setExternalAppUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="flex-1 input-line text-sm"
+                    />
+                    <button
+                      onClick={handleAddExternalApp}
+                      disabled={!externalAppUrl.trim().startsWith('http')}
+                      className="btn-line text-sm px-3 disabled:opacity-50"
+                    >
+                      追加
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs text-[var(--text-tertiary)] mt-1">URLを入力して外部のミニアプリを追加できます</p>
+                <p className="text-xs text-[var(--text-tertiary)] mt-1">名前とURLを入力して外部のミニアプリを追加できます</p>
               </div>
 
               {favoriteApps.length === 0 && (
