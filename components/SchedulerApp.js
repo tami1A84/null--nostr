@@ -617,7 +617,7 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-0 sm:p-4">
-      <div className="bg-[var(--bg-primary)] w-full h-full sm:w-[90%] sm:max-w-2xl sm:max-h-[90vh] sm:rounded-2xl flex flex-col overflow-hidden">
+      <div className="bg-[var(--bg-primary)] w-full h-[calc(100%-80px)] sm:w-[90%] sm:max-w-2xl sm:max-h-[90vh] sm:h-auto sm:rounded-2xl flex flex-col overflow-hidden">
         {/* Header - Fixed */}
         <div className="flex-shrink-0 border-b border-[var(--border-color)] p-4">
           <div className="flex items-center justify-between">
