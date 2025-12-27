@@ -351,12 +351,12 @@ export default function Home() {
         
         {/* MiniApp - only render when active (settings don't need prefetch) */}
         {activeTab === 'miniapp' && (
-          <div 
-            ref={miniappContainerRef} 
-            className="fixed inset-0 lg:left-[240px] xl:left-[280px] bottom-16 lg:bottom-0 overflow-y-auto" 
+          <div
+            ref={miniappContainerRef}
+            className="fixed inset-0 lg:left-[240px] xl:left-[280px] bottom-16 lg:bottom-0 overflow-y-auto"
             style={{ zIndex: 1 }}
           >
-            <MiniAppTab pubkey={pubkey} />
+            <MiniAppTab pubkey={pubkey} onLogout={handleLogout} />
           </div>
         )}
       </div>
