@@ -608,8 +608,8 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
     : ''
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-      <div className="bg-[var(--bg-primary)] w-full h-full sm:w-[90%] sm:max-w-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-0 sm:p-4">
+      <div className="bg-[var(--bg-primary)] w-full h-full sm:w-[90%] sm:max-w-2xl sm:max-h-[90vh] sm:rounded-2xl flex flex-col overflow-hidden">
         {/* Header - Fixed */}
         <div className="flex-shrink-0 border-b border-[var(--border-color)] p-4">
           <div className="flex items-center justify-between">
@@ -690,7 +690,7 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
           
           {dates.length > 0 && (
             <div className="border border-[var(--border-color)] rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
                 <table className="w-full text-sm min-w-max">
                   <thead>
                     <tr className="bg-[var(--bg-tertiary)]">
@@ -1344,16 +1344,66 @@ export default function SchedulerApp({ pubkey }) {
 
   // Filter events
   const filteredEvents = events.filter(event => {
-    if (activeTab === 'mine') return event.pubkey === pubkey
-    if (activeTab === 'participating') {
+    // Filter by tab
+    let matchesTab = false
+    if (activeTab === 'mine') {
+      matchesTab = event.pubkey === pubkey
+    } else if (activeTab === 'participating') {
       const dTag = event.tags.find(t => t[0] === 'd')?.[1]
       const aTag = `${event.kind}:${event.pubkey}:${dTag}`
-      return rsvps.some(r => {
+      matchesTab = rsvps.some(r => {
         if (r.pubkey !== pubkey) return false
         return r.tags.find(t => t[0] === 'a')?.[1] === aTag
       })
+    } else {
+      matchesTab = true
     }
-    return true
+
+    if (!matchesTab) return false
+
+    // Filter out past events - check the latest date
+    const dateTags = event.tags.filter(t => t[0] === 'date')
+    const optionTags = event.tags.filter(t => t[0] === 'option')
+    const startTags = event.tags.filter(t => t[0] === 'start')
+    const slotTags = event.tags.filter(t => t[0] === 'slot')
+    const candidateTags = event.tags.filter(t => t[0] === 'candidate')
+
+    let eventDates = []
+    if (dateTags.length > 0) {
+      eventDates = dateTags.map(t => t[1])
+    } else if (optionTags.length > 0) {
+      eventDates = optionTags.map(t => t[2] || t[1])
+    } else if (slotTags.length > 0) {
+      eventDates = slotTags.map(t => t[1])
+    } else if (candidateTags.length > 0) {
+      eventDates = candidateTags.map(t => t[1])
+    } else if (startTags.length > 0) {
+      eventDates = startTags.map(t => {
+        const val = t[1]
+        if (val && val.includes('T')) {
+          return val.split('T')[0]
+        }
+        const ts = parseInt(val)
+        if (!isNaN(ts) && ts > 1000000000) {
+          return new Date(ts * 1000).toISOString().split('T')[0]
+        }
+        return val
+      }).filter(d => d && d !== '1970-01-01')
+    }
+
+    // If no dates found, show the event
+    if (eventDates.length === 0) return true
+
+    // Check if the latest date has passed
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const latestDate = eventDates.sort().reverse()[0]
+    const eventDate = new Date(latestDate)
+    eventDate.setHours(0, 0, 0, 0)
+
+    // Show events with future or today's dates
+    return eventDate >= today
   })
 
   return (
