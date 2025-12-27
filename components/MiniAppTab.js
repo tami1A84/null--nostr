@@ -307,7 +307,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
 
   // My Mini Apps state
   const [favoriteApps, setFavoriteApps] = useState([])
-  const [showMyApps, setShowMyApps] = useState(true)
+  const [showMyApps, setShowMyApps] = useState(false)
   const [externalAppUrl, setExternalAppUrl] = useState('')
   const [externalAppName, setExternalAppName] = useState('')
   const [draggedIndex, setDraggedIndex] = useState(null)
