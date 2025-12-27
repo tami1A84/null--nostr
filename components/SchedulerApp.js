@@ -288,7 +288,7 @@ function CreateEventForm({ pubkey, onCreated, onCancel }) {
 }
 
 // Event Detail Modal - chronostr style full screen sheet
-function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, onClose, onRsvp, rsvpInProgress }) {
+function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, onClose, onRsvp, rsvpInProgress, onDelete }) {
   const titleTag = event.tags.find(t => t[0] === 'title')?.[1]
   let nameTag = event.tags.find(t => t[0] === 'name')?.[1]
   // chronostr uses name like "イベント名-candidate-dates-N", remove suffix
@@ -601,9 +601,17 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
     navigator.clipboard.writeText(link)
     alert('リンクをコピーしました')
   }
-  
+
+  // Delete event
+  const handleDeleteEvent = async () => {
+    if (!onDelete) return
+    if (!confirm('このイベントを削除しますか？')) return
+    await onDelete(event)
+    onClose()
+  }
+
   // Date range
-  const dateRange = dates.length > 0 
+  const dateRange = dates.length > 0
     ? `${formatDateShort(dates[0])} ~ ${formatDateShort(dates[dates.length - 1])}`
     : ''
 
@@ -690,7 +698,7 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
           
           {dates.length > 0 && (
             <div className="border border-[var(--border-color)] rounded-lg overflow-hidden">
-              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+              <div className="overflow-x-auto overflow-y-auto max-h-[400px] -mx-4 px-4 sm:mx-0 sm:px-0">
                 <table className="w-full text-sm min-w-max">
                   <thead>
                     <tr className="bg-[var(--bg-tertiary)]">
@@ -781,6 +789,23 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
             </svg>
             リンクをコピー
           </button>
+
+          {/* Delete button - only show for event creator */}
+          {myPubkey && event.pubkey === myPubkey && (
+            <button
+              type="button"
+              onClick={handleDeleteEvent}
+              className="w-full py-3 rounded-lg border border-red-500/50 text-red-500 text-sm flex items-center justify-center gap-2 hover:bg-red-500/10"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17"/>
+                <line x1="14" y1="11" x2="14" y2="17"/>
+              </svg>
+              イベントを削除
+            </button>
+          )}
         </div>
       </div>
       
@@ -1165,17 +1190,22 @@ export default function SchedulerApp({ pubkey }) {
         { kinds: [KIND_CALENDAR_RSVP], authors: [pubkey], limit: 50 },
         CALENDAR_RELAYS
       )
-      
-      // Get event references from RSVPs
-      const rsvpEventRefs = myRsvps
+
+      // Get event references from RSVPs - check both 'a' and 'e' tags
+      const rsvpATags = myRsvps
         .map(r => r.tags.find(t => t[0] === 'a')?.[1])
         .filter(Boolean)
-      
+
+      const rsvpETags = myRsvps
+        .map(r => r.tags.find(t => t[0] === 'e')?.[1])
+        .filter(Boolean)
+
       // Fetch participating events (limit to avoid timeout)
       let participatingEvents = []
-      const uniqueRefs = [...new Set(rsvpEventRefs)].slice(0, 5)
-      
-      for (const ref of uniqueRefs) {
+
+      // Fetch by 'a' tags (addressable events)
+      const uniqueATags = [...new Set(rsvpATags)].slice(0, 20)
+      for (const ref of uniqueATags) {
         const parts = ref.split(':')
         if (parts.length >= 3) {
           const [kind, pk, ...identifierParts] = parts
@@ -1187,6 +1217,17 @@ export default function SchedulerApp({ pubkey }) {
           )
           participatingEvents.push(...events)
         }
+      }
+
+      // Fetch by 'e' tags (event IDs) - in batches
+      const uniqueETags = [...new Set(rsvpETags)].slice(0, 20)
+      if (uniqueETags.length > 0) {
+        const eventsByIds = await fastFetch(
+          { ids: uniqueETags },
+          CALENDAR_RELAYS,
+          5000
+        )
+        participatingEvents.push(...eventsByIds)
       }
       
       // Merge all events
@@ -1299,12 +1340,12 @@ export default function SchedulerApp({ pubkey }) {
   // Handle RSVP
   const handleRsvp = async (event, status, date) => {
     if (!pubkey || rsvpInProgress) return
-    
+
     setRsvpInProgress(true)
     try {
       const dTag = event.tags.find(t => t[0] === 'd')?.[1]
       const aTag = `${event.kind}:${event.pubkey}:${dTag}`
-      
+
       const rsvpEvent = {
         kind: KIND_CALENDAR_RSVP,
         created_at: Math.floor(Date.now() / 1000),
@@ -1320,10 +1361,10 @@ export default function SchedulerApp({ pubkey }) {
         content: '',
         pubkey
       }
-      
+
       const signed = await signEventNip07(rsvpEvent)
       await publishEvent(signed)
-      
+
       // Update local state
       setRsvps(prev => {
         const filtered = prev.filter(r => {
@@ -1342,6 +1383,43 @@ export default function SchedulerApp({ pubkey }) {
     }
   }
 
+  // Handle event deletion
+  const handleDelete = async (event) => {
+    if (!pubkey || event.pubkey !== pubkey) return
+
+    try {
+      // Create deletion event (NIP-09)
+      const dTag = event.tags.find(t => t[0] === 'd')?.[1]
+      const aTag = dTag ? `${event.kind}:${event.pubkey}:${dTag}` : null
+
+      const deletionEvent = {
+        kind: 5,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['e', event.id]
+        ],
+        content: 'deleted',
+        pubkey
+      }
+
+      // Add 'a' tag if available (for addressable events)
+      if (aTag) {
+        deletionEvent.tags.push(['a', aTag])
+      }
+
+      const signed = await signEventNip07(deletionEvent)
+      await publishEvent(signed)
+
+      // Remove from local state
+      setEvents(prev => prev.filter(e => e.id !== event.id))
+
+      alert('イベントを削除しました')
+    } catch (e) {
+      console.error('Delete failed:', e)
+      alert('削除に失敗しました')
+    }
+  }
+
   // Filter events
   const filteredEvents = events.filter(event => {
     // Filter by tab
@@ -1353,7 +1431,10 @@ export default function SchedulerApp({ pubkey }) {
       const aTag = `${event.kind}:${event.pubkey}:${dTag}`
       matchesTab = rsvps.some(r => {
         if (r.pubkey !== pubkey) return false
-        return r.tags.find(t => t[0] === 'a')?.[1] === aTag
+        // Check both 'a' tag and 'e' tag
+        const rsvpATag = r.tags.find(t => t[0] === 'a')?.[1]
+        const rsvpETag = r.tags.find(t => t[0] === 'e')?.[1]
+        return rsvpATag === aTag || rsvpETag === event.id
       })
     } else {
       matchesTab = true
@@ -1578,6 +1659,7 @@ export default function SchedulerApp({ pubkey }) {
           onClose={() => setSelectedEvent(null)}
           onRsvp={handleRsvp}
           rsvpInProgress={rsvpInProgress}
+          onDelete={handleDelete}
         />
       )}
     </div>

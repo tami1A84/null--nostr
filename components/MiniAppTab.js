@@ -1187,7 +1187,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
                     type="text"
                     value={externalAppName}
                     onChange={(e) => setExternalAppName(e.target.value)}
-                    placeholder="アプリ名（例：おさつサッツ）"
+                    placeholder="アプリ名(例:おいくらサッツ)"
                     className="w-full input-line text-sm"
                   />
                   <div className="flex gap-2">
