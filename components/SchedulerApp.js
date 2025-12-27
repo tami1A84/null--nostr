@@ -1428,13 +1428,17 @@ export default function SchedulerApp({ pubkey }) {
       matchesTab = event.pubkey === pubkey
     } else if (activeTab === 'participating') {
       const dTag = event.tags.find(t => t[0] === 'd')?.[1]
-      const aTag = `${event.kind}:${event.pubkey}:${dTag}`
+      const aTag = dTag ? `${event.kind}:${event.pubkey}:${dTag}` : null
       matchesTab = rsvps.some(r => {
         if (r.pubkey !== pubkey) return false
         // Check both 'a' tag and 'e' tag
         const rsvpATag = r.tags.find(t => t[0] === 'a')?.[1]
         const rsvpETag = r.tags.find(t => t[0] === 'e')?.[1]
-        return rsvpATag === aTag || rsvpETag === event.id
+        // Match by 'a' tag if both event and RSVP have it
+        if (aTag && rsvpATag === aTag) return true
+        // Match by 'e' tag
+        if (rsvpETag === event.id) return true
+        return false
       })
     } else {
       matchesTab = true
