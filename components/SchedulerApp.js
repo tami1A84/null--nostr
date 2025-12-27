@@ -11,9 +11,10 @@ import {
 } from '@/lib/nostr'
 
 // Chronostr event kinds
-const KIND_CHRONOSTR_EVENT = 31928  // Parent schedule event
+const KIND_CHRONOSTR_EVENT = 31928  // Parent schedule event (date-based calendar)
+const KIND_TIME_BASED_EVENT = 31927 // Time-based calendar event
 const KIND_DATE_CANDIDATE = 31926   // Date candidate (child event)
-const KIND_CALENDAR_RSVP = 31925
+const KIND_CALENDAR_RSVP = 31925    // RSVP to calendar events
 
 // Fast relays for calendar events (Japanese relays only)
 const CALENDAR_RELAYS = [
@@ -616,8 +617,8 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
     : ''
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-0 sm:p-4">
-      <div className="bg-[var(--bg-primary)] w-full h-[calc(100%-80px)] sm:w-[90%] sm:max-w-2xl sm:max-h-[90vh] sm:h-auto sm:rounded-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-start sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-[var(--bg-primary)] w-full max-h-[calc(100vh-60px)] sm:w-[90%] sm:max-w-2xl sm:max-h-[90vh] sm:rounded-2xl flex flex-col overflow-hidden mt-0 mb-auto">
         {/* Header - Fixed */}
         <div className="flex-shrink-0 border-b border-[var(--border-color)] p-4">
           <div className="flex items-center justify-between">
@@ -1180,55 +1181,94 @@ export default function SchedulerApp({ pubkey }) {
           CALENDAR_RELAYS
         ),
         fastFetch(
-          { kinds: [KIND_DATE_CANDIDATE], authors: [pubkey], limit: 50 },
+          { kinds: [KIND_DATE_CANDIDATE, KIND_TIME_BASED_EVENT], authors: [pubkey], limit: 50 },
           CALENDAR_RELAYS
         )
       ])
       
       // Fetch my RSVPs
       const myRsvps = await fastFetch(
-        { kinds: [KIND_CALENDAR_RSVP], authors: [pubkey], limit: 50 },
+        { kinds: [KIND_CALENDAR_RSVP], authors: [pubkey], limit: 100 },
         CALENDAR_RELAYS
       )
 
-      // Get event references from RSVPs - check both 'a' and 'e' tags
-      const rsvpATags = myRsvps
-        .map(r => r.tags.find(t => t[0] === 'a')?.[1])
-        .filter(Boolean)
+      // Following chronostr's approach for participating events
+      // Step 1: Extract 'a' tags from RSVPs (these point to date candidate events)
+      const dateEventATags = new Set()
+      myRsvps.forEach(rsvp => {
+        const aTag = rsvp.tags.find(t => t[0] === 'a')?.[1]
+        if (aTag) dateEventATags.add(aTag)
+      })
 
-      const rsvpETags = myRsvps
-        .map(r => r.tags.find(t => t[0] === 'e')?.[1])
-        .filter(Boolean)
+      // Step 2: Extract d-tags from the a-tags
+      const dateEventDTags = [...dateEventATags]
+        .map(aTag => aTag.split(':')?.[2] || '')
+        .filter(t => t)
 
-      // Fetch participating events (limit to avoid timeout)
-      let participatingEvents = []
-
-      // Fetch by 'a' tags (addressable events)
-      const uniqueATags = [...new Set(rsvpATags)].slice(0, 20)
-      for (const ref of uniqueATags) {
-        const parts = ref.split(':')
-        if (parts.length >= 3) {
-          const [kind, pk, ...identifierParts] = parts
-          const identifier = identifierParts.join(':')
-          const events = await fastFetch(
-            { kinds: [parseInt(kind)], authors: [pk], '#d': [identifier], limit: 1 },
-            CALENDAR_RELAYS,
-            3000
-          )
-          participatingEvents.push(...events)
-        }
-      }
-
-      // Fetch by 'e' tags (event IDs) - in batches
-      const uniqueETags = [...new Set(rsvpETags)].slice(0, 20)
-      if (uniqueETags.length > 0) {
-        const eventsByIds = await fastFetch(
-          { ids: uniqueETags },
-          CALENDAR_RELAYS,
-          5000
+      // Step 3: Fetch date candidate events (kind 31926 and 31927) using d-tags
+      let dateEvents = []
+      if (dateEventDTags.length > 0) {
+        dateEvents = await fastFetch(
+          {
+            kinds: [KIND_DATE_CANDIDATE, KIND_TIME_BASED_EVENT],
+            '#d': dateEventDTags,
+            limit: 100
+          },
+          CALENDAR_RELAYS
         )
-        participatingEvents.push(...eventsByIds)
       }
+
+      // Step 4: Extract 'a' tags from date events (these point to parent calendar events)
+      const calendarEventATags = new Set()
+      dateEvents.forEach(ev => {
+        const aTag = ev.tags.find(t => t[0] === 'a')?.[1]
+        if (aTag) calendarEventATags.add(aTag)
+      })
+
+      // Step 5: Extract d-tags from calendar a-tags
+      const calendarDTags = [...calendarEventATags]
+        .map(aTag => aTag.split(':')?.[2] || '')
+        .filter(t => t)
+
+      // Step 6: Fetch parent calendar events (kind 31928)
+      let participatingParentEvents = []
+      if (calendarDTags.length > 0) {
+        participatingParentEvents = await fastFetch(
+          {
+            kinds: [KIND_CHRONOSTR_EVENT],
+            '#d': calendarDTags,
+            limit: 50
+          },
+          CALENDAR_RELAYS
+        )
+      }
+
+      // Step 7: Fetch all date events for the participating calendars
+      const participatingCalendarATags = new Set()
+      participatingParentEvents.forEach(ev => {
+        const dTag = ev.tags.find(t => t[0] === 'd')?.[1]
+        if (dTag) {
+          participatingCalendarATags.add(`${KIND_CHRONOSTR_EVENT}:${ev.pubkey}:${dTag}`)
+        }
+      })
+
+      const participatingDateDTags = [...participatingCalendarATags]
+        .map(aTag => aTag.split(':')?.[2] || '')
+        .filter(t => t)
+
+      let participatingDateEvents = []
+      if (participatingDateDTags.length > 0) {
+        participatingDateEvents = await fastFetch(
+          {
+            kinds: [KIND_DATE_CANDIDATE, KIND_TIME_BASED_EVENT],
+            '#d': participatingDateDTags,
+            limit: 200
+          },
+          CALENDAR_RELAYS
+        )
+      }
+
+      const participatingEvents = [...participatingParentEvents, ...participatingDateEvents]
       
       // Merge all events
       const allEventsMap = new Map()
@@ -1261,11 +1301,11 @@ export default function SchedulerApp({ pubkey }) {
       
       // Filter out child events that have a parent in the list (for display only)
       const displayEvents = allEvents.filter(e => {
-        // Always show nullnull-style events (kind:31928 with date tags)
-        if (e.kind === 31928) return true
-        
-        // For child events (kind:31926), check if parent exists
-        if (e.kind === 31926) {
+        // Always show parent calendar events (kind:31928)
+        if (e.kind === KIND_CHRONOSTR_EVENT) return true
+
+        // For child events (kind:31926 or 31927), check if parent exists
+        if (e.kind === KIND_DATE_CANDIDATE || e.kind === KIND_TIME_BASED_EVENT) {
           const aTag = e.tags.find(t => t[0] === 'a')?.[1]
           if (aTag) {
             // Extract parent d-tag from a-tag (format: "31928:pubkey:d-tag")
@@ -1279,7 +1319,7 @@ export default function SchedulerApp({ pubkey }) {
             }
           }
         }
-        
+
         return true
       })
       
