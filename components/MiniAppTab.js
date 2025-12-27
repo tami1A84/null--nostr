@@ -942,6 +942,71 @@ export default function MiniAppTab({ pubkey, onLogout }) {
     }
   }
 
+  const handleFavoriteAppClick = (app) => {
+    // For external apps, open in new tab
+    if (app.type === 'external' && app.url) {
+      window.open(app.url, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    // For internal apps, expand the corresponding section
+    switch (app.id) {
+      case 'scheduler':
+        setShowScheduler(true)
+        // Scroll to scheduler section
+        setTimeout(() => {
+          document.querySelector('#scheduler-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'zap':
+        setShowZapSettings(true)
+        setTimeout(() => {
+          document.querySelector('#zap-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'relay':
+        setShowRelaySettings(true)
+        setTimeout(() => {
+          document.querySelector('#relay-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'upload':
+        setShowUploadSettings(true)
+        setTimeout(() => {
+          document.querySelector('#upload-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'mute':
+        setShowMuteSettings(true)
+        setTimeout(() => {
+          document.querySelector('#mute-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'badge':
+        setShowBadgeSettings(true)
+        // Load badges if not already loaded
+        if (profileBadges.length === 0 && awardedBadges.length === 0 && !loadingBadges) {
+          loadBadges()
+        }
+        setTimeout(() => {
+          document.querySelector('#badge-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      case 'emoji':
+        setShowEmojiSettings(true)
+        // Load emojis if not already loaded
+        if (userEmojis.length === 0 && userEmojiSets.length === 0 && !loadingEmojis) {
+          loadUserEmojis()
+        }
+        setTimeout(() => {
+          document.querySelector('#emoji-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
+      default:
+        break
+    }
+  }
+
   // Available mini apps that can be added to favorites
   const availableMiniApps = [
     { id: 'scheduler', name: '調整くん' },
@@ -1059,10 +1124,13 @@ export default function MiniAppTab({ pubkey, onLogout }) {
                         onDragStart={() => handleDragStart(index)}
                         onDragOver={handleDragOver}
                         onDrop={() => handleDrop(index)}
-                        className="flex items-center justify-between p-3 bg-[var(--bg-tertiary)] rounded-xl cursor-move hover:bg-[var(--border-color)] transition-colors"
+                        className="flex items-center justify-between p-3 bg-[var(--bg-tertiary)] rounded-xl hover:bg-[var(--border-color)] transition-colors"
                       >
-                        <div className="flex items-center gap-3">
-                          <svg className="w-4 h-4 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <div
+                          className="flex items-center gap-3 flex-1 cursor-pointer"
+                          onClick={() => handleFavoriteAppClick(app)}
+                        >
+                          <svg className="w-4 h-4 text-[var(--text-tertiary)] cursor-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <line x1="3" y1="9" x2="21" y2="9"/>
                             <line x1="3" y1="15" x2="21" y2="15"/>
                           </svg>
@@ -1072,8 +1140,11 @@ export default function MiniAppTab({ pubkey, onLogout }) {
                           )}
                         </div>
                         <button
-                          onClick={() => handleRemoveFromFavorites(app.id)}
-                          className="text-xs text-red-400 hover:text-red-500"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemoveFromFavorites(app.id)
+                          }}
+                          className="text-xs text-red-400 hover:text-red-500 flex-shrink-0"
                         >
                           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <line x1="18" y1="6" x2="6" y2="18"/>
@@ -1138,7 +1209,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
         </section>
 
         {/* Default Zap Amount Setting */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="zap-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => setShowZapSettings(!showZapSettings)}
             className="w-full flex items-center justify-between"
@@ -1212,7 +1283,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
         </section>
 
         {/* Relay Settings - Simplified */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="relay-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => setShowRelaySettings(!showRelaySettings)}
             className="w-full flex items-center justify-between"
@@ -1313,7 +1384,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
         </section>
 
         {/* Upload Server Settings */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="upload-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => setShowUploadSettings(!showUploadSettings)}
             className="w-full flex items-center justify-between"
@@ -1389,7 +1460,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
         </section>
 
         {/* Mute List Management */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="mute-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => setShowMuteSettings(!showMuteSettings)}
             className="w-full flex items-center justify-between"
@@ -1519,7 +1590,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
         </section>
 
         {/* Emoji Settings */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="emoji-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => {
               setShowEmojiSettings(!showEmojiSettings)
@@ -1676,7 +1747,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
         </section>
 
         {/* Badge Settings */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="badge-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => {
               setShowBadgeSettings(!showBadgeSettings)
@@ -1834,7 +1905,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
         </section>
 
         {/* Scheduler Mini App - 調整くん (Collapsible, at bottom) */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+        <section id="scheduler-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <button
             onClick={() => setShowScheduler(!showScheduler)}
             className="w-full flex items-center justify-between"
