@@ -48,10 +48,11 @@ LINE風のNostrクライアント - シンプルで可愛い、みんなのた�
   - プロフィールバッジ追加/削除（kind:30008）
 - パスキー設定（秘密鍵エクスポート/自動署名）
 
-### 📲 PWA対応
+### 📲 PWA / ネイティブアプリ対応
 - ホーム画面に追加してアプリのように使用可能
 - オフラインキャッシュ対応
 - iOS / Android 両対応
+- Capacitorによるネイティブビルド（Android APK）
 
 ## 🔐 ログイン方法
 
@@ -66,27 +67,35 @@ Face ID / Touch ID / Windows Hello を使って、パスワード不要で安全
 
 - **ブラウザ拡張機能** - Alby / nos2x など（NIP-07）
 - **Nostr Connect** - nsec.app などのリモート署名（NIP-46）
+- **Amber** - Android向けネイティブ署名アプリ（NIP-55）
 - **読み取り専用** - npub入力（署名不可）
 - **ローカルキー** - nsec直接入力（ブラウザに保存）
 
 ## 🛠️ セットアップ
 
+### Web版
 ```bash
 npm install
 npm run dev
 ```
-
 ブラウザで http://localhost:3000 を開きます。
+
+### Android版
+```bash
+npm run android:build        # リリースビルド
+npm run android:build:debug  # デバッグビルド
+```
+詳細は [BUILD_ANDROID.md](BUILD_ANDROID.md) を参照してください。
 
 ## 📋 技術スタック
 
-- Next.js 14.2
-- React 18
-- Tailwind CSS
-- nostr-tools ^2.17
+- Next.js 14.2.35
+- React 18.3.1
+- Tailwind CSS 3.4.3
+- nostr-tools ^2.17.0
 - nosskey-sdk ^0.0.4
-- nostr-login ^1.7.12
-- rx-nostr ^3.6（オプション）
+- rx-nostr ^3.6.2
+- Capacitor 8.0（Android/iOS対応）
 
 ## 📝 NIPs対応
 
@@ -95,7 +104,7 @@ npm run dev
 | NIP-01 | Basic protocol |
 | NIP-02 | Follow List（フォロー/アンフォロー） |
 | NIP-05 | NIP-05認証・検証 |
-| NIP-07 | ブラウザ拡張機能（nostr-login経由） |
+| NIP-07 | ブラウザ拡張機能（Alby, nos2x等） |
 | NIP-09 | Event Deletion（投稿削除、いいね取消、リポスト取消） |
 | NIP-17 | Private Direct Messages |
 | NIP-19 | bech32エンコード（npub/nsec/note/nevent） |
@@ -103,9 +112,10 @@ npm run dev
 | NIP-27 | Text Note References |
 | NIP-30 | Custom Emoji |
 | NIP-44 | Encrypted Payloads |
-| NIP-46 | Nostr Connect（nostr-login経由） |
+| NIP-46 | Nostr Connect（nsec.app等リモート署名） |
 | NIP-50 | Search Capability |
 | NIP-51 | Mute List |
+| NIP-55 | Android Signer（Amber対応） |
 | NIP-57 | Lightning Zaps |
 | NIP-58 | Badges（表示・プロフィールバッジ管理） |
 | NIP-59 | Gift Wrap |
@@ -121,7 +131,10 @@ npm run dev
 
 ## 🔧 パフォーマンス最適化
 
-- リクエストスロットリング（同時接続数制限）
+- リクエストスロットリング（グローバル5/リレー毎3同時接続）
+- レート制限（10リクエスト/秒、バースト20）
+- 指数バックオフリトライ（最大3回）
+- 失敗リレー追跡と自動クールダウン（2分）
 - プロフィール・フォローリスト・ミュートリストのキャッシュ
 - バッチプロフィール取得
 - バッジ定義の複数リレー検索
