@@ -8,7 +8,6 @@ import {
   signEventNip07,
   createEventTemplate,
   publishEvent,
-  subscribeToEvents,
   shortenPubkey,
   formatTimestamp,
   hasNip07,
