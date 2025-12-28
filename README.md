@@ -51,7 +51,6 @@ LINE風のNostrクライアント - シンプルで可愛い、みんなのた�
 ### 📲 PWA対応
 - ホーム画面に追加してアプリのように使用可能
 - オフラインキャッシュ対応
-- iOS / Android 両対応
 
 ## 🔐 ログイン方法
 
@@ -80,13 +79,12 @@ npm run dev
 
 ## 📋 技術スタック
 
-- Next.js 14.2
-- React 18
-- Tailwind CSS
-- nostr-tools ^2.17
+- Next.js 14.2.35
+- React 18.3.1
+- Tailwind CSS 3.4.3
+- nostr-tools ^2.17.0
 - nosskey-sdk ^0.0.4
-- nostr-login ^1.7.12
-- rx-nostr ^3.6（オプション）
+- rx-nostr ^3.6.2
 
 ## 📝 NIPs対応
 
@@ -95,7 +93,7 @@ npm run dev
 | NIP-01 | Basic protocol |
 | NIP-02 | Follow List（フォロー/アンフォロー） |
 | NIP-05 | NIP-05認証・検証 |
-| NIP-07 | ブラウザ拡張機能（nostr-login経由） |
+| NIP-07 | ブラウザ拡張機能（Alby, nos2x等） |
 | NIP-09 | Event Deletion（投稿削除、いいね取消、リポスト取消） |
 | NIP-17 | Private Direct Messages |
 | NIP-19 | bech32エンコード（npub/nsec/note/nevent） |
@@ -103,7 +101,7 @@ npm run dev
 | NIP-27 | Text Note References |
 | NIP-30 | Custom Emoji |
 | NIP-44 | Encrypted Payloads |
-| NIP-46 | Nostr Connect（nostr-login経由） |
+| NIP-46 | Nostr Connect（nsec.app等リモート署名） |
 | NIP-50 | Search Capability |
 | NIP-51 | Mute List |
 | NIP-57 | Lightning Zaps |
@@ -121,8 +119,12 @@ npm run dev
 
 ## 🔧 パフォーマンス最適化
 
-- リクエストスロットリング（同時接続数制限）
+- リクエストスロットリング（グローバル5/リレー毎3同時接続）
+- レート制限（10リクエスト/秒、バースト20）
+- 指数バックオフリトライ（最大3回）
+- 失敗リレー追跡と自動クールダウン（2分）
 - プロフィール・フォローリスト・ミュートリストのキャッシュ
+- カスタム絵文字・バッジのキャッシュ
 - バッチプロフィール取得
 - バッジ定義の複数リレー検索
 

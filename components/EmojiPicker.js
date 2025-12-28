@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { fetchEvents, getDefaultRelay } from '@/lib/nostr'
+import { getCachedEmoji, setCachedEmoji } from '@/lib/cache'
 
 const KIND_EMOJI_LIST = 10030
 const KIND_EMOJI_SET = 30030
@@ -15,6 +16,14 @@ export default function EmojiPicker({ pubkey, onSelect, onClose }) {
 
   useEffect(() => {
     if (pubkey) {
+      // Check cache first
+      const cached = getCachedEmoji(pubkey)
+      if (cached) {
+        setEmojis(cached.emojis || [])
+        setEmojiSets(cached.emojiSets || [])
+        setLoading(false)
+        return
+      }
       loadEmojis()
     }
   }, [pubkey])
@@ -102,6 +111,8 @@ export default function EmojiPicker({ pubkey, onSelect, onClose }) {
 
         setEmojis(individualEmojis)
         setEmojiSets(loadedSets)
+        // Save to cache
+        setCachedEmoji(pubkey, { emojis: individualEmojis, emojiSets: loadedSets })
         setLoading(false)
         return
       } catch (e) {
