@@ -590,7 +590,16 @@ export default function UserProfileView({
               <div className="relative -mt-10">
                 <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-[var(--bg-primary)] bg-[var(--bg-tertiary)]">
                   {profile?.picture ? (
-                    <img src={profile.picture} alt="" className="w-full h-full object-cover" />
+                    <img
+                      src={profile.picture}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        e.target.style.display = 'none'
+                        e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center"><svg class="w-10 h-10 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>'
+                      }}
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <svg className="w-10 h-10 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="currentColor">

@@ -634,11 +634,15 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
           {/* Creator */}
           <div className="flex items-center gap-2 mt-2">
             {profiles[event.pubkey]?.picture ? (
-              <img 
-                src={profiles[event.pubkey].picture} 
-                alt="" 
+              <img
+                src={profiles[event.pubkey].picture}
+                alt=""
                 className="w-6 h-6 rounded-full"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.target.style.display = 'none'
+                  e.target.parentElement.innerHTML = '<div class="w-6 h-6 rounded-full bg-[var(--bg-tertiary)]" />'
+                }}
               />
             ) : (
               <div className="w-6 h-6 rounded-full bg-[var(--bg-tertiary)]" />
@@ -727,7 +731,16 @@ function EventDetailModal({ event, allEvents = [], rsvps, profiles, myPubkey, on
                           <td className="p-3 border-r border-[var(--border-color)] bg-[var(--bg-primary)]">
                             <div className="flex items-center gap-2">
                               {profile?.picture ? (
-                                <img src={profile.picture} alt="" className="w-5 h-5 rounded-full flex-shrink-0" referrerPolicy="no-referrer" />
+                                <img
+                                  src={profile.picture}
+                                  alt=""
+                                  className="w-5 h-5 rounded-full flex-shrink-0"
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none'
+                                    e.target.parentElement.innerHTML += '<div class="w-5 h-5 rounded-full bg-[var(--bg-tertiary)] flex-shrink-0" />'
+                                  }}
+                                />
                               ) : (
                                 <div className="w-5 h-5 rounded-full bg-[var(--bg-tertiary)] flex-shrink-0" />
                               )}
@@ -995,11 +1008,15 @@ function EventCard({ event, allEvents = [], rsvps, profiles, myPubkey, onViewDet
     >
       <div className="flex items-center gap-2 mb-2">
         {creatorProfile?.picture ? (
-          <img 
-            src={creatorProfile.picture} 
-            alt="" 
+          <img
+            src={creatorProfile.picture}
+            alt=""
             className="w-6 h-6 rounded-full object-cover"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.target.style.display = 'none'
+              e.target.parentElement.innerHTML += '<div class="w-6 h-6 rounded-full bg-[var(--bg-secondary)]" />'
+            }}
           />
         ) : (
           <div className="w-6 h-6 rounded-full bg-[var(--bg-secondary)]" />
