@@ -1,105 +1,196 @@
 # ぬるぬる
 
-LINE風UIのNostrクライアント
+**LINE風のNostrクライアント** — シンプルで可愛い、みんなのためのNostr
 
 ---
-
-## Overview
-
-シンプルで直感的なNostr体験を提供するWebアプリケーション。
-パスキー認証による安全なログイン、リアルタイム通信、暗号化DMをサポート。
 
 ## Features
 
 ### Timeline
-- リレー/フォロー切り替え
+
+- リレータイムライン / フォロータイムライン切り替え
+- 固定ヘッダー（スクロール中もタブ切り替え・検索可能）
 - リアルタイム投稿表示
-- いいね・リポスト・Zap
-- 引用投稿表示
-- カスタム絵文字
+- いいね・リポスト（取消対応）・Zap（ワンタップ/長押しカスタム）
+- 投稿の引用表示（nostr:note1/nevent1対応）
+- 返信インジケーター表示
+- カスタム絵文字表示（NIP-30対応）
+- ユーザープロフィール表示
+- フォロー/アンフォロー機能
+- ミュート機能（NIP-51対応）
 
-### Direct Messages
-- NIP-17暗号化DM
-- リアルタイム送受信
-- 会話リスト管理
+### Talk
 
-### Profile
-- プロフィール編集・画像アップロード
-- NIP-05認証
-- バッジ表示
-- フォロー管理
+- NIP-17 暗号化DM（NIP-44/59対応）
+- リアルタイムメッセージ送受信
+- 会話リスト表示
+- プロフィールからDM開始
+
+### Home
+
+- プロフィールの表示・編集
+- NIP-05認証バッジ表示・検証
+- プロフィールバッジ表示（NIP-58対応、最大3つ）
+- フォローリスト管理（フォロー数表示・フォロー解除）
+- 自分の投稿一覧（リポスト含む）
+- 投稿の削除機能
+- プロフィール画像アップロード（Blossom/nostr.build対応）
+- 誕生日表示
 
 ### Search
-- NIP-50全文検索
-- 検索履歴
 
-### Settings
-- Zap金額設定
-- リレー管理
-- ミュートリスト
-- カスタム絵文字セット
-- パスキー管理
+- NIP-50 全文検索
+- 検索結果からいいね・リポスト・Zap
+- 最近の検索履歴
+
+### Mini Apps（Settings）
+
+- デフォルトZap金額設定
+- リレー設定
+- 画像アップロードサーバー設定
+- ミュートリスト管理
+- カスタム絵文字セット管理（NIP-30）
+- プロフィールバッジ管理（NIP-58）
+  - 獲得済みバッジ表示（kind:8アワード）
+  - プロフィールバッジ追加/削除（kind:30008）
+- パスキー設定（秘密鍵エクスポート/自動署名）
+
+### PWA
+
+- ホーム画面に追加してアプリのように使用可能
+- オフラインキャッシュ対応
+
+---
 
 ## Authentication
 
+### Passkey（推奨）
+
+Face ID / Touch ID / Windows Hello を使って、パスワード不要で安全にログインできます。
+
+- 秘密鍵はデバイスのセキュアエリアに保存
+- 設定画面から秘密鍵のエクスポートが可能
+- PRF対応ブラウザが必要（Chrome 109+ / Safari 17+ / Edge 109+）
+
+### Other Methods
+
+パスキー非対応ブラウザや、既存の秘密鍵を使いたい場合：
+
 | Method | Description |
 |--------|-------------|
-| Passkey | Face ID / Touch ID / Windows Hello |
-| NIP-07 | Alby, nos2x等ブラウザ拡張 |
-| NIP-46 | nsec.app等リモート署名 |
-| Read-only | npub閲覧専用 |
-| Local | nsec直接入力 |
+| Browser Extension | Alby / nos2x など（NIP-07） |
+| Nostr Connect | nsec.app などのリモート署名（NIP-46） |
+| Read-only | npub入力（署名不可） |
+| Local Key | nsec直接入力（ブラウザに保存） |
 
-## Quick Start
+---
+
+## Setup
 
 ```bash
 npm install
 npm run dev
 ```
 
-http://localhost:3000
+ブラウザで http://localhost:3000 を開きます。
+
+---
 
 ## Tech Stack
 
 | Category | Technology |
 |----------|------------|
-| Framework | Next.js 14 |
-| UI | React 18, Tailwind CSS |
-| Protocol | nostr-tools |
-| Auth | nosskey-sdk |
-| Mobile | Capacitor |
+| Framework | Next.js 14.2 |
+| UI | React 18.3, Tailwind CSS 3.4 |
+| Protocol | nostr-tools 2.17 |
+| Auth | nosskey-sdk 0.0.4 |
+| Mobile | Capacitor 8.0 |
+
+---
 
 ## NIPs
 
-01, 02, 05, 07, 09, 17, 19, 25, 27, 30, 44, 46, 50, 51, 57, 58, 59, 98
+| NIP | Description |
+|-----|-------------|
+| NIP-01 | Basic protocol |
+| NIP-02 | Follow List（フォロー/アンフォロー） |
+| NIP-05 | NIP-05認証・検証 |
+| NIP-07 | ブラウザ拡張機能（Alby, nos2x等） |
+| NIP-09 | Event Deletion（投稿削除、いいね取消、リポスト取消） |
+| NIP-17 | Private Direct Messages |
+| NIP-19 | bech32エンコード（npub/nsec/note/nevent） |
+| NIP-25 | Reactions（いいね/いいね取消） |
+| NIP-27 | Text Note References |
+| NIP-30 | Custom Emoji |
+| NIP-44 | Encrypted Payloads |
+| NIP-46 | Nostr Connect（nsec.app等リモート署名） |
+| NIP-50 | Search Capability |
+| NIP-51 | Mute List |
+| NIP-57 | Lightning Zaps |
+| NIP-58 | Badges（表示・プロフィールバッジ管理） |
+| NIP-59 | Gift Wrap |
+| NIP-98 | HTTP Auth（画像アップロード用） |
+
+---
+
+## Image Upload
+
+| Server | Description |
+|--------|-------------|
+| nostr.build | デフォルト、NIP-98認証対応 |
+| yabu.me | NIP-98認証対応 |
+| Blossom | nostr.build / カスタムサーバー対応 |
+
+---
+
+## Performance
+
+### Connection Management
+
+- リクエストスロットリング（グローバル4 / リレー毎2同時接続）
+- レート制限（10リクエスト/秒、バースト20）
+- 指数バックオフリトライ（最大3回）
+- 失敗リレー追跡と自動クールダウン（2分）
+
+### Caching
+
+- プロフィール・フォローリスト・ミュートリストのキャッシュ
+- カスタム絵文字・バッジのキャッシュ
+- バッチプロフィール取得
+- バッジ定義の複数リレー検索
+
+---
 
 ## Architecture
 
 ```
-app/           Next.js App Router
-components/    UI Components
-lib/           Core Libraries
+app/
+  layout.js          Root layout
+  page.js            Main entry
+
+components/
+  TimelineTab.js     Timeline view
+  TalkTab.js         DM conversations
+  HomeTab.js         Profile & settings
+  MiniAppTab.js      Mini applications
+  PostItem.js        Post rendering
+  ...
+
+lib/
   nostr.js           Protocol operations
-  connection-manager.js   WebSocket management
-  cache.js           Data caching
-  secure-key-store.js    Key management
+  connection-manager.js   WebSocket pool management
+  cache.js           Data caching layer
+  secure-key-store.js     Secure key storage
+  nip46.js           Nostr Connect
+  imageUtils.js      Image processing
 ```
 
-### Connection Management
-
-- スロットリング: 4並列 / 2並列per relay
-- レート制限: 10req/s, burst 20
-- 指数バックオフリトライ
-- 失敗リレー自動クールダウン
-
-## Image Upload
-
-- nostr.build
-- yabu.me
-- Blossom
-
-すべてNIP-98認証対応
+---
 
 ## License
 
-MIT
+MIT License
+
+---
+
+Made with Nostr
