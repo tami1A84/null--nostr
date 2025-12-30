@@ -1,10 +1,13 @@
-# ぬるぬる 💚
+# ぬるぬる
 
-LINE風のNostrクライアント - シンプルで可愛い、みんなのためのNostr
+**LINE風のNostrクライアント** — シンプルで可愛い、みんなのためのNostr
 
-## ✨ 機能
+---
 
-### 📱 タイムライン
+## Features
+
+### Timeline
+
 - リレータイムライン / フォロータイムライン切り替え
 - 固定ヘッダー（スクロール中もタブ切り替え・検索可能）
 - リアルタイム投稿表示
@@ -16,28 +19,32 @@ LINE風のNostrクライアント - シンプルで可愛い、みんなのた�
 - フォロー/アンフォロー機能
 - ミュート機能（NIP-51対応）
 
-### 💬 トーク
+### Talk
+
 - NIP-17 暗号化DM（NIP-44/59対応）
 - リアルタイムメッセージ送受信
 - 会話リスト表示
 - プロフィールからDM開始
 
-### 🏠 ホーム
+### Home
+
 - プロフィールの表示・編集
 - NIP-05認証バッジ表示・検証
 - プロフィールバッジ表示（NIP-58対応、最大3つ）
 - フォローリスト管理（フォロー数表示・フォロー解除）
 - 自分の投稿一覧（リポスト含む）
-- 投稿の削除機能（⋮メニュー）
+- 投稿の削除機能
 - プロフィール画像アップロード（Blossom/nostr.build対応）
 - 誕生日表示
 
-### 🔍 検索
+### Search
+
 - NIP-50 全文検索
 - 検索結果からいいね・リポスト・Zap
 - 最近の検索履歴
 
-### ⚙️ ミニアプリ（設定）
+### Mini Apps（Settings）
+
 - デフォルトZap金額設定
 - リレー設定
 - 画像アップロードサーバー設定
@@ -48,27 +55,37 @@ LINE風のNostrクライアント - シンプルで可愛い、みんなのた�
   - プロフィールバッジ追加/削除（kind:30008）
 - パスキー設定（秘密鍵エクスポート/自動署名）
 
-### 📲 PWA対応
+### PWA
+
 - ホーム画面に追加してアプリのように使用可能
 - オフラインキャッシュ対応
 
-## 🔐 ログイン方法
+---
 
-### パスキー（推奨）
+## Authentication
+
+### Passkey（推奨）
+
 Face ID / Touch ID / Windows Hello を使って、パスワード不要で安全にログインできます。
+
 - 秘密鍵はデバイスのセキュアエリアに保存
 - 設定画面から秘密鍵のエクスポートが可能
 - PRF対応ブラウザが必要（Chrome 109+ / Safari 17+ / Edge 109+）
 
-### その他のログイン方法
-パスキー非対応ブラウザや、既存の秘密鍵を使いたい場合に利用できます：
+### Other Methods
 
-- **ブラウザ拡張機能** - Alby / nos2x など（NIP-07）
-- **Nostr Connect** - nsec.app などのリモート署名（NIP-46）
-- **読み取り専用** - npub入力（署名不可）
-- **ローカルキー** - nsec直接入力（ブラウザに保存）
+パスキー非対応ブラウザや、既存の秘密鍵を使いたい場合：
 
-## 🛠️ セットアップ
+| Method | Description |
+|--------|-------------|
+| Browser Extension | Alby / nos2x など（NIP-07） |
+| Nostr Connect | nsec.app などのリモート署名（NIP-46） |
+| Read-only | npub入力（署名不可） |
+| Local Key | nsec直接入力（ブラウザに保存） |
+
+---
+
+## Setup
 
 ```bash
 npm install
@@ -77,19 +94,24 @@ npm run dev
 
 ブラウザで http://localhost:3000 を開きます。
 
-## 📋 技術スタック
+---
 
-- Next.js 14.2.35
-- React 18.3.1
-- Tailwind CSS 3.4.3
-- nostr-tools ^2.17.0
-- nosskey-sdk ^0.0.4
-- rx-nostr ^3.6.2
+## Tech Stack
 
-## 📝 NIPs対応
+| Category | Technology |
+|----------|------------|
+| Framework | Next.js 14.2 |
+| UI | React 18.3, Tailwind CSS 3.4 |
+| Protocol | nostr-tools 2.17 |
+| Auth | nosskey-sdk 0.0.4 |
+| Mobile | Capacitor 8.0 |
 
-| NIP | 機能 |
-|-----|------|
+---
+
+## NIPs
+
+| NIP | Description |
+|-----|-------------|
 | NIP-01 | Basic protocol |
 | NIP-02 | Follow List（フォロー/アンフォロー） |
 | NIP-05 | NIP-05認証・検証 |
@@ -109,29 +131,66 @@ npm run dev
 | NIP-59 | Gift Wrap |
 | NIP-98 | HTTP Auth（画像アップロード用） |
 
-## 🖼️ 画像アップロード
+---
 
-- **nostr.build** - デフォルト、NIP-98認証対応
-- **やぶみ** (`share.yabu.me`) - NIP-98認証対応
-- **Blossom** - NIP-98認証対応
-  - nostr.build (`blossom.nostr.build`)
-  - カスタムサーバー
+## Image Upload
 
-## 🔧 パフォーマンス最適化
+| Server | Description |
+|--------|-------------|
+| nostr.build | デフォルト、NIP-98認証対応 |
+| yabu.me | NIP-98認証対応 |
+| Blossom | nostr.build / カスタムサーバー対応 |
 
-- リクエストスロットリング（グローバル5/リレー毎3同時接続）
+---
+
+## Performance
+
+### Connection Management
+
+- リクエストスロットリング（グローバル4 / リレー毎2同時接続）
 - レート制限（10リクエスト/秒、バースト20）
 - 指数バックオフリトライ（最大3回）
 - 失敗リレー追跡と自動クールダウン（2分）
+
+### Caching
+
 - プロフィール・フォローリスト・ミュートリストのキャッシュ
 - カスタム絵文字・バッジのキャッシュ
 - バッチプロフィール取得
 - バッジ定義の複数リレー検索
 
-## 📄 ライセンス
+---
+
+## Architecture
+
+```
+app/
+  layout.js          Root layout
+  page.js            Main entry
+
+components/
+  TimelineTab.js     Timeline view
+  TalkTab.js         DM conversations
+  HomeTab.js         Profile & settings
+  MiniAppTab.js      Mini applications
+  PostItem.js        Post rendering
+  ...
+
+lib/
+  nostr.js           Protocol operations
+  connection-manager.js   WebSocket pool management
+  cache.js           Data caching layer
+  secure-key-store.js     Secure key storage
+  nip46.js           Nostr Connect
+  imageUtils.js      Image processing
+```
+
+---
+
+## License
 
 MIT License
 
 ---
 
-Made with 💚 for Nostr
+Made with Nostr
