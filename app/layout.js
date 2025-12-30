@@ -1,4 +1,5 @@
 import './globals.css'
+import ClientLayout from '@/components/ClientLayout'
 
 export const metadata = {
   title: 'ぬるぬる',
@@ -42,7 +43,9 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-title" content="ぬるぬる" />
       </head>
       <body className="antialiased">
-        {children}
+        <ClientLayout>
+          {children}
+        </ClientLayout>
       </body>
     </html>
   )

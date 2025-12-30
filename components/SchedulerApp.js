@@ -59,11 +59,15 @@ async function fastFetch(filter, relays, timeoutMs = 4000) {
               clearTimeout(timeout)
               if (!resolved) {
                 resolved = true
-                try { ws.close() } catch(e) {}
+                try { ws.close() } catch (closeErr) {
+                  // WebSocket close errors are non-fatal
+                }
                 resolve(results)
               }
             }
-          } catch (e) {}
+          } catch (parseErr) {
+            console.warn('Failed to parse relay message:', parseErr.message)
+          }
         }
         
         ws.onerror = () => {
@@ -1090,7 +1094,10 @@ export default function SchedulerApp({ pubkey }) {
         if (decoded.type === 'naddr') {
           return decoded.data
         }
-      } catch (e) {}
+      } catch (e) {
+        // Invalid naddr format, continue to try other formats
+        console.debug('Failed to decode naddr:', e.message)
+      }
     }
     
     // Try chronostr URL format

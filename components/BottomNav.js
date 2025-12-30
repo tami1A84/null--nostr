@@ -57,7 +57,11 @@ const tabs = [
 
 export default function BottomNav({ activeTab, onTabChange }) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bottom-nav pb-safe">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 bottom-nav pb-safe"
+      role="tablist"
+      aria-label="メインナビゲーション"
+    >
       <div className="flex items-center justify-around h-14">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id
@@ -68,8 +72,15 @@ export default function BottomNav({ activeTab, onTabChange }) {
               className={`flex flex-col items-center justify-center flex-1 h-full transition-colors duration-200 action-btn ${
                 isActive ? 'tab-active' : 'tab-inactive'
               }`}
+              role="tab"
+              aria-selected={isActive}
+              aria-label={`${tab.label}タブ`}
+              aria-controls={`${tab.id}-panel`}
             >
-              <div className={`transition-transform duration-200 ${isActive ? 'scale-105' : ''}`}>
+              <div
+                className={`transition-transform duration-200 ${isActive ? 'scale-105' : ''}`}
+                aria-hidden="true"
+              >
                 {tab.icon(isActive)}
               </div>
               <span className="text-[10px] mt-0.5 font-medium">

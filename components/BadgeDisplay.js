@@ -35,7 +35,9 @@ function getCachedBadges(pubkey) {
         return badges
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Failed to load cached badges:', e.message)
+  }
   return null
 }
 
@@ -47,7 +49,10 @@ function saveCachedBadges(pubkey, badges) {
       badges,
       timestamp: Date.now()
     }))
-  } catch (e) {}
+  } catch (e) {
+    // localStorage might be full, log but don't throw
+    console.warn('Failed to cache badges:', e.message)
+  }
 }
 
 // Badge image component with error handling
