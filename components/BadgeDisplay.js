@@ -124,7 +124,7 @@ export default function BadgeDisplay({ pubkey, maxBadges = 3 }) {
     try {
       const currentRelay = getDefaultRelay()
       // Use multiple relays for better badge definition coverage
-      const extraRelays = ['wss://yabu.me', 'wss://relay.damus.io', 'wss://relay.nostr.band', 'wss://nos.lol']
+      const extraRelays = ['wss://yabu.me', 'wss://relay.damus.io', 'wss://nos.lol']
       const allRelays = [...new Set([currentRelay, ...extraRelays])]
       
       // Fetch profile badges (kind 30008) - try multiple relays
