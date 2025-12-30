@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { savePubkey } from '@/lib/nostr'
+import { nip19 } from 'nostr-tools'
+import { savePubkey, setStoredPrivateKey } from '@/lib/nostr'
 
 export default function LoginScreen({ onLogin }) {
   const [checking, setChecking] = useState(true)
@@ -302,7 +303,6 @@ export default function LoginScreen({ onLogin }) {
   // Onboarding screen
   if (showOnboarding && createdPubkey) {
     const step = onboardingSteps[onboardingStep]
-    const { nip19 } = require('nostr-tools')
     const npub = nip19.npubEncode(createdPubkey)
     
     return (

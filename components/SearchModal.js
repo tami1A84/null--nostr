@@ -43,7 +43,10 @@ export default function SearchModal({ pubkey, onClose, onViewProfile }) {
     if (saved) {
       try {
         setRecentSearches(JSON.parse(saved).slice(0, 5))
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Failed to parse recent searches:', e.message)
+        localStorage.removeItem('recentSearches')
+      }
     }
 
     // Focus input on mount

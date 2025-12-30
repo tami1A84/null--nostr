@@ -256,7 +256,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
               _repostId: repost.id
             })
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('Failed to parse repost event:', e.message)
+        }
       }
 
       const allPosts = [...notes, ...repostData].sort((a, b) => {
@@ -501,7 +503,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
               _repostId: repost.id
             })
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('Failed to parse repost event:', e.message)
+        }
       }
 
       const allPosts = [...notes, ...repostData].sort((a, b) => {
@@ -580,7 +584,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
               _repostId: repost.id
             })
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('Failed to parse repost event:', e.message)
+        }
       }
 
       const allPosts = [...notes, ...repostData].sort((a, b) => {

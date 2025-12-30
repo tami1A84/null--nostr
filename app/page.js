@@ -8,7 +8,7 @@ import HomeTab from '@/components/HomeTab'
 import TalkTab from '@/components/TalkTab'
 import TimelineTab from '@/components/TimelineTab'
 import MiniAppTab from '@/components/MiniAppTab'
-import { loadPubkey, clearPubkey, getLoginMethod, startBackgroundPrefetch, clearPrefetchPromises } from '@/lib/nostr'
+import { loadPubkey, clearPubkey, getLoginMethod, startBackgroundPrefetch, clearPrefetchPromises, setStoredPrivateKey, clearStoredPrivateKey } from '@/lib/nostr'
 import { initCache } from '@/lib/cache'
 
 // Desktop sidebar navigation items
@@ -128,7 +128,7 @@ export default function Home() {
                 if (keyInfo) {
                   const privateKeyHex = await manager.exportNostrKey(keyInfo)
                   if (privateKeyHex) {
-                    window.nostrPrivateKey = privateKeyHex
+                    setStoredPrivateKey(storedPubkey, privateKeyHex)
                   }
                 }
               } catch (e) {
@@ -173,18 +173,18 @@ export default function Home() {
   const handleLogout = () => {
     clearPubkey()
     clearPrefetchPromises()
+    clearStoredPrivateKey()
     // Clear Nosskey data if it was used
     if (window.nosskeyManager) {
       window.nosskeyManager.clearStoredKeyInfo()
       window.nosskeyManager = undefined
     }
-    window.nostrPrivateKey = undefined
     localStorage.removeItem('nurunuru_login_method')
     localStorage.removeItem('nurunuru_bunker_session')
-    
+
     // Trigger nostr-login logout
     document.dispatchEvent(new Event('nlLogout'))
-    
+
     setPubkey(null)
     setActiveTab('timeline')
     setTabsReady({ home: false, talk: false })
