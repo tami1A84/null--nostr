@@ -248,7 +248,6 @@ const KNOWN_RELAYS = [
   { url: 'wss://r.kojira.io', name: 'Kojira', region: 'JP' },
   { url: 'wss://nos.lol', name: 'nos.lol', region: 'Global' },
   { url: 'wss://relay.damus.io', name: 'Damus', region: 'Global' },
-  { url: 'wss://relay.nostr.band', name: 'nostr.band', region: 'Global' },
   { url: 'wss://relay.snort.social', name: 'Snort', region: 'Global' },
   { url: 'wss://nostr.wine', name: 'nostr.wine (有料)', region: 'Global' },
   { url: 'wss://relay.nostr.bg', name: 'nostr.bg', region: 'EU' },
@@ -420,7 +419,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
       const currentRelay = getDefaultRelay()
       // Use multiple relays for better coverage (Japanese relays first)
       const relays = [currentRelay]
-      const extraRelays = ['wss://yabu.me', 'wss://relay-jp.nostr.wirednet.jp', 'wss://r.kojira.io', 'wss://relay.nostr.band', 'wss://nos.lol']
+      const extraRelays = ['wss://yabu.me', 'wss://relay-jp.nostr.wirednet.jp', 'wss://r.kojira.io', 'wss://nos.lol']
       const allRelays = [...new Set([currentRelay, ...extraRelays])]
       
       // Load current profile badges (kind 30008)
