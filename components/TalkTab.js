@@ -17,7 +17,7 @@ import {
 } from '@/lib/nostr'
 import EmojiPicker from './EmojiPicker'
 
-// Render content preview with custom emojis
+// Render content preview with custom emojis (for input preview)
 function MessagePreview({ content, customEmojis = [] }) {
   if (!content) return null
 
@@ -56,6 +56,98 @@ function MessagePreview({ content, customEmojis = [] }) {
           }
           return <span key={i} className="text-[var(--text-tertiary)]">{part}</span>
         }
+        return <span key={i}>{part}</span>
+      })}
+    </div>
+  )
+}
+
+// Image URL detection regex
+const IMAGE_URL_REGEX = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?[^\s]*)?)/gi
+
+// Render message content with CW, custom emojis, and images
+function MessageContent({ content, isSent }) {
+  const [cwRevealed, setCwRevealed] = useState(false)
+
+  if (!content) return null
+
+  // Check for CW pattern: [CW: reason]\n\ncontent
+  const cwMatch = content.match(/^\[CW:\s*([^\]]*)\]\s*\n\n([\s\S]*)$/)
+
+  if (cwMatch) {
+    const cwReason = cwMatch[1] || '警告'
+    const actualContent = cwMatch[2]
+
+    return (
+      <div>
+        <button
+          onClick={() => setCwRevealed(!cwRevealed)}
+          className={`flex items-center gap-1 text-xs font-medium mb-1 ${isSent ? 'text-green-100' : 'text-orange-500'}`}
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          CW: {cwReason}
+          <svg className={`w-3 h-3 transition-transform ${cwRevealed ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        {cwRevealed && (
+          <div className="mt-1 pt-1 border-t border-current/20">
+            <RenderMessageText content={actualContent} isSent={isSent} />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return <RenderMessageText content={content} isSent={isSent} />
+}
+
+// Render text with custom emojis and images
+function RenderMessageText({ content, isSent }) {
+  if (!content) return null
+
+  // Split by image URLs and emoji shortcodes
+  const combinedRegex = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?[^\s]*)?|:[a-zA-Z0-9_]+:)/gi
+  const parts = content.split(combinedRegex).filter(Boolean)
+
+  return (
+    <div className="text-sm whitespace-pre-wrap break-words">
+      {parts.map((part, i) => {
+        // Check for image URL
+        if (part.match(/^https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|svg)/i)) {
+          return (
+            <div key={i} className="my-1">
+              <img
+                src={part}
+                alt=""
+                className="max-w-full max-h-48 rounded-lg object-contain"
+                loading="lazy"
+                onError={(e) => {
+                  // If image fails to load, show as link
+                  e.target.outerHTML = `<a href="${part}" target="_blank" rel="noopener noreferrer" class="underline break-all">${part}</a>`
+                }}
+              />
+            </div>
+          )
+        }
+
+        // Check for custom emoji shortcode
+        const emojiMatch = part.match(/^:([a-zA-Z0-9_]+):$/)
+        if (emojiMatch) {
+          const shortcode = emojiMatch[1]
+          // For now, we don't have the emoji URL map for received messages
+          // Show as styled shortcode
+          return (
+            <span key={i} className={`${isSent ? 'text-green-100/70' : 'text-[var(--text-tertiary)]'}`}>
+              {part}
+            </span>
+          )
+        }
+
         return <span key={i}>{part}</span>
       })}
     </div>
@@ -775,7 +867,7 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
             style={{ animationDelay: `${index * 20}ms` }}
           >
             <div className={msg.isSent ? 'message-sent' : 'message-received'}>
-              <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+              <MessageContent content={msg.content} isSent={msg.isSent} />
               <p className={`text-xs mt-1 ${msg.isSent ? 'text-green-100' : 'text-[var(--text-tertiary)]'}`}>
                 {msg.sending ? '送信中...' : formatTimestamp(msg.created_at)}
               </p>
