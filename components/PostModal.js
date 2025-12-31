@@ -329,6 +329,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
               value={postContent}
               onChange={(e) => setPostContent(e.target.value)}
               onKeyDown={handleKeyDown}
+              spellCheck={false}
               className={`w-full h-32 resize-none bg-transparent placeholder:text-[var(--text-tertiary)] focus:outline-none ${
                 postContent && (postContent.includes('#') || selectedEmojis.length > 0)
                   ? 'text-transparent caret-[var(--text-primary)] absolute inset-0 z-10'

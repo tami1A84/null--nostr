@@ -1315,6 +1315,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                 <textarea
                   value={newPost}
                   onChange={(e) => setNewPost(e.target.value)}
+                  spellCheck={false}
                   className={`w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none placeholder-[var(--text-tertiary)] outline-none text-base ${
                     newPost && (newPost.includes('#') || emojiTags.length > 0)
                       ? 'text-transparent caret-[var(--text-primary)] absolute inset-0 z-10'
