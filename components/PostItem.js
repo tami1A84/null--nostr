@@ -408,7 +408,7 @@ export default function PostItem({
               e.stopPropagation()
               if (onHashtagClick) onHashtagClick(hashtag)
             }}
-            className="text-[#1d9bf0] hover:underline cursor-pointer"
+            className="text-[var(--line-green)] hover:underline cursor-pointer"
           >
             {part}
           </span>
