@@ -12,8 +12,10 @@ import {
   decryptNip44,
   fetchProfilesBatch,
   getAllCachedProfiles,
+  uploadImage,
   RELAYS
 } from '@/lib/nostr'
+import EmojiPicker from './EmojiPicker'
 
 const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, ref) {
   const [conversations, setConversations] = useState([])
@@ -25,7 +27,17 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
   const [loading, setLoading] = useState(true)
   const [profiles, setProfiles] = useState({})
   const [sending, setSending] = useState(false)
+  // New state for enhanced message input
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [selectedEmojis, setSelectedEmojis] = useState([])
+  const [contentWarning, setContentWarning] = useState('')
+  const [showCWInput, setShowCWInput] = useState(false)
   const messagesEndRef = useRef(null)
+  const fileInputRef = useRef(null)
+  const textareaRef = useRef(null)
   
   // DM support state - check dynamically
   const [hasDMSupport, setHasDMSupport] = useState(true) // Default to true, will update
@@ -319,14 +331,90 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
     refresh: loadConversations
   }))
 
+  // Image handling
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagePreview(reader.result)
+    }
+    reader.readAsDataURL(file)
+    setImageFile(file)
+  }
+
+  const handleRemoveImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  // Emoji handling
+  const handleEmojiSelect = (emoji) => {
+    if (emoji.shortcode && emoji.url) {
+      // Custom emoji
+      setNewMessage(prev => prev + `:${emoji.shortcode}:`)
+      setSelectedEmojis(prev => {
+        if (!prev.find(e => e.shortcode === emoji.shortcode)) {
+          return [...prev, emoji]
+        }
+        return prev
+      })
+    } else {
+      // Standard emoji
+      setNewMessage(prev => prev + emoji.native)
+    }
+    setShowEmojiPicker(false)
+  }
+
+  // Reset input state after sending
+  const resetInputState = () => {
+    setNewMessage('')
+    setImageFile(null)
+    setImagePreview(null)
+    setSelectedEmojis([])
+    setContentWarning('')
+    setShowCWInput(false)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedChat || sending) return
+    if ((!newMessage.trim() && !imageFile) || !selectedChat || sending) return
     setSending(true)
 
-    const messageContent = newMessage.trim()
+    let messageContent = newMessage.trim()
     const tempId = 'temp-' + Date.now()
 
     try {
+      // Upload image if selected
+      if (imageFile) {
+        try {
+          setUploadingImage(true)
+          const imageUrl = await uploadImage(imageFile)
+          if (imageUrl) {
+            messageContent = messageContent ? `${messageContent}\n${imageUrl}` : imageUrl
+          }
+        } catch (e) {
+          console.error('Image upload failed:', e)
+          alert(`画像のアップロードに失敗しました: ${e.message}`)
+          setSending(false)
+          setUploadingImage(false)
+          return
+        } finally {
+          setUploadingImage(false)
+        }
+      }
+
+      // Add content warning prefix if set
+      if (contentWarning.trim()) {
+        messageContent = `[CW: ${contentWarning.trim()}]\n\n${messageContent}`
+      }
+
       // Add optimistic message
       const optimisticMsg = {
         id: tempId,
@@ -337,13 +425,13 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
         sending: true
       }
       setMessages(prev => [...prev, optimisticMsg])
-      setNewMessage('')
+      resetInputState()
 
       // Send using NIP-17 (private direct messages)
       await sendEncryptedDM(selectedChat, messageContent)
-      
+
       // Update message as sent
-      setMessages(prev => prev.map(m => 
+      setMessages(prev => prev.map(m =>
         m.id === tempId ? { ...m, sending: false } : m
       ))
 
@@ -351,7 +439,7 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
       setConversations(prev => {
         const existing = prev.find(c => c.pubkey === selectedChat)
         const newTimestamp = Math.floor(Date.now() / 1000)
-        
+
         if (existing) {
           // Move existing conversation to top
           return [
@@ -653,24 +741,142 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
       </div>
 
       {/* Input */}
-      <div className="sticky bottom-14 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-color)] p-2">
-        <div className="flex items-center gap-2">
+      <div className="sticky bottom-14 lg:bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--border-color)]">
+        {/* Content Warning Input */}
+        {showCWInput && (
+          <div className="px-3 pt-2 pb-1 border-b border-[var(--border-color)]">
+            <div className="flex items-center gap-2 mb-1">
+              <svg className="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <span className="text-xs font-medium text-orange-500">コンテンツ警告</span>
+            </div>
+            <input
+              type="text"
+              value={contentWarning}
+              onChange={(e) => setContentWarning(e.target.value)}
+              className="w-full px-2 py-1.5 text-sm bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-orange-500"
+              placeholder="警告の理由"
+              maxLength={100}
+            />
+          </div>
+        )}
+
+        {/* Image Preview */}
+        {imagePreview && (
+          <div className="px-3 pt-2">
+            <div className="relative inline-block">
+              <img
+                src={imagePreview}
+                alt="プレビュー"
+                className="max-h-32 max-w-full rounded-lg object-contain"
+              />
+              <button
+                onClick={handleRemoveImage}
+                className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-1 px-2 pt-2">
+          {/* Image upload */}
           <input
-            type="text"
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageSelect}
+            className="hidden"
+            id="chat-image-input"
+          />
+          <label
+            htmlFor="chat-image-input"
+            className="action-btn p-2 cursor-pointer"
+          >
+            <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+          </label>
+
+          {/* CW toggle */}
+          <button
+            onClick={() => setShowCWInput(!showCWInput)}
+            className={`action-btn p-2 ${showCWInput ? 'text-orange-500' : ''}`}
+            title="コンテンツ警告"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </button>
+
+          {/* Emoji picker */}
+          <div className="relative">
+            <button
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              className="action-btn p-2"
+            >
+              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                <line x1="9" y1="9" x2="9.01" y2="9" />
+                <line x1="15" y1="9" x2="15.01" y2="9" />
+              </svg>
+            </button>
+            {showEmojiPicker && (
+              <div className="absolute bottom-full left-0 mb-2 z-10">
+                <EmojiPicker
+                  onSelect={handleEmojiSelect}
+                  onClose={() => setShowEmojiPicker(false)}
+                  pubkey={pubkey}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Text input and send button */}
+        <div className="flex items-center gap-2 p-2">
+          <textarea
+            ref={textareaRef}
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-            className="flex-1 input-line py-2.5"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSendMessage()
+              }
+            }}
+            spellCheck={false}
+            className="flex-1 input-line py-2 resize-none min-h-[40px] max-h-[120px]"
             placeholder="メッセージ"
+            rows={1}
           />
           <button
             onClick={handleSendMessage}
-            disabled={!newMessage.trim() || sending}
-            className="w-10 h-10 rounded-full bg-[var(--line-green)] flex items-center justify-center disabled:opacity-50 action-btn"
+            disabled={(!newMessage.trim() && !imageFile) || sending || uploadingImage}
+            className="w-10 h-10 rounded-full bg-[var(--line-green)] flex items-center justify-center disabled:opacity-50 action-btn flex-shrink-0"
           >
-            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-            </svg>
+            {uploadingImage ? (
+              <svg className="w-5 h-5 text-white animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" strokeDasharray="60" strokeDashoffset="20" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+            )}
           </button>
         </div>
       </div>
