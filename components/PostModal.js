@@ -94,8 +94,8 @@ function ContentPreview({ content, customEmojis = [] }) {
 export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuccess }) {
   const [postContent, setPostContent] = useState('')
   const [posting, setPosting] = useState(false)
-  const [imageFile, setImageFile] = useState(null)
-  const [imagePreview, setImagePreview] = useState(null)
+  const [imageFiles, setImageFiles] = useState([])
+  const [imagePreviews, setImagePreviews] = useState([])
   const [uploadingImage, setUploadingImage] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [selectedEmojis, setSelectedEmojis] = useState([])
@@ -111,24 +111,39 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
   }, [])
 
   const handleImageSelect = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
 
-    // Preview
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setImagePreview(reader.result)
+    // Limit to 4 images total
+    const maxImages = 4
+    const remainingSlots = maxImages - imageFiles.length
+    const filesToAdd = files.slice(0, remainingSlots)
+
+    if (filesToAdd.length === 0) {
+      alert('最大4枚まで画像を追加できます')
+      return
     }
-    reader.readAsDataURL(file)
-    setImageFile(file)
-  }
 
-  const handleRemoveImage = () => {
-    setImageFile(null)
-    setImagePreview(null)
+    // Read all files and create previews
+    filesToAdd.forEach(file => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreviews(prev => [...prev, reader.result])
+      }
+      reader.readAsDataURL(file)
+    })
+
+    setImageFiles(prev => [...prev, ...filesToAdd])
+
+    // Reset input to allow selecting same file again
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
+  }
+
+  const handleRemoveImage = (index) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index))
+    setImagePreviews(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleEmojiSelect = (emoji) => {
@@ -151,7 +166,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
   const handlePost = async () => {
     const content = postContent.trim()
-    if (!content && !imageFile) return
+    if (!content && imageFiles.length === 0) return
     if (posting) return
 
     try {
@@ -159,13 +174,24 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
       let finalContent = content
 
-      // Upload image if selected
-      if (imageFile) {
+      // Upload images if selected
+      if (imageFiles.length > 0) {
         try {
           setUploadingImage(true)
-          const imageUrl = await uploadImage(imageFile)
-          if (imageUrl) {
-            finalContent = finalContent ? `${finalContent}\n${imageUrl}` : imageUrl
+          const uploadedUrls = []
+
+          // Upload all images
+          for (const file of imageFiles) {
+            const imageUrl = await uploadImage(file)
+            if (imageUrl) {
+              uploadedUrls.push(imageUrl)
+            }
+          }
+
+          // Append all image URLs to content
+          if (uploadedUrls.length > 0) {
+            const imageUrlsStr = uploadedUrls.join('\n')
+            finalContent = finalContent ? `${finalContent}\n${imageUrlsStr}` : imageUrlsStr
           }
         } catch (e) {
           console.error('Image upload failed:', e)
@@ -223,8 +249,8 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
       })
 
       setPostContent('')
-      setImageFile(null)
-      setImagePreview(null)
+      setImageFiles([])
+      setImagePreviews([])
       setSelectedEmojis([])
       setContentWarning('')
       setShowCWInput(false)
@@ -256,7 +282,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
     }
   }
 
-  const isValid = postContent.trim() || imageFile
+  const isValid = postContent.trim() || imageFiles.length > 0
   const isLoading = posting || uploadingImage
 
   return (
@@ -347,24 +373,50 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
             )}
           </div>
 
-          {/* Image preview */}
-          {imagePreview && (
-            <div className="relative mt-3 inline-block">
-              <img
-                src={imagePreview}
-                alt="プレビュー"
-                className="max-h-48 max-w-full rounded-lg object-contain"
+          {/* Image previews - Multiple images */}
+          {imagePreviews.length > 0 && (
+            <div className="mt-3">
+              <div className="flex flex-wrap gap-2">
+                {imagePreviews.map((preview, index) => (
+                  <div key={index} className="relative inline-block">
+                    <img
+                      src={preview}
+                      alt={`プレビュー ${index + 1}`}
+                      className="h-24 w-24 rounded-lg object-cover"
+                    />
+                    <button
+                      onClick={() => handleRemoveImage(index)}
+                      className="absolute -top-1 -right-1 p-1 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+                      aria-label="画像を削除"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+                {/* Add more button if under limit */}
+                {imagePreviews.length < 4 && (
+                  <label
+                    htmlFor="post-image-input-add"
+                    className="h-24 w-24 rounded-lg border-2 border-dashed border-[var(--border-color)] flex items-center justify-center cursor-pointer hover:border-[var(--line-green)] transition-colors"
+                  >
+                    <svg className="w-6 h-6 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                  </label>
+                )}
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageSelect}
+                className="hidden"
+                id="post-image-input-add"
               />
-              <button
-                onClick={handleRemoveImage}
-                className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
-                aria-label="画像を削除"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
             </div>
           )}
         </div>
@@ -376,13 +428,14 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            multiple
             onChange={handleImageSelect}
             className="hidden"
             id="post-image-input"
           />
           <label
             htmlFor="post-image-input"
-            className="action-btn p-2 cursor-pointer"
+            className={`action-btn p-2 cursor-pointer relative ${imageFiles.length >= 4 ? 'opacity-50 pointer-events-none' : ''}`}
             aria-label="画像を追加"
           >
             <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -390,6 +443,11 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
               <circle cx="8.5" cy="8.5" r="1.5" />
               <polyline points="21 15 16 10 5 21" />
             </svg>
+            {imageFiles.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-[var(--line-green)] text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
+                {imageFiles.length}
+              </span>
+            )}
           </label>
 
           {/* Content Warning toggle (NIP-36) */}

@@ -1,17 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { 
-  shortenPubkey, 
-  formatTimestamp, 
-  parseNostrLink, 
-  fetchEvents, 
+import {
+  shortenPubkey,
+  formatTimestamp,
+  parseNostrLink,
+  fetchEvents,
   parseProfile,
   verifyNip05,
   encodeNpub,
-  RELAYS 
+  RELAYS
 } from '@/lib/nostr'
 import BadgeDisplay from './BadgeDisplay'
+import URLPreview from './URLPreview'
 
 // NIP-05 verified badge component
 function Nip05Badge({ nip05, pubkey }) {
@@ -397,7 +398,10 @@ export default function PostItem({
 
     const parts = content.split(combinedRegex).filter(Boolean)
 
-    return parts.map((part, i) => {
+    // Track URLs for preview (excluding images/videos)
+    const previewUrls = []
+
+    const renderedParts = parts.map((part, i) => {
       // Check for hashtags
       if (part.startsWith('#') && part.length > 1) {
         const hashtag = part.slice(1) // Remove # prefix
@@ -477,11 +481,15 @@ export default function PostItem({
       
       // Check for regular URLs
       if (part.match(/^https?:\/\//)) {
+        // Track URL for preview
+        if (!previewUrls.includes(part)) {
+          previewUrls.push(part)
+        }
         return (
-          <a 
-            key={i} 
-            href={part} 
-            target="_blank" 
+          <a
+            key={i}
+            href={part}
+            target="_blank"
             rel="noopener noreferrer"
             className="text-[var(--line-green)] hover:underline break-all"
           >
@@ -489,11 +497,21 @@ export default function PostItem({
           </a>
         )
       }
-      
+
       // Apply custom emoji to text parts
       const emojified = emojifyContent(part)
       return <span key={i}>{emojified}</span>
     })
+
+    return (
+      <>
+        {renderedParts}
+        {/* Show URL previews for non-media URLs (max 2) */}
+        {previewUrls.slice(0, 2).map((url, i) => (
+          <URLPreview key={`preview-${i}`} url={url} />
+        ))}
+      </>
+    )
   }
 
   const handleAvatarClick = (e) => {
