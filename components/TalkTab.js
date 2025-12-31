@@ -17,6 +17,51 @@ import {
 } from '@/lib/nostr'
 import EmojiPicker from './EmojiPicker'
 
+// Render content preview with custom emojis
+function MessagePreview({ content, customEmojis = [] }) {
+  if (!content) return null
+
+  // Build emoji map from selected emojis
+  const emojiMap = {}
+  customEmojis.forEach(emoji => {
+    if (emoji.shortcode && emoji.url) {
+      emojiMap[emoji.shortcode] = emoji.url
+    }
+  })
+
+  // Split by custom emoji shortcodes
+  const emojiRegex = /(:[a-zA-Z0-9_]+:)/g
+  const parts = content.split(emojiRegex).filter(Boolean)
+
+  return (
+    <div className="text-sm text-[var(--text-primary)] whitespace-pre-wrap break-words">
+      {parts.map((part, i) => {
+        const emojiMatch = part.match(/^:([a-zA-Z0-9_]+):$/)
+        if (emojiMatch) {
+          const shortcode = emojiMatch[1]
+          const emojiUrl = emojiMap[shortcode]
+          if (emojiUrl) {
+            return (
+              <img
+                key={i}
+                src={emojiUrl}
+                alt={`:${shortcode}:`}
+                title={`:${shortcode}:`}
+                className="inline-block w-5 h-5 align-middle mx-0.5"
+                onError={(e) => {
+                  e.target.style.display = 'none'
+                }}
+              />
+            )
+          }
+          return <span key={i} className="text-[var(--text-tertiary)]">{part}</span>
+        }
+        return <span key={i}>{part}</span>
+      })}
+    </div>
+  )
+}
+
 const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, ref) {
   const [conversations, setConversations] = useState([])
   const [selectedChat, setSelectedChat] = useState(null)
@@ -835,34 +880,59 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
               </svg>
             </button>
             {showEmojiPicker && (
-              <div className="absolute bottom-full left-0 mb-2 z-10">
-                <EmojiPicker
-                  onSelect={handleEmojiSelect}
-                  onClose={() => setShowEmojiPicker(false)}
-                  pubkey={pubkey}
-                />
-              </div>
+              <>
+                {/* Mobile: centered modal */}
+                <div className="sm:hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setShowEmojiPicker(false)}>
+                  <div className="w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+                    <EmojiPicker
+                      onSelect={handleEmojiSelect}
+                      onClose={() => setShowEmojiPicker(false)}
+                      pubkey={pubkey}
+                    />
+                  </div>
+                </div>
+                {/* Desktop: dropdown */}
+                <div className="hidden sm:block absolute right-0 bottom-full mb-2 z-50 w-80">
+                  <EmojiPicker
+                    onSelect={handleEmojiSelect}
+                    onClose={() => setShowEmojiPicker(false)}
+                    pubkey={pubkey}
+                  />
+                </div>
+              </>
             )}
           </div>
         </div>
 
         {/* Text input and send button */}
         <div className="flex items-center gap-2 p-2">
-          <textarea
-            ref={textareaRef}
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                handleSendMessage()
-              }
-            }}
-            spellCheck={false}
-            className="flex-1 input-line py-2 resize-none min-h-[40px] max-h-[120px]"
-            placeholder="メッセージ"
-            rows={1}
-          />
+          <div className="flex-1 relative">
+            <textarea
+              ref={textareaRef}
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSendMessage()
+                }
+              }}
+              spellCheck={false}
+              className={`w-full input-line py-2 resize-none min-h-[40px] max-h-[120px] ${
+                newMessage && selectedEmojis.length > 0
+                  ? 'text-transparent caret-[var(--text-primary)]'
+                  : ''
+              }`}
+              placeholder="メッセージ"
+              rows={1}
+            />
+            {/* Preview overlay for custom emojis */}
+            {newMessage && selectedEmojis.length > 0 && (
+              <div className="absolute inset-0 pointer-events-none px-4 py-2 overflow-hidden">
+                <MessagePreview content={newMessage} customEmojis={selectedEmojis} />
+              </div>
+            )}
+          </div>
           <button
             onClick={handleSendMessage}
             disabled={(!newMessage.trim() && !imageFile) || sending || uploadingImage}
