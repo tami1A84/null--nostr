@@ -854,7 +854,7 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[var(--bg-secondary)]">
+      <div className="flex-1 overflow-y-auto p-4 pb-36 space-y-2 bg-[var(--bg-secondary)]">
         {messages.length === 0 && (
           <div className="text-center py-8">
             <p className="text-[var(--text-tertiary)] text-sm">メッセージを送信してみましょう</p>
