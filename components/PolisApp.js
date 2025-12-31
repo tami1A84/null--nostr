@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { nip19 } from 'nostr-tools'
+import { nip19, getEventHash } from 'nostr-tools'
 import {
   parseProfile,
   signEventNip07,
@@ -9,6 +9,20 @@ import {
   getDefaultRelay,
   shortenPubkey
 } from '@/lib/nostr'
+import {
+  getWotScore,
+  getWotScoresBatch,
+  getVoteWeightFromWot
+} from '@/lib/wot'
+import {
+  countLeadingZeroBits,
+  getEventDifficulty,
+  mineEvent,
+  getVoteWeightFromPow,
+  getCombinedVoteWeight,
+  DIFFICULTY_LEVELS,
+  getDifficultyLevel
+} from '@/lib/pow'
 
 // Polis-compatible Nostr event kinds
 // These follow the PLURALITY_PROPOSAL.md specification
@@ -466,10 +480,110 @@ function ClusterSummary({ statements, opinions, clusters, participants }) {
 }
 
 /**
- * Statement Voting Card - Polis-style voting interface
+ * WoT Score Badge - Shows Web of Trust score
  */
-function StatementVotingCard({ statement, onVote, myVote, authorProfile, isVoting }) {
+function WotScoreBadge({ score, loading }) {
+  if (loading) {
+    return (
+      <span className="px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-xs text-[var(--text-tertiary)]">
+        WoT...
+      </span>
+    )
+  }
+
+  if (score === undefined || score === null) return null
+
+  let bgColor, textColor, label
+  if (score === Infinity) {
+    bgColor = 'bg-blue-100 dark:bg-blue-900/30'
+    textColor = 'text-blue-600 dark:text-blue-400'
+    label = 'あなた'
+  } else if (score >= 5) {
+    bgColor = 'bg-green-100 dark:bg-green-900/30'
+    textColor = 'text-green-600 dark:text-green-400'
+    label = `WoT +${score}`
+  } else if (score >= 1) {
+    bgColor = 'bg-yellow-100 dark:bg-yellow-900/30'
+    textColor = 'text-yellow-600 dark:text-yellow-400'
+    label = `WoT +${score}`
+  } else if (score === 0) {
+    bgColor = 'bg-gray-100 dark:bg-gray-900/30'
+    textColor = 'text-gray-600 dark:text-gray-400'
+    label = 'WoT 0'
+  } else {
+    bgColor = 'bg-red-100 dark:bg-red-900/30'
+    textColor = 'text-red-600 dark:text-red-400'
+    label = `WoT ${score}`
+  }
+
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs ${bgColor} ${textColor}`}>
+      {label}
+    </span>
+  )
+}
+
+/**
+ * PoW Difficulty Selector - Choose vote weight via Proof of Work
+ */
+function PowDifficultySelector({ selectedLevel, onSelect, mining, miningProgress }) {
+  return (
+    <div className="bg-[var(--bg-secondary)] rounded-xl p-3 mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-medium text-[var(--text-primary)]">
+          投票の重み（Quadratic Voting）
+        </span>
+        <span className="text-xs text-[var(--text-tertiary)]">
+          PoW難易度で重みを増加
+        </span>
+      </div>
+      <div className="flex gap-2">
+        {DIFFICULTY_LEVELS.map((level, idx) => (
+          <button
+            key={idx}
+            onClick={() => onSelect(level)}
+            disabled={mining}
+            className={`flex-1 py-2 px-1 rounded-lg text-xs transition-colors ${
+              selectedLevel?.minDifficulty === level.minDifficulty
+                ? 'bg-[var(--line-green)] text-white'
+                : 'bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
+            } ${mining ? 'opacity-50' : ''}`}
+          >
+            <div className="font-medium">{level.votes}票</div>
+            <div className="text-[10px] opacity-70">{level.label}</div>
+          </button>
+        ))}
+      </div>
+      {mining && (
+        <div className="mt-2 text-xs text-[var(--text-tertiary)] text-center">
+          マイニング中... {miningProgress}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Statement Voting Card - Polis-style voting interface with PoW/WoT
+ */
+function StatementVotingCard({ statement, onVote, myVote, authorProfile, isVoting, authorWotScore, wotLoading, enablePow = false }) {
+  const [selectedPowLevel, setSelectedPowLevel] = useState(DIFFICULTY_LEVELS[0])
+  const [mining, setMining] = useState(false)
+  const [miningProgress, setMiningProgress] = useState('')
+
   const voteLabel = myVote === 'agree' ? '賛成済み' : myVote === 'disagree' ? '反対済み' : myVote === 'pass' ? 'パス済み' : null
+
+  const handleVote = async (opinion) => {
+    if (selectedPowLevel.minDifficulty > 0) {
+      setMining(true)
+      setMiningProgress('開始中...')
+    }
+    await onVote(opinion, selectedPowLevel.minDifficulty, (iteration, hashRate) => {
+      setMiningProgress(`${Math.floor(iteration / 1000)}k試行 (${Math.floor(hashRate / 1000)}kH/s)`)
+    })
+    setMining(false)
+    setMiningProgress('')
+  }
 
   return (
     <div className="bg-[var(--bg-primary)] rounded-2xl shadow-lg p-5 border border-[var(--border-color)]">
@@ -488,16 +602,19 @@ function StatementVotingCard({ statement, onVote, myVote, authorProfile, isVotin
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-[var(--text-primary)] text-sm">
-            {authorProfile?.name || shortenPubkey(statement.pubkey)}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="font-medium text-[var(--text-primary)] text-sm">
+              {authorProfile?.name || shortenPubkey(statement.pubkey)}
+            </p>
+            <WotScoreBadge score={authorWotScore} loading={wotLoading} />
+          </div>
           <p className="text-xs text-[var(--text-tertiary)]">
             {new Date(statement.created_at * 1000).toLocaleDateString('ja-JP')}
           </p>
         </div>
       </div>
 
-      <p className="text-[var(--text-primary)] text-lg mb-6 leading-relaxed">
+      <p className="text-[var(--text-primary)] text-lg mb-4 leading-relaxed">
         {statement.content}
       </p>
 
@@ -506,29 +623,39 @@ function StatementVotingCard({ statement, onVote, myVote, authorProfile, isVotin
           <span className="text-[var(--text-secondary)]">{voteLabel}</span>
         </div>
       ) : (
-        <div className="flex gap-3">
-          <button
-            onClick={() => onVote('agree')}
-            disabled={isVoting}
-            className="flex-1 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-medium transition-colors disabled:opacity-50"
-          >
-            賛成
-          </button>
-          <button
-            onClick={() => onVote('pass')}
-            disabled={isVoting}
-            className="flex-1 py-3 rounded-xl bg-gray-400 hover:bg-gray-500 text-white font-medium transition-colors disabled:opacity-50"
-          >
-            パス
-          </button>
-          <button
-            onClick={() => onVote('disagree')}
-            disabled={isVoting}
-            className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-50"
-          >
-            反対
-          </button>
-        </div>
+        <>
+          {enablePow && (
+            <PowDifficultySelector
+              selectedLevel={selectedPowLevel}
+              onSelect={setSelectedPowLevel}
+              mining={mining}
+              miningProgress={miningProgress}
+            />
+          )}
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleVote('agree')}
+              disabled={isVoting || mining}
+              className="flex-1 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-medium transition-colors disabled:opacity-50"
+            >
+              賛成{selectedPowLevel.votes > 1 ? ` (${selectedPowLevel.votes}票)` : ''}
+            </button>
+            <button
+              onClick={() => handleVote('pass')}
+              disabled={isVoting || mining}
+              className="flex-1 py-3 rounded-xl bg-gray-400 hover:bg-gray-500 text-white font-medium transition-colors disabled:opacity-50"
+            >
+              パス
+            </button>
+            <button
+              onClick={() => handleVote('disagree')}
+              disabled={isVoting || mining}
+              className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-colors disabled:opacity-50"
+            >
+              反対{selectedPowLevel.votes > 1 ? ` (${selectedPowLevel.votes}票)` : ''}
+            </button>
+          </div>
+        </>
       )}
     </div>
   )
@@ -695,6 +822,11 @@ function TopicView({ topic, pubkey, onBack, profiles }) {
   const [loading, setLoading] = useState(true)
   const [showStats, setShowStats] = useState(false)
   const [showAddStatement, setShowAddStatement] = useState(false)
+  const [enablePow, setEnablePow] = useState(false)
+
+  // WoT scores for statement authors
+  const [wotScores, setWotScores] = useState({})
+  const [wotLoading, setWotLoading] = useState(false)
 
   // Fetch statements and opinions
   const fetchData = useCallback(async () => {
@@ -725,6 +857,30 @@ function TopicView({ topic, pubkey, onBack, profiles }) {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  // Fetch WoT scores for statement authors
+  useEffect(() => {
+    if (!pubkey || statements.length === 0) return
+
+    const fetchWotScores = async () => {
+      setWotLoading(true)
+      try {
+        const authorPubkeys = [...new Set(statements.map(s => s.pubkey))]
+        const scores = await getWotScoresBatch(pubkey, authorPubkeys, POLIS_RELAYS)
+        const scoreMap = {}
+        scores.forEach((data, pk) => {
+          scoreMap[pk] = data.score
+        })
+        setWotScores(scoreMap)
+      } catch (e) {
+        console.error('Failed to fetch WoT scores:', e)
+      } finally {
+        setWotLoading(false)
+      }
+    }
+
+    fetchWotScores()
+  }, [pubkey, statements])
 
   // Get my votes
   const myVotes = useMemo(() => {
@@ -809,15 +965,15 @@ function TopicView({ topic, pubkey, onBack, profiles }) {
     }
   }, [statements, opinions, pubkey, topic.id])
 
-  // Handle vote
-  const handleVote = async (opinion) => {
+  // Handle vote with optional PoW
+  const handleVote = async (opinion, targetDifficulty = 0, onProgress = null) => {
     if (currentIndex >= unvotedStatements.length) return
 
     const statement = unvotedStatements[currentIndex]
     setIsVoting(true)
 
     try {
-      const event = {
+      let event = {
         kind: KIND_POLIS_OPINION,
         created_at: Math.floor(Date.now() / 1000),
         tags: [
@@ -831,6 +987,14 @@ function TopicView({ topic, pubkey, onBack, profiles }) {
         pubkey
       }
 
+      // If PoW is requested, mine the event
+      if (targetDifficulty > 0) {
+        event = await mineEvent(event, targetDifficulty, {
+          maxIterations: 50_000_000,
+          onProgress
+        })
+      }
+
       const signed = await signEventNip07(event)
       await publishEvent(signed, POLIS_RELAYS)
 
@@ -839,7 +1003,11 @@ function TopicView({ topic, pubkey, onBack, profiles }) {
       setCurrentIndex(prev => prev + 1)
     } catch (e) {
       console.error('Failed to vote:', e)
-      alert('投票に失敗しました: ' + e.message)
+      if (e.message === 'Mining aborted') {
+        alert('マイニングがキャンセルされました')
+      } else {
+        alert('投票に失敗しました: ' + e.message)
+      }
     } finally {
       setIsVoting(false)
     }
@@ -961,6 +1129,20 @@ function TopicView({ topic, pubkey, onBack, profiles }) {
       ) : (
         /* Voting view */
         <div className="space-y-4">
+          {/* PoW Toggle */}
+          <div className="flex items-center justify-between bg-[var(--bg-secondary)] rounded-xl p-3">
+            <div>
+              <span className="text-sm font-medium text-[var(--text-primary)]">Quadratic Voting (PoW)</span>
+              <p className="text-xs text-[var(--text-tertiary)]">計算で投票の重みを増加</p>
+            </div>
+            <button
+              onClick={() => setEnablePow(!enablePow)}
+              className={`w-12 h-6 rounded-full transition-colors ${enablePow ? 'bg-[var(--line-green)]' : 'bg-[var(--bg-tertiary)]'}`}
+            >
+              <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${enablePow ? 'translate-x-6' : 'translate-x-0.5'}`}/>
+            </button>
+          </div>
+
           {unvotedStatements.length > 0 && currentIndex < unvotedStatements.length ? (
             <StatementVotingCard
               statement={unvotedStatements[currentIndex]}
@@ -968,6 +1150,9 @@ function TopicView({ topic, pubkey, onBack, profiles }) {
               myVote={null}
               authorProfile={profiles?.[unvotedStatements[currentIndex].pubkey]}
               isVoting={isVoting}
+              authorWotScore={wotScores[unvotedStatements[currentIndex].pubkey]}
+              wotLoading={wotLoading}
+              enablePow={enablePow}
             />
           ) : (
             <div className="bg-[var(--bg-secondary)] rounded-2xl p-6 text-center">

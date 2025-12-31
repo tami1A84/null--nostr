@@ -533,14 +533,14 @@ Merge → 承認イベント (kind: 1092)
 
 ### Phase 1: 基盤（1-2ヶ月）
 1. ✅ コードベース分析完了
-2. 🔲 Web of Trustスコアリング実装
+2. ✅ Web of Trustスコアリング実装（Coracle互換）
 3. ✅ Polisミニアプリ実装（kind:1080/1081/1082）
 4. ✅ 投票UI実装（トピック作成・意見投稿・賛成/反対/パス）
 5. ✅ PCA/クラスタリングによる意見マップ可視化
+6. ✅ NIP-13 PoWによるQuadratic Voting実装
 
 ### Phase 2: Plurality Core（2-4ヶ月）
-6. 🔲 Quadratic Voting実装
-7. 🔲 クレジットシステム実装
+7. 🔲 クレジットシステム実装（時間ベース配布）
 8. 🔲 Polis外部サービスとの互換性強化
 9. 🔲 SBT拡張バッジ対応
 
