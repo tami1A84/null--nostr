@@ -429,10 +429,10 @@ export default function UserProfileView({
   const npub = encodeNpub(targetPubkey)
 
   return (
-    <div className="fixed inset-x-0 top-0 z-40 bg-[var(--bg-primary)]" style={{ bottom: '56px' }}>
+    <div className="fixed inset-x-0 top-0 bottom-14 lg:bottom-0 z-40 bg-[var(--bg-primary)] lg:left-[240px] xl:left-[280px] flex flex-col">
       {/* Birthday Animation Overlay */}
       {showBirthdayAnimation && (
-        <div className="fixed inset-0 z-50 pointer-events-none overflow-hidden flex items-center justify-center" style={{ bottom: '56px' }}>
+        <div className="fixed inset-0 bottom-14 lg:bottom-0 z-50 pointer-events-none overflow-hidden flex items-center justify-center lg:left-[240px] xl:left-[280px]">
           {/* Background overlay */}
           <div className="absolute inset-0 bg-gradient-to-b from-purple-200/80 via-pink-100/80 to-blue-100/80 dark:from-purple-900/80 dark:via-pink-900/80 dark:to-blue-900/80" />
           
@@ -571,7 +571,7 @@ export default function UserProfileView({
         )}
       </header>
 
-      <div className="h-[calc(100vh-48px)] overflow-y-auto pb-16">
+      <div className="flex-1 overflow-y-auto pb-4 lg:pb-8">
         {/* Banner */}
         <div 
           className="h-28 bg-gradient-to-br from-[#06C755] to-[#04A347]"
