@@ -41,7 +41,9 @@ function ContentPreview({ content, customEmojis = [] }) {
   // Build emoji map from selected emojis
   const emojiMap = {}
   customEmojis.forEach(emoji => {
-    emojiMap[emoji.shortcode] = emoji.url
+    if (emoji.shortcode && emoji.url) {
+      emojiMap[emoji.shortcode] = emoji.url
+    }
   })
 
   // Split by hashtags and custom emoji shortcodes
@@ -73,9 +75,14 @@ function ContentPreview({ content, customEmojis = [] }) {
                 alt={`:${shortcode}:`}
                 title={`:${shortcode}:`}
                 className="inline-block w-5 h-5 align-middle mx-0.5"
+                onError={(e) => {
+                  e.target.style.display = 'none'
+                }}
               />
             )
           }
+          // Show shortcode as text if no URL found
+          return <span key={i} className="text-[var(--text-tertiary)]">{part}</span>
         }
 
         return <span key={i}>{part}</span>
@@ -315,37 +322,29 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
             </div>
           )}
 
-          {/* Content Preview with highlighted hashtags and emojis */}
-          {postContent && (postContent.includes('#') || selectedEmojis.length > 0) ? (
-            <div className="relative">
-              {/* Hidden textarea for input */}
-              <textarea
-                ref={textareaRef}
-                value={postContent}
-                onChange={(e) => setPostContent(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="w-full h-32 resize-none bg-transparent text-transparent caret-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none absolute inset-0 z-10"
-                placeholder={replyTo ? '返信を入力...' : 'いまなにしてる？'}
-                maxLength={10000}
-                aria-label="投稿内容"
-              />
-              {/* Visible preview layer */}
-              <div className="w-full h-32 overflow-y-auto pointer-events-none">
-                <ContentPreview content={postContent} customEmojis={selectedEmojis} />
-              </div>
-            </div>
-          ) : (
+          {/* Textarea with preview overlay */}
+          <div className="relative">
             <textarea
               ref={textareaRef}
               value={postContent}
               onChange={(e) => setPostContent(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="w-full h-32 resize-none bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
+              className={`w-full h-32 resize-none bg-transparent placeholder:text-[var(--text-tertiary)] focus:outline-none ${
+                postContent && (postContent.includes('#') || selectedEmojis.length > 0)
+                  ? 'text-transparent caret-[var(--text-primary)] absolute inset-0 z-10'
+                  : 'text-[var(--text-primary)] relative'
+              }`}
               placeholder={replyTo ? '返信を入力...' : 'いまなにしてる？'}
               maxLength={10000}
               aria-label="投稿内容"
             />
-          )}
+            {/* Visible preview layer - only show when there are hashtags or emojis */}
+            {postContent && (postContent.includes('#') || selectedEmojis.length > 0) && (
+              <div className="w-full h-32 overflow-y-auto pointer-events-none">
+                <ContentPreview content={postContent} customEmojis={selectedEmojis} />
+              </div>
+            )}
+          </div>
 
           {/* Image preview */}
           {imagePreview && (

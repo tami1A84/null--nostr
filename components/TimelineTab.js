@@ -51,10 +51,10 @@ function extractHashtags(content) {
 function ContentPreview({ content, customEmojis = [] }) {
   if (!content) return null
 
-  // Build emoji map from selected emojis
+  // Build emoji map from selected emojis (format: ['emoji', shortcode, url])
   const emojiMap = {}
   customEmojis.forEach(emoji => {
-    if (emoji[0] === 'emoji') {
+    if (emoji[0] === 'emoji' && emoji[1] && emoji[2]) {
       emojiMap[emoji[1]] = emoji[2]
     }
   })
@@ -88,9 +88,14 @@ function ContentPreview({ content, customEmojis = [] }) {
                 alt={`:${shortcode}:`}
                 title={`:${shortcode}:`}
                 className="inline-block w-5 h-5 align-middle mx-0.5"
+                onError={(e) => {
+                  e.target.style.display = 'none'
+                }}
               />
             )
           }
+          // Show shortcode as text if no URL found
+          return <span key={i} className="text-[var(--text-tertiary)]">{part}</span>
         }
 
         return <span key={i}>{part}</span>
@@ -1156,31 +1161,26 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                 </div>
               )}
 
-              {/* Content Preview with highlighted hashtags and emojis */}
-              {newPost && (newPost.includes('#') || emojiTags.length > 0) ? (
-                <div className="relative min-h-[120px] sm:min-h-[150px]">
-                  {/* Hidden textarea for input */}
-                  <textarea
-                    value={newPost}
-                    onChange={(e) => setNewPost(e.target.value)}
-                    className="w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none text-transparent caret-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none text-base absolute inset-0 z-10"
-                    placeholder="いまどうしてる？"
-                    autoFocus
-                  />
-                  {/* Visible preview layer */}
-                  <div className="w-full min-h-[120px] sm:min-h-[150px] pointer-events-none">
-                    <ContentPreview content={newPost} customEmojis={emojiTags} />
-                  </div>
-                </div>
-              ) : (
+              {/* Textarea with preview overlay */}
+              <div className="relative min-h-[120px] sm:min-h-[150px]">
                 <textarea
                   value={newPost}
                   onChange={(e) => setNewPost(e.target.value)}
-                  className="w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none text-base"
+                  className={`w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none placeholder-[var(--text-tertiary)] outline-none text-base ${
+                    newPost && (newPost.includes('#') || emojiTags.length > 0)
+                      ? 'text-transparent caret-[var(--text-primary)] absolute inset-0 z-10'
+                      : 'text-[var(--text-primary)] relative'
+                  }`}
                   placeholder="いまどうしてる？"
                   autoFocus
                 />
-              )}
+                {/* Visible preview layer - only show when there are hashtags or emojis */}
+                {newPost && (newPost.includes('#') || emojiTags.length > 0) && (
+                  <div className="w-full min-h-[120px] sm:min-h-[150px] pointer-events-none">
+                    <ContentPreview content={newPost} customEmojis={emojiTags} />
+                  </div>
+                )}
+              </div>
 
               {/* Image preview */}
               {postImage && (
