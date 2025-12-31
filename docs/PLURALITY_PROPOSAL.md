@@ -61,10 +61,49 @@
 - **NIP-51**: リスト（ミュート、ピン留め等）
 - **NIP-57**: Zap（Lightning支払い）
 - **NIP-58**: バッジ（実績・認証の表示）
+- **NIP-88**: 投票（Polls） ← **Plurality実装の基盤として活用**
 
-### 2.3 不足している機能
+### 2.3 NIP-88 Polls について
 
-- 投票/ガバナンス用NIP
+[NIP-88](https://github.com/nostr-protocol/nips/blob/master/88.md)は既にNostr上での投票機能を定義しています：
+
+**投票イベント (kind: 1068)**:
+```json
+{
+  "kind": 1068,
+  "content": "どの機能を優先すべき？",
+  "tags": [
+    ["option", "0", "ダークモード"],
+    ["option", "1", "翻訳機能"],
+    ["option", "2", "グループDM"],
+    ["relay", "wss://yabu.me"],
+    ["polltype", "singlechoice"],
+    ["endsAt", "1735689600"]
+  ]
+}
+```
+
+**回答イベント (kind: 1018)**:
+```json
+{
+  "kind": 1018,
+  "tags": [
+    ["e", "<poll_event_id>"],
+    ["response", "1"]
+  ]
+}
+```
+
+**NIP-88の特徴**:
+- `singlechoice` / `multiplechoice` の投票タイプ
+- 終了時刻の設定
+- 同一ユーザーの複数投票は最新のみ有効
+- 削除リクエスト(kind:5)は無視される設計
+
+### 2.4 不足している機能（NIP-88を拡張して対応）
+
+- ~~投票/ガバナンス用NIP~~ → **NIP-88で対応済み**
+- Quadratic Voting（二次投票）の仕組み
 - Web of Trustの標準化
 - Sybil耐性の仕組み
 - 意見クラスタリング
@@ -127,35 +166,37 @@ export async function calculateTrustScore(targetPubkey, viewerPubkey) {
 
 ---
 
-#### 3.1.2 コミュニティ投票システム（簡易版）
+#### 3.1.2 NIP-88投票システムの実装
 
-**新規NIP提案: NIP-XX "Community Polls"**
+**NIP-88を活用**（新規NIPは不要）
 
+NIP-88は既にNostrで投票機能を標準化しています。ぬるぬるでこれを実装します。
+
+**投票作成 (kind: 1068)**:
 ```json
 {
   "kind": 1068,
   "content": "どの機能を優先して実装すべきですか？",
   "tags": [
-    ["poll_type", "single"],
-    ["poll_option", "0", "ダークモード対応"],
-    ["poll_option", "1", "翻訳機能"],
-    ["poll_option", "2", "グループDM"],
-    ["poll_option", "3", "スレッド表示改善"],
-    ["poll_end", "1735689600"],
-    ["e", "<parent_event_id>"]
+    ["option", "0", "ダークモード対応"],
+    ["option", "1", "翻訳機能"],
+    ["option", "2", "グループDM"],
+    ["option", "3", "スレッド表示改善"],
+    ["polltype", "singlechoice"],
+    ["endsAt", "1735689600"],
+    ["relay", "wss://yabu.me"]
   ]
 }
 ```
 
-**投票イベント**:
+**投票回答 (kind: 1018)**:
 ```json
 {
-  "kind": 1069,
+  "kind": 1018,
   "content": "",
   "tags": [
     ["e", "<poll_event_id>"],
-    ["vote", "1"],
-    ["vote_weight", "1"]
+    ["response", "1"]
   ]
 }
 ```
@@ -164,6 +205,8 @@ export async function calculateTrustScore(targetPubkey, viewerPubkey) {
 - PostModalに投票作成オプション追加
 - TimelineTab/HomeTabに投票表示・参加UI
 - 投票結果のリアルタイム集計表示
+- 終了時刻カウントダウン表示
+- 投票済み/未投票の状態管理
 
 ---
 
@@ -175,6 +218,42 @@ export async function calculateTrustScore(targetPubkey, viewerPubkey) {
 - 各ユーザーに一定の「投票クレジット」を付与
 - 1票=1クレジット、2票=4クレジット、3票=9クレジット（n票=n²クレジット）
 - 強い意見を持つ少数派も影響力を持てる
+
+**NIP-88を拡張したQuadratic Voting**:
+
+NIP-88の`polltype`を拡張し、`quadratic`タイプを追加する案：
+
+```json
+{
+  "kind": 1068,
+  "content": "次期開発の優先順位を決めましょう",
+  "tags": [
+    ["option", "0", "パフォーマンス改善"],
+    ["option", "1", "新機能追加"],
+    ["option", "2", "UI/UX改善"],
+    ["polltype", "quadratic"],
+    ["credits", "100"],
+    ["endsAt", "1735689600"],
+    ["relay", "wss://yabu.me"]
+  ]
+}
+```
+
+**Quadratic Vote 回答 (kind: 1018 拡張)**:
+```json
+{
+  "kind": 1018,
+  "content": "",
+  "tags": [
+    ["e", "<poll_event_id>"],
+    ["response", "0", "3"],
+    ["response", "1", "2"],
+    ["response", "2", "1"],
+    ["credits_used", "14"]
+  ]
+}
+```
+※ 3²+2²+1² = 9+4+1 = 14クレジット消費
 
 **実装アプローチ**:
 
@@ -196,23 +275,27 @@ export function maxVotesWithCredits(credits) {
 }
 
 /**
- * Quadratic Vote イベントを作成
+ * NIP-88形式でQuadratic Vote回答を作成
  */
-export function createQuadraticVoteEvent({
+export function createQuadraticVoteResponse({
   pollEventId,
-  optionIndex,
-  voteCount,
-  creditsUsed
+  votes, // { optionId: voteCount, ... }
+  totalCredits
 }) {
+  const responseTags = Object.entries(votes).map(
+    ([optionId, count]) => ["response", optionId, String(count)]
+  );
+  const creditsUsed = Object.values(votes).reduce(
+    (sum, count) => sum + count * count, 0
+  );
+
   return {
-    kind: 1070, // Quadratic Vote
+    kind: 1018,
     content: "",
     tags: [
       ["e", pollEventId],
-      ["option", String(optionIndex)],
-      ["votes", String(voteCount)],
-      ["credits_used", String(creditsUsed)],
-      ["qv", "true"]
+      ...responseTags,
+      ["credits_used", String(creditsUsed)]
     ]
   };
 }
@@ -425,14 +508,14 @@ Merge → 承認イベント (kind: 1092)
 | 機能 | 説明 | 実装難易度 |
 |------|------|-----------|
 | **信頼スコア表示** | フォローグラフベースの簡易Web of Trust | ★★☆☆☆ |
-| **簡易投票機能** | 単一選択の投票作成・参加 | ★★☆☆☆ |
+| **NIP-88投票機能** | 既存NIPを活用した投票作成・参加 | ★★☆☆☆ |
 | **バッジ拡張** | SBTフラグ対応、検証済みバッジ表示 | ★★★☆☆ |
 
 ### 4.2 優先度中（次期開発）
 
 | 機能 | 説明 | 実装難易度 |
 |------|------|-----------|
-| **Quadratic Voting** | 二次投票の実装 | ★★★☆☆ |
+| **Quadratic Voting** | NIP-88拡張による二次投票 | ★★★☆☆ |
 | **意見クラスタリング** | Polis風の可視化 | ★★★★☆ |
 | **投票クレジット管理** | クレジットの配布・消費システム | ★★★☆☆ |
 
@@ -451,7 +534,7 @@ Merge → 承認イベント (kind: 1092)
 ### Phase 1: 基盤（1-2ヶ月）
 1. ✅ コードベース分析完了
 2. 🔲 Web of Trustスコアリング実装
-3. 🔲 簡易投票NIP草案作成
+3. 🔲 NIP-88投票機能の実装（kind:1068/1018）
 4. 🔲 投票UI実装（作成・参加・結果表示）
 
 ### Phase 2: Plurality Core（2-4ヶ月）
@@ -510,6 +593,7 @@ Merge → 承認イベント (kind: 1092)
 ### Nostr関連
 - [Nostr Protocol (GitHub)](https://github.com/nostr-protocol/nostr)
 - [NIPs Repository](https://github.com/nostr-protocol/nips)
+- [NIP-88 Polls](https://github.com/nostr-protocol/nips/blob/master/88.md) ← **投票機能の基盤**
 - [Nostr.Band Trust Rank](https://trust.nostr.band/)
 
 ### 技術参考
@@ -532,7 +616,7 @@ Pluralityの概念は、Nostrの分散型アーキテクチャと非常に相性
 
 **ぬるぬる**は、日本語圏で最も使いやすいNostrクライアントの一つとして、Pluralityの概念を実装する理想的なプラットフォームです。特に日本には台湾と文化的に近い部分もあり、デジタル民主主義の実験場として適しています。
 
-まずは**簡易投票機能**と**Web of Trust表示**から始め、段階的にQuadratic VotingやPolis風機能を追加していくことを推奨します。
+まずは**NIP-88による投票機能**と**Web of Trust表示**から始め、段階的にQuadratic VotingやPolis風機能を追加していくことを推奨します。NIP-88という既存の標準が存在することで、他のNostrクライアントとの互換性を保ちながらPlurality機能を拡張できます。
 
 ---
 
