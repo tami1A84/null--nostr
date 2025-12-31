@@ -152,9 +152,11 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
       // Hashtag tags (NIP-01)
       const hashtags = extractHashtags(finalContent)
-      hashtags.forEach((hashtag) => {
-        tags.push(['t', hashtag])
-      })
+      if (hashtags.length > 0) {
+        hashtags.forEach((hashtag) => {
+          tags.push(['t', hashtag])
+        })
+      }
 
       await publishEvent({
         kind: 1,
