@@ -45,6 +45,58 @@ function extractHashtags(content) {
   return hashtags
 }
 
+// Render content preview with hashtags and custom emojis highlighted
+function ContentPreview({ content, customEmojis = [] }) {
+  if (!content) return null
+
+  // Build emoji map from selected emojis
+  const emojiMap = {}
+  customEmojis.forEach(emoji => {
+    if (emoji[0] === 'emoji') {
+      emojiMap[emoji[1]] = emoji[2]
+    }
+  })
+
+  // Split by hashtags and custom emoji shortcodes
+  const combinedRegex = /(#[^\s#\u3000]+|:[a-zA-Z0-9_]+:)/g
+  const parts = content.split(combinedRegex).filter(Boolean)
+
+  return (
+    <div className="text-base text-[var(--text-primary)] whitespace-pre-wrap break-words">
+      {parts.map((part, i) => {
+        // Check for hashtags
+        if (part.startsWith('#') && part.length > 1) {
+          return (
+            <span key={i} className="text-[var(--line-green)]">
+              {part}
+            </span>
+          )
+        }
+
+        // Check for custom emoji shortcodes
+        const emojiMatch = part.match(/^:([a-zA-Z0-9_]+):$/)
+        if (emojiMatch) {
+          const shortcode = emojiMatch[1]
+          const emojiUrl = emojiMap[shortcode]
+          if (emojiUrl) {
+            return (
+              <img
+                key={i}
+                src={emojiUrl}
+                alt={`:${shortcode}:`}
+                title={`:${shortcode}:`}
+                className="inline-block w-5 h-5 align-middle mx-0.5"
+              />
+            )
+          }
+        }
+
+        return <span key={i}>{part}</span>
+      })}
+    </div>
+  )
+}
+
 // Format birthday to string (handles both string and object formats)
 function formatBirthday(birthday) {
   if (!birthday) return ''
@@ -1253,21 +1305,39 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                 </div>
               )}
 
-              <textarea
-                value={newPost}
-                onChange={(e) => setNewPost(e.target.value)}
-                className="w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none text-base"
-                placeholder="いまどうしてる？"
-                autoFocus
-              />
+              {/* Content Preview with highlighted hashtags and emojis */}
+              {newPost && (newPost.includes('#') || emojiTags.length > 0) ? (
+                <div className="relative min-h-[120px] sm:min-h-[150px]">
+                  {/* Hidden textarea for input */}
+                  <textarea
+                    value={newPost}
+                    onChange={(e) => setNewPost(e.target.value)}
+                    className="w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none text-transparent caret-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none text-base absolute inset-0 z-10"
+                    placeholder="いまどうしてる？"
+                    autoFocus
+                  />
+                  {/* Visible preview layer */}
+                  <div className="w-full min-h-[120px] sm:min-h-[150px] pointer-events-none">
+                    <ContentPreview content={newPost} customEmojis={emojiTags} />
+                  </div>
+                </div>
+              ) : (
+                <textarea
+                  value={newPost}
+                  onChange={(e) => setNewPost(e.target.value)}
+                  className="w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none text-base"
+                  placeholder="いまどうしてる？"
+                  autoFocus
+                />
+              )}
 
               {/* Image preview */}
               {postImage && (
-                <div className="relative mt-3 rounded-xl overflow-hidden flex-shrink-0">
-                  <img src={postImage} alt="Upload preview" className="w-full max-h-48 object-cover rounded-xl" />
+                <div className="relative mt-3 inline-block flex-shrink-0">
+                  <img src={postImage} alt="Upload preview" className="max-h-48 max-w-full object-contain rounded-xl" />
                   <button
                     onClick={() => setPostImage(null)}
-                    className="absolute top-2 right-2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white"
+                    className="absolute top-2 right-2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80 transition-colors"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <line x1="18" y1="6" x2="6" y2="18"/>

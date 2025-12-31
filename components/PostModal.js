@@ -34,6 +34,56 @@ function extractHashtags(content) {
   return hashtags
 }
 
+// Render content preview with hashtags and custom emojis highlighted
+function ContentPreview({ content, customEmojis = [] }) {
+  if (!content) return null
+
+  // Build emoji map from selected emojis
+  const emojiMap = {}
+  customEmojis.forEach(emoji => {
+    emojiMap[emoji.shortcode] = emoji.url
+  })
+
+  // Split by hashtags and custom emoji shortcodes
+  const combinedRegex = /(#[^\s#\u3000]+|:[a-zA-Z0-9_]+:)/g
+  const parts = content.split(combinedRegex).filter(Boolean)
+
+  return (
+    <div className="text-sm text-[var(--text-primary)] whitespace-pre-wrap break-words">
+      {parts.map((part, i) => {
+        // Check for hashtags
+        if (part.startsWith('#') && part.length > 1) {
+          return (
+            <span key={i} className="text-[var(--line-green)]">
+              {part}
+            </span>
+          )
+        }
+
+        // Check for custom emoji shortcodes
+        const emojiMatch = part.match(/^:([a-zA-Z0-9_]+):$/)
+        if (emojiMatch) {
+          const shortcode = emojiMatch[1]
+          const emojiUrl = emojiMap[shortcode]
+          if (emojiUrl) {
+            return (
+              <img
+                key={i}
+                src={emojiUrl}
+                alt={`:${shortcode}:`}
+                title={`:${shortcode}:`}
+                className="inline-block w-5 h-5 align-middle mx-0.5"
+              />
+            )
+          }
+        }
+
+        return <span key={i}>{part}</span>
+      })}
+    </div>
+  )
+}
+
 export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuccess }) {
   const [postContent, setPostContent] = useState('')
   const [posting, setPosting] = useState(false)
@@ -265,31 +315,52 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
             </div>
           )}
 
-          <textarea
-            ref={textareaRef}
-            value={postContent}
-            onChange={(e) => setPostContent(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="w-full h-32 resize-none bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
-            placeholder={replyTo ? '返信を入力...' : 'いまなにしてる？'}
-            maxLength={10000}
-            aria-label="投稿内容"
-          />
+          {/* Content Preview with highlighted hashtags and emojis */}
+          {postContent && (postContent.includes('#') || selectedEmojis.length > 0) ? (
+            <div className="relative">
+              {/* Hidden textarea for input */}
+              <textarea
+                ref={textareaRef}
+                value={postContent}
+                onChange={(e) => setPostContent(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="w-full h-32 resize-none bg-transparent text-transparent caret-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none absolute inset-0 z-10"
+                placeholder={replyTo ? '返信を入力...' : 'いまなにしてる？'}
+                maxLength={10000}
+                aria-label="投稿内容"
+              />
+              {/* Visible preview layer */}
+              <div className="w-full h-32 overflow-y-auto pointer-events-none">
+                <ContentPreview content={postContent} customEmojis={selectedEmojis} />
+              </div>
+            </div>
+          ) : (
+            <textarea
+              ref={textareaRef}
+              value={postContent}
+              onChange={(e) => setPostContent(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="w-full h-32 resize-none bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
+              placeholder={replyTo ? '返信を入力...' : 'いまなにしてる？'}
+              maxLength={10000}
+              aria-label="投稿内容"
+            />
+          )}
 
           {/* Image preview */}
           {imagePreview && (
-            <div className="relative mt-3">
+            <div className="relative mt-3 inline-block">
               <img
                 src={imagePreview}
                 alt="プレビュー"
-                className="max-h-48 rounded-lg object-contain"
+                className="max-h-48 max-w-full rounded-lg object-contain"
               />
               <button
                 onClick={handleRemoveImage}
-                className="absolute top-2 right-2 p-1 bg-black/50 rounded-full text-white hover:bg-black/70"
+                className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
                 aria-label="画像を削除"
               >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
