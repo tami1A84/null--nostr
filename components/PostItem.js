@@ -266,35 +266,42 @@ function EmbeddedProfile({ pubkey, relays }) {
 }
 
 // Main PostItem component
-export default function PostItem({ 
-  post, 
-  profile, 
-  profiles, 
-  likeCount = 0, 
-  hasLiked = false, 
+export default function PostItem({
+  post,
+  profile,
+  profiles,
+  likeCount = 0,
+  hasLiked = false,
   hasReposted = false,
   myReactionId = null,
   myRepostId = null,
-  isLiking = false, 
-  isZapping = false, 
-  onLike, 
+  isLiking = false,
+  isZapping = false,
+  onLike,
   onUnlike,
   onRepost,
-  onUnrepost, 
+  onUnrepost,
   onZap,
   onZapLongPress,
   onZapLongPressEnd,
   onAvatarClick,
+  onHashtagClick,
   onMute,
   onDelete,
   isOwnPost = false,
-  isRepost = false, 
+  isRepost = false,
   repostedBy = null,
-  showActions = true 
+  showActions = true
 }) {
   const [showMenu, setShowMenu] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isCWExpanded, setIsCWExpanded] = useState(false) // Content warning expand state
   const displayProfile = isRepost ? profiles?.[post.pubkey] : profile
+
+  // Extract content warning tag (NIP-36)
+  const cwTag = post.tags?.find(t => t[0] === 'content-warning')
+  const contentWarning = cwTag ? (cwTag[1] || '') : null
+  const hasCW = contentWarning !== null
   
   // Content length threshold for collapsing (excluding URLs)
   const COLLAPSE_THRESHOLD = 140
@@ -379,17 +386,35 @@ export default function PostItem({
     return parts.length > 0 ? parts : text
   }
   
-  // Render content with nostr: links, URLs, images, and custom emoji
+  // Render content with nostr: links, URLs, images, hashtags, and custom emoji
   const renderContent = (content) => {
     if (!content) return null
-    
+
     // Use non-capturing group (?:...) to avoid duplicate parts in split result
     // Require at least 58 characters after the prefix for valid bech32 (e.g., note1 + 58 chars = 63 total)
-    const combinedRegex = /(https?:\/\/[^\s]+|nostr:(?:note1|nevent1|npub1|nprofile1|naddr1)[a-z0-9]{58,})/gi
-    
+    // Also capture hashtags (#tag)
+    const combinedRegex = /(https?:\/\/[^\s]+|nostr:(?:note1|nevent1|npub1|nprofile1|naddr1)[a-z0-9]{58,}|#[^\s#\u3000]+)/gi
+
     const parts = content.split(combinedRegex).filter(Boolean)
-    
+
     return parts.map((part, i) => {
+      // Check for hashtags
+      if (part.startsWith('#') && part.length > 1) {
+        const hashtag = part.slice(1) // Remove # prefix
+        return (
+          <span
+            key={i}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (onHashtagClick) onHashtagClick(hashtag)
+            }}
+            className="text-[var(--line-green)] hover:underline cursor-pointer"
+          >
+            {part}
+          </span>
+        )
+      }
+
       // Check for nostr: links
       if (part.toLowerCase().startsWith('nostr:')) {
         const bech32 = part.slice(6) // Remove 'nostr:' prefix
@@ -655,32 +680,71 @@ export default function PostItem({
             )}
           </div>
           
-          <div className="text-[var(--text-primary)] text-sm whitespace-pre-wrap break-words">
-            {shouldCollapse && !isExpanded ? (
-              <>
-                {/* Show more content when there are URLs (since they don't count toward limit) */}
-                {renderContent(post.content.slice(0, 280) + '...')}
-                <button 
-                  onClick={(e) => { e.stopPropagation(); setIsExpanded(true) }}
-                  className="text-[var(--line-green)] text-xs mt-1 hover:underline"
-                >
-                  もっと見る
-                </button>
-              </>
-            ) : (
-              <>
-                {renderContent(post.content)}
-                {shouldCollapse && isExpanded && (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setIsExpanded(false) }}
-                    className="text-[var(--line-green)] text-xs mt-1 hover:underline block"
+          {/* Content Warning Display (NIP-36) */}
+          {hasCW && !isCWExpanded ? (
+            <div className="border border-orange-500/30 bg-orange-500/5 rounded-lg p-3">
+              <div className="flex items-center gap-2 text-orange-500">
+                <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span className="text-sm font-medium">
+                  {contentWarning || 'コンテンツ警告'}
+                </span>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setIsCWExpanded(true) }}
+                className="mt-2 px-3 py-1.5 text-xs font-medium bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-full hover:bg-orange-500/30 transition-colors"
+              >
+                表示する
+              </button>
+            </div>
+          ) : (
+            <div className="text-[var(--text-primary)] text-sm whitespace-pre-wrap break-words">
+              {/* Show CW indicator when expanded */}
+              {hasCW && isCWExpanded && (
+                <div className="flex items-center gap-2 mb-2 text-orange-500 text-xs">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  <span className="font-medium">{contentWarning || 'コンテンツ警告'}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setIsCWExpanded(false) }}
+                    className="ml-auto text-[var(--text-tertiary)] hover:text-orange-500"
                   >
-                    閉じる
+                    隠す
                   </button>
-                )}
-              </>
-            )}
-          </div>
+                </div>
+              )}
+              {shouldCollapse && !isExpanded ? (
+                <>
+                  {/* Show more content when there are URLs (since they don't count toward limit) */}
+                  {renderContent(post.content.slice(0, 280) + '...')}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setIsExpanded(true) }}
+                    className="text-[var(--line-green)] text-xs mt-1 hover:underline"
+                  >
+                    もっと見る
+                  </button>
+                </>
+              ) : (
+                <>
+                  {renderContent(post.content)}
+                  {shouldCollapse && isExpanded && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setIsExpanded(false) }}
+                      className="text-[var(--line-green)] text-xs mt-1 hover:underline block"
+                    >
+                      閉じる
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
           
           {/* Actions */}
           {showActions && (

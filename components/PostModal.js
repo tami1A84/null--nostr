@@ -17,6 +17,80 @@ import EmojiPicker from './EmojiPicker'
  * @param {Function} [props.onSuccess] - Callback after successful post
  * @returns {JSX.Element}
  */
+// Extract hashtags from content (NIP-01)
+function extractHashtags(content) {
+  if (!content) return []
+  // Match #hashtag pattern, supporting Unicode characters
+  const hashtagRegex = /#([^\s#\u3000]+)/g
+  const hashtags = []
+  let match
+  while ((match = hashtagRegex.exec(content)) !== null) {
+    // Normalize to lowercase
+    const tag = match[1].toLowerCase()
+    if (!hashtags.includes(tag)) {
+      hashtags.push(tag)
+    }
+  }
+  return hashtags
+}
+
+// Render content preview with hashtags and custom emojis highlighted
+function ContentPreview({ content, customEmojis = [] }) {
+  if (!content) return null
+
+  // Build emoji map from selected emojis
+  const emojiMap = {}
+  customEmojis.forEach(emoji => {
+    if (emoji.shortcode && emoji.url) {
+      emojiMap[emoji.shortcode] = emoji.url
+    }
+  })
+
+  // Split by hashtags and custom emoji shortcodes
+  const combinedRegex = /(#[^\s#\u3000]+|:[a-zA-Z0-9_]+:)/g
+  const parts = content.split(combinedRegex).filter(Boolean)
+
+  return (
+    <div className="text-sm text-[var(--text-primary)] whitespace-pre-wrap break-words">
+      {parts.map((part, i) => {
+        // Check for hashtags
+        if (part.startsWith('#') && part.length > 1) {
+          return (
+            <span key={i} className="text-[var(--line-green)]">
+              {part}
+            </span>
+          )
+        }
+
+        // Check for custom emoji shortcodes
+        const emojiMatch = part.match(/^:([a-zA-Z0-9_]+):$/)
+        if (emojiMatch) {
+          const shortcode = emojiMatch[1]
+          const emojiUrl = emojiMap[shortcode]
+          if (emojiUrl) {
+            return (
+              <img
+                key={i}
+                src={emojiUrl}
+                alt={`:${shortcode}:`}
+                title={`:${shortcode}:`}
+                className="inline-block w-5 h-5 align-middle mx-0.5"
+                onError={(e) => {
+                  e.target.style.display = 'none'
+                }}
+              />
+            )
+          }
+          // Show shortcode as text if no URL found
+          return <span key={i} className="text-[var(--text-tertiary)]">{part}</span>
+        }
+
+        return <span key={i}>{part}</span>
+      })}
+    </div>
+  )
+}
+
 export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuccess }) {
   const [postContent, setPostContent] = useState('')
   const [posting, setPosting] = useState(false)
@@ -25,6 +99,8 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
   const [uploadingImage, setUploadingImage] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [selectedEmojis, setSelectedEmojis] = useState([])
+  const [contentWarning, setContentWarning] = useState('')
+  const [showCWInput, setShowCWInput] = useState(false)
 
   const textareaRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -126,6 +202,19 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
         tags.push(['emoji', emoji.shortcode, emoji.url])
       })
 
+      // Content warning tag (NIP-36)
+      if (contentWarning.trim()) {
+        tags.push(['content-warning', contentWarning.trim()])
+      }
+
+      // Hashtag tags (NIP-01)
+      const hashtags = extractHashtags(finalContent)
+      if (hashtags.length > 0) {
+        hashtags.forEach((hashtag) => {
+          tags.push(['t', hashtag])
+        })
+      }
+
       await publishEvent({
         kind: 1,
         content: finalContent,
@@ -137,6 +226,8 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
       setImageFile(null)
       setImagePreview(null)
       setSelectedEmojis([])
+      setContentWarning('')
+      setShowCWInput(false)
       onClose()
       onSuccess?.()
     } catch (e) {
@@ -209,31 +300,67 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
         {/* Content */}
         <div className="p-4">
-          <textarea
-            ref={textareaRef}
-            value={postContent}
-            onChange={(e) => setPostContent(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="w-full h-32 resize-none bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
-            placeholder={replyTo ? '返信を入力...' : 'いまなにしてる？'}
-            maxLength={10000}
-            aria-label="投稿内容"
-          />
+          {/* Content Warning Input (NIP-36) */}
+          {showCWInput && (
+            <div className="mb-3 pb-3 border-b border-[var(--border-color)]">
+              <div className="flex items-center gap-2 mb-1.5">
+                <svg className="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span className="text-sm font-medium text-orange-500">コンテンツ警告</span>
+              </div>
+              <input
+                type="text"
+                value={contentWarning}
+                onChange={(e) => setContentWarning(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-orange-500"
+                placeholder="警告の理由（例: ネタバレ、センシティブ）"
+                maxLength={100}
+              />
+            </div>
+          )}
+
+          {/* Textarea with preview overlay */}
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={postContent}
+              onChange={(e) => setPostContent(e.target.value)}
+              onKeyDown={handleKeyDown}
+              spellCheck={false}
+              className={`w-full h-32 resize-none bg-transparent placeholder:text-[var(--text-tertiary)] focus:outline-none ${
+                postContent && (postContent.includes('#') || selectedEmojis.length > 0)
+                  ? 'text-transparent caret-[var(--text-primary)] absolute inset-0 z-10'
+                  : 'text-[var(--text-primary)] relative'
+              }`}
+              placeholder={replyTo ? '返信を入力...' : 'いまなにしてる？'}
+              maxLength={10000}
+              aria-label="投稿内容"
+            />
+            {/* Visible preview layer - only show when there are hashtags or emojis */}
+            {postContent && (postContent.includes('#') || selectedEmojis.length > 0) && (
+              <div className="w-full h-32 overflow-y-auto pointer-events-none">
+                <ContentPreview content={postContent} customEmojis={selectedEmojis} />
+              </div>
+            )}
+          </div>
 
           {/* Image preview */}
           {imagePreview && (
-            <div className="relative mt-3">
+            <div className="relative mt-3 inline-block">
               <img
                 src={imagePreview}
                 alt="プレビュー"
-                className="max-h-48 rounded-lg object-contain"
+                className="max-h-48 max-w-full rounded-lg object-contain"
               />
               <button
                 onClick={handleRemoveImage}
-                className="absolute top-2 right-2 p-1 bg-black/50 rounded-full text-white hover:bg-black/70"
+                className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
                 aria-label="画像を削除"
               >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -264,6 +391,20 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
               <polyline points="21 15 16 10 5 21" />
             </svg>
           </label>
+
+          {/* Content Warning toggle (NIP-36) */}
+          <button
+            onClick={() => setShowCWInput(!showCWInput)}
+            className={`action-btn p-2 ${showCWInput ? 'text-orange-500' : ''}`}
+            aria-label="コンテンツ警告を追加"
+            title="コンテンツ警告 (CW)"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </button>
 
           {/* Emoji picker */}
           <div className="relative">

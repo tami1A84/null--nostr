@@ -30,6 +30,78 @@ import UserProfileView from './UserProfileView'
 import EmojiPicker from './EmojiPicker'
 import BadgeDisplay, { clearBadgeCache } from './BadgeDisplay'
 
+// Extract hashtags from content (NIP-01)
+function extractHashtags(content) {
+  if (!content) return []
+  const hashtagRegex = /#([^\s#\u3000]+)/g
+  const hashtags = []
+  let match
+  while ((match = hashtagRegex.exec(content)) !== null) {
+    const tag = match[1].toLowerCase()
+    if (!hashtags.includes(tag)) {
+      hashtags.push(tag)
+    }
+  }
+  return hashtags
+}
+
+// Render content preview with hashtags and custom emojis highlighted
+function ContentPreview({ content, customEmojis = [] }) {
+  if (!content) return null
+
+  // Build emoji map from selected emojis (format: ['emoji', shortcode, url])
+  const emojiMap = {}
+  customEmojis.forEach(emoji => {
+    if (emoji[0] === 'emoji' && emoji[1] && emoji[2]) {
+      emojiMap[emoji[1]] = emoji[2]
+    }
+  })
+
+  // Split by hashtags and custom emoji shortcodes
+  const combinedRegex = /(#[^\s#\u3000]+|:[a-zA-Z0-9_]+:)/g
+  const parts = content.split(combinedRegex).filter(Boolean)
+
+  return (
+    <div className="text-base text-[var(--text-primary)] whitespace-pre-wrap break-words">
+      {parts.map((part, i) => {
+        // Check for hashtags
+        if (part.startsWith('#') && part.length > 1) {
+          return (
+            <span key={i} className="text-[var(--line-green)]">
+              {part}
+            </span>
+          )
+        }
+
+        // Check for custom emoji shortcodes
+        const emojiMatch = part.match(/^:([a-zA-Z0-9_]+):$/)
+        if (emojiMatch) {
+          const shortcode = emojiMatch[1]
+          const emojiUrl = emojiMap[shortcode]
+          if (emojiUrl) {
+            return (
+              <img
+                key={i}
+                src={emojiUrl}
+                alt={`:${shortcode}:`}
+                title={`:${shortcode}:`}
+                className="inline-block w-5 h-5 align-middle mx-0.5"
+                onError={(e) => {
+                  e.target.style.display = 'none'
+                }}
+              />
+            )
+          }
+          // Show shortcode as text if no URL found
+          return <span key={i} className="text-[var(--text-tertiary)]">{part}</span>
+        }
+
+        return <span key={i}>{part}</span>
+      })}
+    </div>
+  )
+}
+
 // Format birthday to string (handles both string and object formats)
 function formatBirthday(birthday) {
   if (!birthday) return ''
@@ -91,7 +163,7 @@ function ProfileNip05Badge({ nip05, pubkey }) {
   )
 }
 
-const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref) {
+const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHashtagClick }, ref) {
   const [profile, setProfile] = useState(null)
   const [rawProfile, setRawProfile] = useState(null) // Store original profile JSON
   const [posts, setPosts] = useState([])
@@ -128,6 +200,8 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref
   const [uploadingBanner, setUploadingBanner] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [emojiTags, setEmojiTags] = useState([])
+  const [contentWarning, setContentWarning] = useState('') // Content warning text (NIP-36)
+  const [showCWInput, setShowCWInput] = useState(false) // Toggle CW input visibility
   // Follow list state
   const [followList, setFollowList] = useState([])
   const [followListLoading, setFollowListLoading] = useState(false)
@@ -599,15 +673,29 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref
       if (emojiTags.length > 0) {
         event.tags = [...event.tags, ...emojiTags]
       }
-      
+
+      // Content warning tag (NIP-36)
+      if (contentWarning.trim()) {
+        event.tags = [...event.tags, ['content-warning', contentWarning.trim()]]
+      }
+
+      // Hashtag tags (NIP-01)
+      const hashtags = extractHashtags(content)
+      if (hashtags.length > 0) {
+        const hashtagTags = hashtags.map(tag => ['t', tag])
+        event.tags = [...event.tags, ...hashtagTags]
+      }
+
       const signedEvent = await signEventNip07(event)
       const success = await publishEvent(signedEvent)
-      
+
       if (success) {
         setPosts([signedEvent, ...posts])
         setNewPost('')
         setPostImage(null)
         setEmojiTags([])
+        setContentWarning('')
+        setShowCWInput(false)
         setShowPostModal(false)
       }
     } catch (e) {
@@ -1200,21 +1288,57 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref
               </button>
             </div>
             <div className="flex-1 p-4 pb-20 sm:pb-4 flex flex-col overflow-y-auto">
-              <textarea
-                value={newPost}
-                onChange={(e) => setNewPost(e.target.value)}
-                className="w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none text-base"
-                placeholder="いまどうしてる？"
-                autoFocus
-              />
-              
+              {/* Content Warning Input (NIP-36) */}
+              {showCWInput && (
+                <div className="mb-3 pb-3 border-b border-[var(--border-color)]">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <svg className="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span className="text-sm font-medium text-orange-500">コンテンツ警告</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={contentWarning}
+                    onChange={(e) => setContentWarning(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-orange-500"
+                    placeholder="警告の理由（例: ネタバレ、センシティブ）"
+                    maxLength={100}
+                  />
+                </div>
+              )}
+
+              {/* Textarea with preview overlay */}
+              <div className="relative min-h-[120px] sm:min-h-[150px]">
+                <textarea
+                  value={newPost}
+                  onChange={(e) => setNewPost(e.target.value)}
+                  spellCheck={false}
+                  className={`w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none placeholder-[var(--text-tertiary)] outline-none text-base ${
+                    newPost && (newPost.includes('#') || emojiTags.length > 0)
+                      ? 'text-transparent caret-[var(--text-primary)] absolute inset-0 z-10'
+                      : 'text-[var(--text-primary)] relative'
+                  }`}
+                  placeholder="いまどうしてる？"
+                  autoFocus
+                />
+                {/* Visible preview layer - only show when there are hashtags or emojis */}
+                {newPost && (newPost.includes('#') || emojiTags.length > 0) && (
+                  <div className="w-full min-h-[120px] sm:min-h-[150px] pointer-events-none">
+                    <ContentPreview content={newPost} customEmojis={emojiTags} />
+                  </div>
+                )}
+              </div>
+
               {/* Image preview */}
               {postImage && (
-                <div className="relative mt-3 rounded-xl overflow-hidden flex-shrink-0">
-                  <img src={postImage} alt="Upload preview" className="w-full max-h-48 object-cover rounded-xl" />
+                <div className="relative mt-3 inline-block flex-shrink-0">
+                  <img src={postImage} alt="Upload preview" className="max-h-48 max-w-full object-contain rounded-xl" />
                   <button
                     onClick={() => setPostImage(null)}
-                    className="absolute top-2 right-2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white"
+                    className="absolute top-2 right-2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80 transition-colors"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <line x1="18" y1="6" x2="6" y2="18"/>
@@ -1223,8 +1347,8 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref
                   </button>
                 </div>
               )}
-              
-              {/* Image upload and emoji picker buttons */}
+
+              {/* Image upload, CW, and emoji picker buttons */}
               <div className="mt-3 pt-3 border-t border-[var(--border-color)] flex-shrink-0">
                 <input
                   ref={postImageInputRef}
@@ -1258,7 +1382,21 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref
                       </>
                     )}
                   </button>
-                  
+
+                  {/* Content Warning toggle (NIP-36) */}
+                  <button
+                    onClick={() => setShowCWInput(!showCWInput)}
+                    className={`flex items-center gap-2 text-sm ${showCWInput ? 'text-orange-500' : 'text-[var(--text-tertiary)]'}`}
+                    title="コンテンツ警告 (CW)"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    CW
+                  </button>
+
                   {/* Emoji picker button */}
                   <button
                     onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -1384,6 +1522,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref
                       onRepost={handleRepost}
                       onUnrepost={handleUnrepost}
                       onZap={handleZap}
+                      onHashtagClick={onHashtagClick}
                       onDelete={handleDelete}
                       isOwnPost={post.pubkey === pubkey}
                       onAvatarClick={(targetPubkey) => {
@@ -1442,6 +1581,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref
                       onRepost={handleRepost}
                       onUnrepost={handleUnrepost}
                       onZap={handleZap}
+                      onHashtagClick={onHashtagClick}
                       onAvatarClick={(targetPubkey) => {
                         if (targetPubkey !== pubkey) {
                           setViewingProfile(targetPubkey)

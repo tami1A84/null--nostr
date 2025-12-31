@@ -32,6 +32,78 @@ import UserProfileView from './UserProfileView'
 import SearchModal from './SearchModal'
 import EmojiPicker from './EmojiPicker'
 
+// Extract hashtags from content (NIP-01)
+function extractHashtags(content) {
+  if (!content) return []
+  const hashtagRegex = /#([^\s#\u3000]+)/g
+  const hashtags = []
+  let match
+  while ((match = hashtagRegex.exec(content)) !== null) {
+    const tag = match[1].toLowerCase()
+    if (!hashtags.includes(tag)) {
+      hashtags.push(tag)
+    }
+  }
+  return hashtags
+}
+
+// Render content preview with hashtags and custom emojis highlighted
+function ContentPreview({ content, customEmojis = [] }) {
+  if (!content) return null
+
+  // Build emoji map from selected emojis (format: ['emoji', shortcode, url])
+  const emojiMap = {}
+  customEmojis.forEach(emoji => {
+    if (emoji[0] === 'emoji' && emoji[1] && emoji[2]) {
+      emojiMap[emoji[1]] = emoji[2]
+    }
+  })
+
+  // Split by hashtags and custom emoji shortcodes
+  const combinedRegex = /(#[^\s#\u3000]+|:[a-zA-Z0-9_]+:)/g
+  const parts = content.split(combinedRegex).filter(Boolean)
+
+  return (
+    <div className="text-base text-[var(--text-primary)] whitespace-pre-wrap break-words">
+      {parts.map((part, i) => {
+        // Check for hashtags
+        if (part.startsWith('#') && part.length > 1) {
+          return (
+            <span key={i} className="text-[var(--line-green)]">
+              {part}
+            </span>
+          )
+        }
+
+        // Check for custom emoji shortcodes
+        const emojiMatch = part.match(/^:([a-zA-Z0-9_]+):$/)
+        if (emojiMatch) {
+          const shortcode = emojiMatch[1]
+          const emojiUrl = emojiMap[shortcode]
+          if (emojiUrl) {
+            return (
+              <img
+                key={i}
+                src={emojiUrl}
+                alt={`:${shortcode}:`}
+                title={`:${shortcode}:`}
+                className="inline-block w-5 h-5 align-middle mx-0.5"
+                onError={(e) => {
+                  e.target.style.display = 'none'
+                }}
+              />
+            )
+          }
+          // Show shortcode as text if no URL found
+          return <span key={i} className="text-[var(--text-tertiary)]">{part}</span>
+        }
+
+        return <span key={i}>{part}</span>
+      })}
+    </div>
+  )
+}
+
 const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollContainerRef, onPostPublished, isDesktop = false, isActive = true }, ref) {
   // Separate state for each timeline mode
   const [globalPosts, setGlobalPosts] = useState([])
@@ -54,6 +126,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const [posting, setPosting] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [emojiTags, setEmojiTags] = useState([]) // Array of emoji tags for post
+  const [contentWarning, setContentWarning] = useState('') // Content warning text (NIP-36)
+  const [showCWInput, setShowCWInput] = useState(false) // Toggle CW input visibility
   const [viewingProfile, setViewingProfile] = useState(null)
   const [mutedPubkeys, setMutedPubkeys] = useState(new Set())
   const [showZapModal, setShowZapModal] = useState(null)
@@ -61,6 +135,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const [zapComment, setZapComment] = useState('')
   const [zapping, setZapping] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('') // Initial query for search modal
   // Follow timeline state
   const [timelineMode, setTimelineMode] = useState('global') // 'global' or 'following'
   const [followList, setFollowList] = useState([])
@@ -83,7 +158,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     refresh: loadTimeline,
     closeProfile: () => setViewingProfile(null),
     openPostModal: () => setShowPostModal(true),
-    closeSearch: () => setShowSearch(false)
+    closeSearch: () => { setShowSearch(false); setSearchQuery('') },
+    openSearch: (query) => { setSearchQuery(query); setShowSearch(true) }
   }))
 
   // Save scroll position when switching modes - use scrollContainerRef from parent
@@ -655,6 +731,12 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     }
   }
 
+  // Handle hashtag click - open search with hashtag
+  const handleHashtagClick = (hashtag) => {
+    setSearchQuery(`#${hashtag}`)
+    setShowSearch(true)
+  }
+
   const handleLike = async (event) => {
     if (!pubkey || userReactions.has(event.id)) return
 
@@ -909,15 +991,29 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       if (emojiTags.length > 0) {
         event.tags = [...event.tags, ...emojiTags]
       }
-      
+
+      // Content warning tag (NIP-36)
+      if (contentWarning.trim()) {
+        event.tags = [...event.tags, ['content-warning', contentWarning.trim()]]
+      }
+
+      // Hashtag tags (NIP-01)
+      const hashtags = extractHashtags(content)
+      if (hashtags.length > 0) {
+        const hashtagTags = hashtags.map(tag => ['t', tag])
+        event.tags = [...event.tags, ...hashtagTags]
+      }
+
       const signed = await signEventNip07(event)
       const success = await publishEvent(signed)
-      
+
       if (success) {
         setPosts([signed, ...posts])
         setNewPost('')
         setPostImage(null)
         setEmojiTags([])
+        setContentWarning('')
+        setShowCWInput(false)
         setShowPostModal(false)
         
         // Notify parent to refresh home tab
@@ -1013,7 +1109,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       {showSearch && (
         <SearchModal
           pubkey={pubkey}
-          onClose={() => setShowSearch(false)}
+          initialQuery={searchQuery}
+          onClose={() => { setShowSearch(false); setSearchQuery('') }}
           onViewProfile={(pk) => {
             setShowSearch(false)
             setViewingProfile(pk)
@@ -1042,21 +1139,57 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
               </button>
             </div>
             <div className="flex-1 p-4 pb-20 sm:pb-4 flex flex-col overflow-y-auto">
-              <textarea
-                value={newPost}
-                onChange={(e) => setNewPost(e.target.value)}
-                className="w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none text-base"
-                placeholder="いまどうしてる？"
-                autoFocus
-              />
-              
+              {/* Content Warning Input (NIP-36) */}
+              {showCWInput && (
+                <div className="mb-3 pb-3 border-b border-[var(--border-color)]">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <svg className="w-4 h-4 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <span className="text-sm font-medium text-orange-500">コンテンツ警告</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={contentWarning}
+                    onChange={(e) => setContentWarning(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-orange-500"
+                    placeholder="警告の理由（例: ネタバレ、センシティブ）"
+                    maxLength={100}
+                  />
+                </div>
+              )}
+
+              {/* Textarea with preview overlay */}
+              <div className="relative min-h-[120px] sm:min-h-[150px]">
+                <textarea
+                  value={newPost}
+                  onChange={(e) => setNewPost(e.target.value)}
+                  spellCheck={false}
+                  className={`w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none placeholder-[var(--text-tertiary)] outline-none text-base ${
+                    newPost && (newPost.includes('#') || emojiTags.length > 0)
+                      ? 'text-transparent caret-[var(--text-primary)] absolute inset-0 z-10'
+                      : 'text-[var(--text-primary)] relative'
+                  }`}
+                  placeholder="いまどうしてる？"
+                  autoFocus
+                />
+                {/* Visible preview layer - only show when there are hashtags or emojis */}
+                {newPost && (newPost.includes('#') || emojiTags.length > 0) && (
+                  <div className="w-full min-h-[120px] sm:min-h-[150px] pointer-events-none">
+                    <ContentPreview content={newPost} customEmojis={emojiTags} />
+                  </div>
+                )}
+              </div>
+
               {/* Image preview */}
               {postImage && (
-                <div className="relative mt-3 rounded-xl overflow-hidden flex-shrink-0">
-                  <img src={postImage} alt="Upload preview" className="w-full max-h-48 object-cover rounded-xl" />
+                <div className="relative mt-3 inline-block flex-shrink-0">
+                  <img src={postImage} alt="Upload preview" className="max-h-48 max-w-full object-contain rounded-xl" />
                   <button
                     onClick={() => setPostImage(null)}
-                    className="absolute top-2 right-2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white"
+                    className="absolute top-2 right-2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80 transition-colors"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <line x1="18" y1="6" x2="6" y2="18"/>
@@ -1066,7 +1199,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                 </div>
               )}
               
-              {/* Image upload and emoji picker buttons */}
+              {/* Image upload, CW, and emoji picker buttons */}
               <div className="mt-3 pt-3 border-t border-[var(--border-color)] flex-shrink-0">
                 <input
                   ref={postImageInputRef}
@@ -1100,7 +1233,21 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                       </>
                     )}
                   </button>
-                  
+
+                  {/* Content Warning toggle (NIP-36) */}
+                  <button
+                    onClick={() => setShowCWInput(!showCWInput)}
+                    className={`flex items-center gap-2 text-sm ${showCWInput ? 'text-orange-500' : 'text-[var(--text-tertiary)]'}`}
+                    title="コンテンツ警告 (CW)"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    CW
+                  </button>
+
                   {/* Emoji picker button */}
                   <button
                     onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -1330,6 +1477,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                     onZapLongPress={handleZapLongPressStart}
                     onZapLongPressEnd={handleZapLongPressEnd}
                     onAvatarClick={handleAvatarClick}
+                    onHashtagClick={handleHashtagClick}
                     onMute={handleMute}
                     onDelete={handleDelete}
                     isOwnPost={post.pubkey === pubkey}
@@ -1430,6 +1578,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                         onZapLongPress={handleZapLongPressStart}
                         onZapLongPressEnd={handleZapLongPressEnd}
                         onAvatarClick={handleAvatarClick}
+                        onHashtagClick={handleHashtagClick}
                         onMute={handleMute}
                         onDelete={handleDelete}
                         isOwnPost={post.pubkey === pubkey}
@@ -1443,7 +1592,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
             )}
           </div>
         </div>
-        
+
         {/* Right column: Following timeline */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-shrink-0 bg-[var(--bg-primary)] border-b border-[var(--border-color)] px-4 py-3 flex items-center justify-between">
@@ -1524,6 +1673,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                         onZapLongPress={handleZapLongPressStart}
                         onZapLongPressEnd={handleZapLongPressEnd}
                         onAvatarClick={handleAvatarClick}
+                        onHashtagClick={handleHashtagClick}
                         onMute={handleMute}
                         onDelete={handleDelete}
                         isOwnPost={post.pubkey === pubkey}

@@ -228,6 +228,18 @@ export default function Home() {
     setActiveTab('talk')
   }
 
+  // Handle hashtag click from HomeTab - switch to timeline and search
+  const handleHashtagSearch = (hashtag) => {
+    setActiveTab('timeline')
+    // TimelineTab will handle opening search with the hashtag
+    // We need to add a method to timelineRef or use a different approach
+    setTimeout(() => {
+      if (timelineRef.current?.openSearch) {
+        timelineRef.current.openSearch(`#${hashtag}`)
+      }
+    }, 100)
+  }
+
   // Loading state with mascot image
   if (isLoading) {
     return (
@@ -334,7 +346,7 @@ export default function Home() {
             className={`fixed inset-0 lg:left-[240px] xl:left-[280px] bottom-16 lg:bottom-0 overflow-y-auto ${activeTab === 'home' ? '' : 'invisible pointer-events-none'}`}
             style={{ zIndex: activeTab === 'home' ? 1 : 0 }}
           >
-            <HomeTab ref={homeRef} pubkey={pubkey} onLogout={handleLogout} onStartDM={handleStartDM} />
+            <HomeTab ref={homeRef} pubkey={pubkey} onLogout={handleLogout} onStartDM={handleStartDM} onHashtagClick={handleHashtagSearch} />
           </div>
         )}
         
