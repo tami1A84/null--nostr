@@ -152,11 +152,13 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
       // Hashtag tags (NIP-01)
       const hashtags = extractHashtags(finalContent)
+      console.log('[DEBUG] Extracted hashtags:', hashtags)
       if (hashtags.length > 0) {
         hashtags.forEach((hashtag) => {
           tags.push(['t', hashtag])
         })
       }
+      console.log('[DEBUG] Final tags:', JSON.stringify(tags))
 
       await publishEvent({
         kind: 1,
@@ -164,6 +166,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
         tags,
         created_at: Math.floor(Date.now() / 1000),
       })
+      console.log('[DEBUG] Event published with tags')
 
       setPostContent('')
       setImageFile(null)

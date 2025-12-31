@@ -934,12 +934,15 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
 
       // Hashtag tags (NIP-01)
       const hashtags = extractHashtags(content)
+      console.log('[DEBUG] Extracted hashtags:', hashtags)
       if (hashtags.length > 0) {
         const hashtagTags = hashtags.map(tag => ['t', tag])
         event.tags = [...event.tags, ...hashtagTags]
       }
+      console.log('[DEBUG] Final event tags:', JSON.stringify(event.tags))
 
       const signed = await signEventNip07(event)
+      console.log('[DEBUG] Signed event tags:', JSON.stringify(signed.tags))
       const success = await publishEvent(signed)
 
       if (success) {

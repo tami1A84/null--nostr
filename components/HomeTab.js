@@ -624,12 +624,15 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref
 
       // Hashtag tags (NIP-01)
       const hashtags = extractHashtags(content)
+      console.log('[DEBUG] Extracted hashtags:', hashtags)
       if (hashtags.length > 0) {
         const hashtagTags = hashtags.map(tag => ['t', tag])
         event.tags = [...event.tags, ...hashtagTags]
       }
+      console.log('[DEBUG] Final event tags:', JSON.stringify(event.tags))
 
       const signedEvent = await signEventNip07(event)
+      console.log('[DEBUG] Signed event tags:', JSON.stringify(signedEvent.tags))
       const success = await publishEvent(signedEvent)
 
       if (success) {
