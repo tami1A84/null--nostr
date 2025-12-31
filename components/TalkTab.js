@@ -510,18 +510,19 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
     refresh: loadConversations
   }))
 
+  // Maximum images allowed
+  const MAX_IMAGES = 3
+
   // Image handling - support multiple images
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
 
-    // Limit to 4 images total
-    const maxImages = 4
-    const remainingSlots = maxImages - imageFiles.length
+    const remainingSlots = MAX_IMAGES - imageFiles.length
     const filesToAdd = files.slice(0, remainingSlots)
 
     if (filesToAdd.length === 0) {
-      alert('最大4枚まで画像を追加できます')
+      alert(`最大${MAX_IMAGES}枚まで画像を追加できます`)
       return
     }
 
@@ -578,6 +579,21 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
     }
   }
 
+  // Upload image with retry logic
+  const uploadImageWithRetry = async (file, retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const url = await uploadImage(file)
+        if (url) return url
+      } catch (e) {
+        console.error(`Upload attempt ${i + 1} failed:`, e)
+        if (i === retries - 1) throw e
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)))
+      }
+    }
+    return null
+  }
+
   const handleSendMessage = async () => {
     if ((!newMessage.trim() && imageFiles.length === 0) || !selectedChat || sending) return
     setSending(true)
@@ -592,9 +608,9 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
           setUploadingImage(true)
           const uploadedUrls = []
 
-          // Upload all images
+          // Upload all images with retry
           for (const file of imageFiles) {
-            const imageUrl = await uploadImage(file)
+            const imageUrl = await uploadImageWithRetry(file)
             if (imageUrl) {
               uploadedUrls.push(imageUrl)
             }
@@ -992,8 +1008,8 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
                   </button>
                 </div>
               ))}
-              {/* Add more button if under limit */}
-              {imagePreviews.length < 4 && (
+              {/* Add more button if under limit (max 3) */}
+              {imagePreviews.length < 3 && (
                 <label
                   htmlFor="chat-image-input-add"
                   className="h-20 w-20 rounded-lg border-2 border-dashed border-[var(--border-color)] flex items-center justify-center cursor-pointer hover:border-[var(--line-green)] transition-colors"
@@ -1030,7 +1046,7 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
           />
           <label
             htmlFor="chat-image-input"
-            className={`action-btn p-2 cursor-pointer relative ${imageFiles.length >= 4 ? 'opacity-50 pointer-events-none' : ''}`}
+            className={`action-btn p-2 cursor-pointer relative ${imageFiles.length >= 3 ? 'opacity-50 pointer-events-none' : ''}`}
           >
             <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />

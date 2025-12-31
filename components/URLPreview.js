@@ -1,28 +1,37 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 // In-memory cache for OG data
 const ogDataCache = new Map()
+
+// Rate limiting - track last request time per domain
+const domainLastRequest = new Map()
+const MIN_REQUEST_INTERVAL = 500 // ms between requests to same domain
 
 /**
  * URLPreview Component
  * Displays a rich preview card for external URLs with OpenGraph metadata
  * Uses microlink.io API for fetching OG data (CORS-enabled)
- *
- * @param {Object} props
- * @param {string} props.url - The URL to preview
- * @param {boolean} [props.compact] - Show compact version (smaller)
  */
 export default function URLPreview({ url, compact = false }) {
   const [ogData, setOgData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const mountedRef = useRef(true)
+  const fetchAttemptedRef = useRef(false)
 
   useEffect(() => {
-    if (!url) {
-      setLoading(false)
-      setError(true)
+    mountedRef.current = true
+    fetchAttemptedRef.current = false
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [url])
+
+  useEffect(() => {
+    if (!url || fetchAttemptedRef.current) {
       return
     }
 
@@ -32,6 +41,8 @@ export default function URLPreview({ url, compact = false }) {
       setError(true)
       return
     }
+
+    fetchAttemptedRef.current = true
 
     // Check in-memory cache first
     const cached = ogDataCache.get(url)
@@ -66,69 +77,107 @@ export default function URLPreview({ url, compact = false }) {
       }
     } catch {}
 
-    let mounted = true
-
     const fetchOGData = async () => {
+      // Rate limiting per domain
       try {
-        // Use microlink.io API for fetching OG data
-        const response = await fetch(
-          `https://api.microlink.io?url=${encodeURIComponent(url)}`,
-          { headers: { 'Accept': 'application/json' } }
-        )
+        const domain = new URL(url).hostname
+        const lastRequest = domainLastRequest.get(domain) || 0
+        const timeSinceLastRequest = Date.now() - lastRequest
 
-        if (!mounted) return
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch')
+        if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+          await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest))
         }
 
-        const result = await response.json()
+        domainLastRequest.set(domain, Date.now())
+      } catch {}
 
-        if (!mounted) return
+      // Retry logic
+      const maxRetries = 2
+      let lastError = null
 
-        if (result.status !== 'success' || !result.data) {
-          throw new Error('No data')
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          if (!mountedRef.current) return
+
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 8000)
+
+          const response = await fetch(
+            `https://api.microlink.io?url=${encodeURIComponent(url)}`,
+            {
+              headers: { 'Accept': 'application/json' },
+              signal: controller.signal
+            }
+          )
+
+          clearTimeout(timeoutId)
+
+          if (!mountedRef.current) return
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`)
+          }
+
+          const result = await response.json()
+
+          if (!mountedRef.current) return
+
+          if (result.status !== 'success' || !result.data) {
+            throw new Error('No data')
+          }
+
+          const data = {
+            url,
+            title: result.data.title || null,
+            description: result.data.description || null,
+            image: result.data.image?.url || null,
+            siteName: result.data.publisher || null,
+            favicon: result.data.logo?.url || null,
+          }
+
+          // Only cache if we got useful data
+          if (data.title) {
+            ogDataCache.set(url, data)
+            try {
+              localStorage.setItem(`og:${url}`, JSON.stringify({
+                data,
+                timestamp: Date.now()
+              }))
+            } catch {}
+          }
+
+          if (mountedRef.current) {
+            setOgData(data)
+            setLoading(false)
+          }
+          return // Success, exit retry loop
+
+        } catch (e) {
+          lastError = e
+          if (attempt < maxRetries) {
+            // Wait before retry with exponential backoff
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+          }
         }
+      }
 
-        const data = {
-          url,
-          title: result.data.title || null,
-          description: result.data.description || null,
-          image: result.data.image?.url || null,
-          siteName: result.data.publisher || null,
-          favicon: result.data.logo?.url || null,
-        }
-
-        // Cache the data
-        ogDataCache.set(url, data)
+      // All retries failed
+      if (mountedRef.current) {
+        ogDataCache.set(url, { error: true })
         try {
           localStorage.setItem(`og:${url}`, JSON.stringify({
-            data,
+            error: true,
             timestamp: Date.now()
           }))
         } catch {}
-
-        setOgData(data)
+        setError(true)
         setLoading(false)
-      } catch (e) {
-        if (mounted) {
-          // Cache the error to avoid repeated requests
-          ogDataCache.set(url, { error: true })
-          try {
-            localStorage.setItem(`og:${url}`, JSON.stringify({
-              error: true,
-              timestamp: Date.now()
-            }))
-          } catch {}
-          setError(true)
-          setLoading(false)
-        }
       }
     }
 
-    fetchOGData()
-
-    return () => { mounted = false }
+    // Delay fetch slightly to avoid overwhelming the API
+    const timeoutId = setTimeout(fetchOGData, 100)
+    return () => clearTimeout(timeoutId)
   }, [url])
 
   // Don't show anything if error or no data
