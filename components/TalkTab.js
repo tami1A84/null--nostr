@@ -16,6 +16,7 @@ import {
   RELAYS
 } from '@/lib/nostr'
 import EmojiPicker from './EmojiPicker'
+import URLPreview from './URLPreview'
 
 // Render content preview with custom emojis (for input preview)
 function MessagePreview({ content, customEmojis = [] }) {
@@ -106,50 +107,91 @@ function MessageContent({ content, isSent }) {
   return <RenderMessageText content={content} isSent={isSent} />
 }
 
-// Render text with custom emojis and images
+// Render text with custom emojis, images, and URL previews
 function RenderMessageText({ content, isSent }) {
   if (!content) return null
 
-  // Split by image URLs and emoji shortcodes
-  const combinedRegex = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?[^\s]*)?|:[a-zA-Z0-9_]+:)/gi
+  // Split by URLs (both image and general) and emoji shortcodes
+  const combinedRegex = /(https?:\/\/[^\s]+|:[a-zA-Z0-9_]+:)/gi
   const parts = content.split(combinedRegex).filter(Boolean)
+
+  // Track URLs for preview (avoid duplicates)
+  const previewUrls = []
+
+  const renderedParts = parts.map((part, i) => {
+    // Check for image URL
+    if (part.match(/^https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|svg)(?:\?[^\s]*)?$/i)) {
+      return (
+        <div key={i} className="my-1">
+          <img
+            src={part}
+            alt=""
+            className="max-w-full max-h-48 rounded-lg object-contain"
+            loading="lazy"
+            onError={(e) => {
+              // If image fails to load, show as link
+              e.target.outerHTML = `<a href="${part}" target="_blank" rel="noopener noreferrer" class="underline break-all">${part}</a>`
+            }}
+          />
+        </div>
+      )
+    }
+
+    // Check for video URL
+    if (part.match(/^https?:\/\/[^\s]+\.(?:mp4|webm|mov)(?:\?[^\s]*)?$/i)) {
+      return (
+        <div key={i} className="my-1">
+          <video
+            src={part}
+            controls
+            className="max-w-full max-h-48 rounded-lg"
+          />
+        </div>
+      )
+    }
+
+    // Check for general URL (for preview)
+    if (part.match(/^https?:\/\//)) {
+      // Add to preview list if not already there
+      if (!previewUrls.includes(part)) {
+        previewUrls.push(part)
+      }
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--line-green)] hover:underline break-all"
+        >
+          {part.length > 50 ? part.slice(0, 50) + '...' : part}
+        </a>
+      )
+    }
+
+    // Check for custom emoji shortcode
+    const emojiMatch = part.match(/^:([a-zA-Z0-9_]+):$/)
+    if (emojiMatch) {
+      const shortcode = emojiMatch[1]
+      // For now, we don't have the emoji URL map for received messages
+      // Show as styled shortcode
+      return (
+        <span key={i} className={`${isSent ? 'text-green-100/70' : 'text-[var(--text-tertiary)]'}`}>
+          {part}
+        </span>
+      )
+    }
+
+    return <span key={i}>{part}</span>
+  })
 
   return (
     <div className="text-sm whitespace-pre-wrap break-words">
-      {parts.map((part, i) => {
-        // Check for image URL
-        if (part.match(/^https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|svg)/i)) {
-          return (
-            <div key={i} className="my-1">
-              <img
-                src={part}
-                alt=""
-                className="max-w-full max-h-48 rounded-lg object-contain"
-                loading="lazy"
-                onError={(e) => {
-                  // If image fails to load, show as link
-                  e.target.outerHTML = `<a href="${part}" target="_blank" rel="noopener noreferrer" class="underline break-all">${part}</a>`
-                }}
-              />
-            </div>
-          )
-        }
-
-        // Check for custom emoji shortcode
-        const emojiMatch = part.match(/^:([a-zA-Z0-9_]+):$/)
-        if (emojiMatch) {
-          const shortcode = emojiMatch[1]
-          // For now, we don't have the emoji URL map for received messages
-          // Show as styled shortcode
-          return (
-            <span key={i} className={`${isSent ? 'text-green-100/70' : 'text-[var(--text-tertiary)]'}`}>
-              {part}
-            </span>
-          )
-        }
-
-        return <span key={i}>{part}</span>
-      })}
+      {renderedParts}
+      {/* Show URL previews for non-media URLs (max 2) */}
+      {previewUrls.slice(0, 2).map((url, i) => (
+        <URLPreview key={`preview-${i}`} url={url} compact />
+      ))}
     </div>
   )
 }
@@ -165,8 +207,8 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
   const [profiles, setProfiles] = useState({})
   const [sending, setSending] = useState(false)
   // New state for enhanced message input
-  const [imageFile, setImageFile] = useState(null)
-  const [imagePreview, setImagePreview] = useState(null)
+  const [imageFiles, setImageFiles] = useState([])
+  const [imagePreviews, setImagePreviews] = useState([])
   const [uploadingImage, setUploadingImage] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [selectedEmojis, setSelectedEmojis] = useState([])
@@ -468,25 +510,41 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
     refresh: loadConversations
   }))
 
-  // Image handling
+  // Image handling - support multiple images
   const handleImageSelect = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
 
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setImagePreview(reader.result)
+    // Limit to 4 images total
+    const maxImages = 4
+    const remainingSlots = maxImages - imageFiles.length
+    const filesToAdd = files.slice(0, remainingSlots)
+
+    if (filesToAdd.length === 0) {
+      alert('最大4枚まで画像を追加できます')
+      return
     }
-    reader.readAsDataURL(file)
-    setImageFile(file)
-  }
 
-  const handleRemoveImage = () => {
-    setImageFile(null)
-    setImagePreview(null)
+    // Read all files and create previews
+    filesToAdd.forEach(file => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreviews(prev => [...prev, reader.result])
+      }
+      reader.readAsDataURL(file)
+    })
+
+    setImageFiles(prev => [...prev, ...filesToAdd])
+
+    // Reset input to allow selecting same file again
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
+  }
+
+  const handleRemoveImage = (index) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index))
+    setImagePreviews(prev => prev.filter((_, i) => i !== index))
   }
 
   // Emoji handling
@@ -510,8 +568,8 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
   // Reset input state after sending
   const resetInputState = () => {
     setNewMessage('')
-    setImageFile(null)
-    setImagePreview(null)
+    setImageFiles([])
+    setImagePreviews([])
     setSelectedEmojis([])
     setContentWarning('')
     setShowCWInput(false)
@@ -521,20 +579,31 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
   }
 
   const handleSendMessage = async () => {
-    if ((!newMessage.trim() && !imageFile) || !selectedChat || sending) return
+    if ((!newMessage.trim() && imageFiles.length === 0) || !selectedChat || sending) return
     setSending(true)
 
     let messageContent = newMessage.trim()
     const tempId = 'temp-' + Date.now()
 
     try {
-      // Upload image if selected
-      if (imageFile) {
+      // Upload images if selected
+      if (imageFiles.length > 0) {
         try {
           setUploadingImage(true)
-          const imageUrl = await uploadImage(imageFile)
-          if (imageUrl) {
-            messageContent = messageContent ? `${messageContent}\n${imageUrl}` : imageUrl
+          const uploadedUrls = []
+
+          // Upload all images
+          for (const file of imageFiles) {
+            const imageUrl = await uploadImage(file)
+            if (imageUrl) {
+              uploadedUrls.push(imageUrl)
+            }
+          }
+
+          // Append all image URLs to message
+          if (uploadedUrls.length > 0) {
+            const imageUrlsStr = uploadedUrls.join('\n')
+            messageContent = messageContent ? `${messageContent}\n${imageUrlsStr}` : imageUrlsStr
           }
         } catch (e) {
           console.error('Image upload failed:', e)
@@ -901,25 +970,49 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
           </div>
         )}
 
-        {/* Image Preview */}
-        {imagePreview && (
+        {/* Image Previews - Multiple images */}
+        {imagePreviews.length > 0 && (
           <div className="px-3 pt-2">
-            <div className="relative inline-block">
-              <img
-                src={imagePreview}
-                alt="プレビュー"
-                className="max-h-32 max-w-full rounded-lg object-contain"
-              />
-              <button
-                onClick={handleRemoveImage}
-                className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
+            <div className="flex flex-wrap gap-2">
+              {imagePreviews.map((preview, index) => (
+                <div key={index} className="relative inline-block">
+                  <img
+                    src={preview}
+                    alt={`プレビュー ${index + 1}`}
+                    className="h-20 w-20 rounded-lg object-cover"
+                  />
+                  <button
+                    onClick={() => handleRemoveImage(index)}
+                    className="absolute -top-1 -right-1 p-1 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+                  >
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              {/* Add more button if under limit */}
+              {imagePreviews.length < 4 && (
+                <label
+                  htmlFor="chat-image-input-add"
+                  className="h-20 w-20 rounded-lg border-2 border-dashed border-[var(--border-color)] flex items-center justify-center cursor-pointer hover:border-[var(--line-green)] transition-colors"
+                >
+                  <svg className="w-6 h-6 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </label>
+              )}
             </div>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageSelect}
+              className="hidden"
+              id="chat-image-input-add"
+            />
           </div>
         )}
 
@@ -930,19 +1023,25 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            multiple
             onChange={handleImageSelect}
             className="hidden"
             id="chat-image-input"
           />
           <label
             htmlFor="chat-image-input"
-            className="action-btn p-2 cursor-pointer"
+            className={`action-btn p-2 cursor-pointer relative ${imageFiles.length >= 4 ? 'opacity-50 pointer-events-none' : ''}`}
           >
             <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
               <circle cx="8.5" cy="8.5" r="1.5" />
               <polyline points="21 15 16 10 5 21" />
             </svg>
+            {imageFiles.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-[var(--line-green)] text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
+                {imageFiles.length}
+              </span>
+            )}
           </label>
 
           {/* CW toggle */}
@@ -1027,7 +1126,7 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
           </div>
           <button
             onClick={handleSendMessage}
-            disabled={(!newMessage.trim() && !imageFile) || sending || uploadingImage}
+            disabled={(!newMessage.trim() && imageFiles.length === 0) || sending || uploadingImage}
             className="w-10 h-10 rounded-full bg-[var(--line-green)] flex items-center justify-center disabled:opacity-50 action-btn flex-shrink-0"
           >
             {uploadingImage ? (
