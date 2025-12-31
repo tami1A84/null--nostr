@@ -285,6 +285,7 @@ export default function PostItem({
   onZapLongPress,
   onZapLongPressEnd,
   onAvatarClick,
+  onHashtagClick,
   onMute,
   onDelete,
   isOwnPost = false,
@@ -385,17 +386,35 @@ export default function PostItem({
     return parts.length > 0 ? parts : text
   }
   
-  // Render content with nostr: links, URLs, images, and custom emoji
+  // Render content with nostr: links, URLs, images, hashtags, and custom emoji
   const renderContent = (content) => {
     if (!content) return null
-    
+
     // Use non-capturing group (?:...) to avoid duplicate parts in split result
     // Require at least 58 characters after the prefix for valid bech32 (e.g., note1 + 58 chars = 63 total)
-    const combinedRegex = /(https?:\/\/[^\s]+|nostr:(?:note1|nevent1|npub1|nprofile1|naddr1)[a-z0-9]{58,})/gi
-    
+    // Also capture hashtags (#tag)
+    const combinedRegex = /(https?:\/\/[^\s]+|nostr:(?:note1|nevent1|npub1|nprofile1|naddr1)[a-z0-9]{58,}|#[^\s#\u3000]+)/gi
+
     const parts = content.split(combinedRegex).filter(Boolean)
-    
+
     return parts.map((part, i) => {
+      // Check for hashtags
+      if (part.startsWith('#') && part.length > 1) {
+        const hashtag = part.slice(1) // Remove # prefix
+        return (
+          <span
+            key={i}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (onHashtagClick) onHashtagClick(hashtag)
+            }}
+            className="text-[#1d9bf0] hover:underline cursor-pointer"
+          >
+            {part}
+          </span>
+        )
+      }
+
       // Check for nostr: links
       if (part.toLowerCase().startsWith('nostr:')) {
         const bech32 = part.slice(6) // Remove 'nostr:' prefix

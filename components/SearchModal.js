@@ -16,8 +16,8 @@ import {
 } from '@/lib/nostr'
 import PostItem from './PostItem'
 
-export default function SearchModal({ pubkey, onClose, onViewProfile }) {
-  const [query, setQuery] = useState('')
+export default function SearchModal({ pubkey, onClose, onViewProfile, initialQuery = '' }) {
+  const [query, setQuery] = useState(initialQuery)
   const [results, setResults] = useState([])
   const [profiles, setProfiles] = useState({})
   const [searching, setSearching] = useState(false)
@@ -37,6 +37,13 @@ export default function SearchModal({ pubkey, onClose, onViewProfile }) {
     return () => setMounted(false)
   }, [])
 
+  // Auto-search when initialQuery is provided
+  useEffect(() => {
+    if (initialQuery && mounted) {
+      handleSearch(initialQuery)
+    }
+  }, [initialQuery, mounted])
+
   useEffect(() => {
     // Load recent searches from localStorage
     const saved = localStorage.getItem('recentSearches')
@@ -49,8 +56,10 @@ export default function SearchModal({ pubkey, onClose, onViewProfile }) {
       }
     }
 
-    // Focus input on mount
-    inputRef.current?.focus()
+    // Focus input on mount (only if no initialQuery)
+    if (!initialQuery) {
+      inputRef.current?.focus()
+    }
     
     // Handle click outside on desktop
     const handleClickOutside = (e) => {

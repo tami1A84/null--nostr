@@ -78,6 +78,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const [zapComment, setZapComment] = useState('')
   const [zapping, setZapping] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('') // Initial query for search modal
   // Follow timeline state
   const [timelineMode, setTimelineMode] = useState('global') // 'global' or 'following'
   const [followList, setFollowList] = useState([])
@@ -100,7 +101,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     refresh: loadTimeline,
     closeProfile: () => setViewingProfile(null),
     openPostModal: () => setShowPostModal(true),
-    closeSearch: () => setShowSearch(false)
+    closeSearch: () => { setShowSearch(false); setSearchQuery('') },
+    openSearch: (query) => { setSearchQuery(query); setShowSearch(true) }
   }))
 
   // Save scroll position when switching modes - use scrollContainerRef from parent
@@ -672,6 +674,12 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     }
   }
 
+  // Handle hashtag click - open search with hashtag
+  const handleHashtagClick = (hashtag) => {
+    setSearchQuery(`#${hashtag}`)
+    setShowSearch(true)
+  }
+
   const handleLike = async (event) => {
     if (!pubkey || userReactions.has(event.id)) return
 
@@ -934,15 +942,12 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
 
       // Hashtag tags (NIP-01)
       const hashtags = extractHashtags(content)
-      console.log('[DEBUG] Extracted hashtags:', hashtags)
       if (hashtags.length > 0) {
         const hashtagTags = hashtags.map(tag => ['t', tag])
         event.tags = [...event.tags, ...hashtagTags]
       }
-      console.log('[DEBUG] Final event tags:', JSON.stringify(event.tags))
 
       const signed = await signEventNip07(event)
-      console.log('[DEBUG] Signed event tags:', JSON.stringify(signed.tags))
       const success = await publishEvent(signed)
 
       if (success) {
@@ -1047,7 +1052,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       {showSearch && (
         <SearchModal
           pubkey={pubkey}
-          onClose={() => setShowSearch(false)}
+          initialQuery={searchQuery}
+          onClose={() => { setShowSearch(false); setSearchQuery('') }}
           onViewProfile={(pk) => {
             setShowSearch(false)
             setViewingProfile(pk)
@@ -1400,6 +1406,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                     onZapLongPress={handleZapLongPressStart}
                     onZapLongPressEnd={handleZapLongPressEnd}
                     onAvatarClick={handleAvatarClick}
+                    onHashtagClick={handleHashtagClick}
                     onMute={handleMute}
                     onDelete={handleDelete}
                     isOwnPost={post.pubkey === pubkey}
@@ -1500,6 +1507,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                         onZapLongPress={handleZapLongPressStart}
                         onZapLongPressEnd={handleZapLongPressEnd}
                         onAvatarClick={handleAvatarClick}
+                        onHashtagClick={handleHashtagClick}
                         onMute={handleMute}
                         onDelete={handleDelete}
                         isOwnPost={post.pubkey === pubkey}
@@ -1513,7 +1521,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
             )}
           </div>
         </div>
-        
+
         {/* Right column: Following timeline */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-shrink-0 bg-[var(--bg-primary)] border-b border-[var(--border-color)] px-4 py-3 flex items-center justify-between">
@@ -1594,6 +1602,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                         onZapLongPress={handleZapLongPressStart}
                         onZapLongPressEnd={handleZapLongPressEnd}
                         onAvatarClick={handleAvatarClick}
+                        onHashtagClick={handleHashtagClick}
                         onMute={handleMute}
                         onDelete={handleDelete}
                         isOwnPost={post.pubkey === pubkey}

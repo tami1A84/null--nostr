@@ -106,7 +106,7 @@ function ProfileNip05Badge({ nip05, pubkey }) {
   )
 }
 
-const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref) {
+const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHashtagClick }, ref) {
   const [profile, setProfile] = useState(null)
   const [rawProfile, setRawProfile] = useState(null) // Store original profile JSON
   const [posts, setPosts] = useState([])
@@ -624,15 +624,12 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref
 
       // Hashtag tags (NIP-01)
       const hashtags = extractHashtags(content)
-      console.log('[DEBUG] Extracted hashtags:', hashtags)
       if (hashtags.length > 0) {
         const hashtagTags = hashtags.map(tag => ['t', tag])
         event.tags = [...event.tags, ...hashtagTags]
       }
-      console.log('[DEBUG] Final event tags:', JSON.stringify(event.tags))
 
       const signedEvent = await signEventNip07(event)
-      console.log('[DEBUG] Signed event tags:', JSON.stringify(signedEvent.tags))
       const success = await publishEvent(signedEvent)
 
       if (success) {
@@ -1454,6 +1451,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref
                       onRepost={handleRepost}
                       onUnrepost={handleUnrepost}
                       onZap={handleZap}
+                      onHashtagClick={onHashtagClick}
                       onDelete={handleDelete}
                       isOwnPost={post.pubkey === pubkey}
                       onAvatarClick={(targetPubkey) => {
@@ -1512,6 +1510,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM }, ref
                       onRepost={handleRepost}
                       onUnrepost={handleUnrepost}
                       onZap={handleZap}
+                      onHashtagClick={onHashtagClick}
                       onAvatarClick={(targetPubkey) => {
                         if (targetPubkey !== pubkey) {
                           setViewingProfile(targetPubkey)
