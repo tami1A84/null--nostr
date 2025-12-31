@@ -18,6 +18,7 @@ import {
 } from '@/lib/nostr'
 import { clearBadgeCache } from './BadgeDisplay'
 import SchedulerApp from './SchedulerApp'
+import PolisApp from './PolisApp'
 
 // Nosskey Settings Component
 function NosskeySettings({ pubkey }) {
@@ -282,6 +283,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
 
   // Collapsed section states
   const [showScheduler, setShowScheduler] = useState(false)
+  const [showPolis, setShowPolis] = useState(false)
   const [showZapSettings, setShowZapSettings] = useState(false)
   const [showMuteSettings, setShowMuteSettings] = useState(false)
   const [showBadgeSettings, setShowBadgeSettings] = useState(false)
@@ -953,6 +955,12 @@ export default function MiniAppTab({ pubkey, onLogout }) {
 
     // For internal apps, expand the corresponding section
     switch (app.id) {
+      case 'polis':
+        setShowPolis(true)
+        setTimeout(() => {
+          document.querySelector('#polis-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
       case 'scheduler':
         setShowScheduler(true)
         // Scroll to scheduler section
@@ -1011,6 +1019,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
 
   // Available mini apps that can be added to favorites
   const availableMiniApps = [
+    { id: 'polis', name: 'Polis（合意形成）' },
     { id: 'scheduler', name: '調整くん' },
     { id: 'zap', name: 'Zap設定' },
     { id: 'relay', name: 'リレー設定' },
@@ -1920,6 +1929,32 @@ export default function MiniAppTab({ pubkey, onLogout }) {
                   )}
                 </div>
               )}
+            </div>
+          )}
+        </section>
+
+        {/* Polis Mini App - 合意形成 (Collapsible) */}
+        <section id="polis-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+          <button
+            onClick={() => setShowPolis(!showPolis)}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M8 12h8M12 8v8"/>
+              </svg>
+              <h2 className="font-semibold text-[var(--text-primary)]">Polis（合意形成）</h2>
+              <span className="px-1.5 py-0.5 text-xs bg-[var(--line-green)] text-white rounded-full">NEW</span>
+            </div>
+            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showPolis ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          {showPolis && (
+            <div className="mt-4">
+              <PolisApp pubkey={pubkey} />
             </div>
           )}
         </section>
