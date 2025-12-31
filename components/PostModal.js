@@ -4,28 +4,13 @@ import { useState, useRef, useEffect } from 'react'
 import { publishEvent, uploadImage, nip19 } from '@/lib/nostr'
 import EmojiPicker from './EmojiPicker'
 
-/**
- * Post Modal Component
- *
- * Modal for creating new posts with image upload and emoji support.
- *
- * @param {Object} props
- * @param {string} props.pubkey - Current user's public key
- * @param {Object} [props.replyTo] - Event to reply to (if replying)
- * @param {Object} [props.quotedEvent] - Event to quote (if quoting)
- * @param {Function} props.onClose - Close handler
- * @param {Function} [props.onSuccess] - Callback after successful post
- * @returns {JSX.Element}
- */
 // Extract hashtags from content (NIP-01)
 function extractHashtags(content) {
   if (!content) return []
-  // Match #hashtag pattern, supporting Unicode characters
   const hashtagRegex = /#([^\s#\u3000]+)/g
   const hashtags = []
   let match
   while ((match = hashtagRegex.exec(content)) !== null) {
-    // Normalize to lowercase
     const tag = match[1].toLowerCase()
     if (!hashtags.includes(tag)) {
       hashtags.push(tag)
@@ -38,7 +23,6 @@ function extractHashtags(content) {
 function ContentPreview({ content, customEmojis = [] }) {
   if (!content) return null
 
-  // Build emoji map from selected emojis
   const emojiMap = {}
   customEmojis.forEach(emoji => {
     if (emoji.shortcode && emoji.url) {
@@ -46,23 +30,15 @@ function ContentPreview({ content, customEmojis = [] }) {
     }
   })
 
-  // Split by hashtags and custom emoji shortcodes
   const combinedRegex = /(#[^\s#\u3000]+|:[a-zA-Z0-9_]+:)/g
   const parts = content.split(combinedRegex).filter(Boolean)
 
   return (
     <div className="text-sm text-[var(--text-primary)] whitespace-pre-wrap break-words">
       {parts.map((part, i) => {
-        // Check for hashtags
         if (part.startsWith('#') && part.length > 1) {
-          return (
-            <span key={i} className="text-[var(--line-green)]">
-              {part}
-            </span>
-          )
+          return <span key={i} className="text-[var(--line-green)]">{part}</span>
         }
-
-        // Check for custom emoji shortcodes
         const emojiMatch = part.match(/^:([a-zA-Z0-9_]+):$/)
         if (emojiMatch) {
           const shortcode = emojiMatch[1]
@@ -75,21 +51,20 @@ function ContentPreview({ content, customEmojis = [] }) {
                 alt={`:${shortcode}:`}
                 title={`:${shortcode}:`}
                 className="inline-block w-5 h-5 align-middle mx-0.5"
-                onError={(e) => {
-                  e.target.style.display = 'none'
-                }}
+                onError={(e) => { e.target.style.display = 'none' }}
               />
             )
           }
-          // Show shortcode as text if no URL found
           return <span key={i} className="text-[var(--text-tertiary)]">{part}</span>
         }
-
         return <span key={i}>{part}</span>
       })}
     </div>
   )
 }
+
+// Maximum number of images allowed
+const MAX_IMAGES = 3
 
 export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuccess }) {
   const [postContent, setPostContent] = useState('')
@@ -97,6 +72,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
   const [imageFiles, setImageFiles] = useState([])
   const [imagePreviews, setImagePreviews] = useState([])
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [selectedEmojis, setSelectedEmojis] = useState([])
   const [contentWarning, setContentWarning] = useState('')
@@ -104,27 +80,26 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
   const textareaRef = useRef(null)
   const fileInputRef = useRef(null)
+  const addFileInputRef = useRef(null)
 
-  // Auto-focus textarea
   useEffect(() => {
     textareaRef.current?.focus()
   }, [])
 
-  const handleImageSelect = async (e) => {
+  // Handle image selection - supports multiple files
+  const handleImageSelect = (e) => {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
 
-    // Limit to 4 images total
-    const maxImages = 4
-    const remainingSlots = maxImages - imageFiles.length
+    const remainingSlots = MAX_IMAGES - imageFiles.length
     const filesToAdd = files.slice(0, remainingSlots)
 
     if (filesToAdd.length === 0) {
-      alert('最大4枚まで画像を追加できます')
+      alert(`最大${MAX_IMAGES}枚まで画像を追加できます`)
       return
     }
 
-    // Read all files and create previews
+    // Create previews for each file
     filesToAdd.forEach(file => {
       const reader = new FileReader()
       reader.onloadend = () => {
@@ -135,33 +110,46 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
     setImageFiles(prev => [...prev, ...filesToAdd])
 
-    // Reset input to allow selecting same file again
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
+    // Reset file inputs
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (addFileInputRef.current) addFileInputRef.current.value = ''
   }
 
+  // Remove image at specific index
   const handleRemoveImage = (index) => {
     setImageFiles(prev => prev.filter((_, i) => i !== index))
     setImagePreviews(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleEmojiSelect = (emoji) => {
-    // Check if custom emoji (has shortcode and url)
     if (emoji.shortcode && emoji.url) {
-      setPostContent((prev) => prev + `:${emoji.shortcode}:`)
-      // Track custom emoji for tags
-      setSelectedEmojis((prev) => {
-        if (!prev.find((e) => e.shortcode === emoji.shortcode)) {
+      setPostContent(prev => prev + `:${emoji.shortcode}:`)
+      setSelectedEmojis(prev => {
+        if (!prev.find(e => e.shortcode === emoji.shortcode)) {
           return [...prev, emoji]
         }
         return prev
       })
     } else {
-      // Standard emoji
-      setPostContent((prev) => prev + emoji.native)
+      setPostContent(prev => prev + emoji.native)
     }
     setShowEmojiPicker(false)
+  }
+
+  // Upload image with retry logic
+  const uploadImageWithRetry = async (file, retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const url = await uploadImage(file)
+        if (url) return url
+      } catch (e) {
+        console.error(`Upload attempt ${i + 1} failed:`, e)
+        if (i === retries - 1) throw e
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)))
+      }
+    }
+    return null
   }
 
   const handlePost = async () => {
@@ -171,7 +159,6 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
     try {
       setPosting(true)
-
       let finalContent = content
 
       // Upload images if selected
@@ -180,15 +167,14 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
           setUploadingImage(true)
           const uploadedUrls = []
 
-          // Upload all images
-          for (const file of imageFiles) {
-            const imageUrl = await uploadImage(file)
+          for (let i = 0; i < imageFiles.length; i++) {
+            setUploadProgress(`画像をアップロード中... (${i + 1}/${imageFiles.length})`)
+            const imageUrl = await uploadImageWithRetry(imageFiles[i])
             if (imageUrl) {
               uploadedUrls.push(imageUrl)
             }
           }
 
-          // Append all image URLs to content
           if (uploadedUrls.length > 0) {
             const imageUrlsStr = uploadedUrls.join('\n')
             finalContent = finalContent ? `${finalContent}\n${imageUrlsStr}` : imageUrlsStr
@@ -199,6 +185,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
           return
         } finally {
           setUploadingImage(false)
+          setUploadProgress('')
         }
       }
 
@@ -211,35 +198,28 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
       // Build tags
       const tags = []
 
-      // Reply tags
       if (replyTo) {
         tags.push(['e', replyTo.id, '', 'reply'])
         tags.push(['p', replyTo.pubkey])
       }
 
-      // Quote tags
       if (quotedEvent) {
         tags.push(['q', quotedEvent.id])
         tags.push(['p', quotedEvent.pubkey])
       }
 
-      // Custom emoji tags
-      selectedEmojis.forEach((emoji) => {
+      selectedEmojis.forEach(emoji => {
         tags.push(['emoji', emoji.shortcode, emoji.url])
       })
 
-      // Content warning tag (NIP-36)
       if (contentWarning.trim()) {
         tags.push(['content-warning', contentWarning.trim()])
       }
 
-      // Hashtag tags (NIP-01)
       const hashtags = extractHashtags(finalContent)
-      if (hashtags.length > 0) {
-        hashtags.forEach((hashtag) => {
-          tags.push(['t', hashtag])
-        })
-      }
+      hashtags.forEach(hashtag => {
+        tags.push(['t', hashtag])
+      })
 
       await publishEvent({
         kind: 1,
@@ -271,12 +251,10 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
   }
 
   const handleKeyDown = (e) => {
-    // Ctrl/Cmd + Enter to post
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault()
       handlePost()
     }
-    // Escape to close
     if (e.key === 'Escape') {
       onClose()
     }
@@ -284,6 +262,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
   const isValid = postContent.trim() || imageFiles.length > 0
   const isLoading = posting || uploadingImage
+  const canAddMoreImages = imageFiles.length < MAX_IMAGES
 
   return (
     <div
@@ -291,7 +270,6 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="post-modal-title"
     >
       <div
         className="w-full max-w-lg mx-4 bg-[var(--bg-primary)] rounded-2xl overflow-hidden animate-scaleIn shadow-xl"
@@ -310,23 +288,22 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
-            <h2 id="post-modal-title" className="text-lg font-bold text-[var(--text-primary)]">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
               {replyTo ? '返信' : quotedEvent ? '引用' : '新規投稿'}
             </h2>
             <button
               onClick={handlePost}
               disabled={!isValid || isLoading}
               className="btn-line px-4 py-1.5 text-sm disabled:opacity-50"
-              aria-busy={isLoading}
             >
-              {isLoading ? '投稿中...' : '投稿'}
+              {isLoading ? (uploadProgress || '投稿中...') : '投稿'}
             </button>
           </div>
         </div>
 
         {/* Content */}
         <div className="p-4">
-          {/* Content Warning Input (NIP-36) */}
+          {/* Content Warning Input */}
           {showCWInput && (
             <div className="mb-3 pb-3 border-b border-[var(--border-color)]">
               <div className="flex items-center gap-2 mb-1.5">
@@ -348,7 +325,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
             </div>
           )}
 
-          {/* Textarea with preview overlay */}
+          {/* Textarea */}
           <div className="relative">
             <textarea
               ref={textareaRef}
@@ -363,9 +340,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
               }`}
               placeholder={replyTo ? '返信を入力...' : 'いまなにしてる？'}
               maxLength={10000}
-              aria-label="投稿内容"
             />
-            {/* Visible preview layer - only show when there are hashtags or emojis */}
             {postContent && (postContent.includes('#') || selectedEmojis.length > 0) && (
               <div className="w-full h-32 overflow-y-auto pointer-events-none">
                 <ContentPreview content={postContent} customEmojis={selectedEmojis} />
@@ -373,34 +348,34 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
             )}
           </div>
 
-          {/* Image previews - Multiple images */}
+          {/* Image Previews - Grid layout like TalkTab */}
           {imagePreviews.length > 0 && (
             <div className="mt-3">
               <div className="flex flex-wrap gap-2">
                 {imagePreviews.map((preview, index) => (
-                  <div key={index} className="relative inline-block">
+                  <div key={index} className="relative">
                     <img
                       src={preview}
                       alt={`プレビュー ${index + 1}`}
-                      className="h-24 w-24 rounded-lg object-cover"
+                      className="h-20 w-20 rounded-lg object-cover"
                     />
                     <button
                       onClick={() => handleRemoveImage(index)}
                       className="absolute -top-1 -right-1 p-1 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
                       aria-label="画像を削除"
                     >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <line x1="18" y1="6" x2="6" y2="18" />
                         <line x1="6" y1="6" x2="18" y2="18" />
                       </svg>
                     </button>
                   </div>
                 ))}
-                {/* Add more button if under limit */}
-                {imagePreviews.length < 4 && (
+                {/* Add more button */}
+                {canAddMoreImages && (
                   <label
-                    htmlFor="post-image-input-add"
-                    className="h-24 w-24 rounded-lg border-2 border-dashed border-[var(--border-color)] flex items-center justify-center cursor-pointer hover:border-[var(--line-green)] transition-colors"
+                    htmlFor="post-image-add"
+                    className="h-20 w-20 rounded-lg border-2 border-dashed border-[var(--border-color)] flex items-center justify-center cursor-pointer hover:border-[var(--line-green)] transition-colors"
                   >
                     <svg className="w-6 h-6 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <line x1="12" y1="5" x2="12" y2="19" />
@@ -410,12 +385,13 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
                 )}
               </div>
               <input
+                ref={addFileInputRef}
                 type="file"
                 accept="image/*"
                 multiple
                 onChange={handleImageSelect}
                 className="hidden"
-                id="post-image-input-add"
+                id="post-image-add"
               />
             </div>
           )}
@@ -423,7 +399,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
         {/* Toolbar */}
         <div className="px-4 pb-4 flex items-center gap-3 border-t border-[var(--border-color)] pt-3">
-          {/* Image upload */}
+          {/* Image upload button */}
           <input
             ref={fileInputRef}
             type="file"
@@ -435,7 +411,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
           />
           <label
             htmlFor="post-image-input"
-            className={`action-btn p-2 cursor-pointer relative ${imageFiles.length >= 4 ? 'opacity-50 pointer-events-none' : ''}`}
+            className={`action-btn p-2 cursor-pointer relative ${!canAddMoreImages ? 'opacity-50 pointer-events-none' : ''}`}
             aria-label="画像を追加"
           >
             <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -450,11 +426,10 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
             )}
           </label>
 
-          {/* Content Warning toggle (NIP-36) */}
+          {/* CW toggle */}
           <button
             onClick={() => setShowCWInput(!showCWInput)}
             className={`action-btn p-2 ${showCWInput ? 'text-orange-500' : ''}`}
-            aria-label="コンテンツ警告を追加"
             title="コンテンツ警告 (CW)"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -470,7 +445,6 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
               className="action-btn p-2"
               aria-label="絵文字を追加"
-              aria-expanded={showEmojiPicker}
             >
               <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
@@ -490,7 +464,6 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
             )}
           </div>
 
-          {/* Character count */}
           <span className="ml-auto text-xs text-[var(--text-tertiary)]">
             {postContent.length}/10000
           </span>

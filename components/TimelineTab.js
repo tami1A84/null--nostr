@@ -121,8 +121,10 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const [likeAnimating, setLikeAnimating] = useState(null)
   const [showPostModal, setShowPostModal] = useState(false)
   const [newPost, setNewPost] = useState('')
-  const [postImage, setPostImage] = useState(null)
+  const [imageFiles, setImageFiles] = useState([])
+  const [imagePreviews, setImagePreviews] = useState([])
   const [uploadingPostImage, setUploadingPostImage] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
   const [posting, setPosting] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [emojiTags, setEmojiTags] = useState([]) // Array of emoji tags for post
@@ -144,7 +146,11 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const subRef = useRef(null)
   const longPressTimerRef = useRef(null)
   const postImageInputRef = useRef(null)
+  const postImageAddRef = useRef(null)
   const initialLoadDone = useRef(false)
+
+  // Maximum number of images allowed
+  const MAX_IMAGES = 3
   // Scroll position refs for each timeline
   const globalScrollRef = useRef(0)
   const followingScrollRef = useRef(0)
@@ -954,39 +960,95 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     }
   }
 
-  const handlePostImageUpload = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    
-    setUploadingPostImage(true)
-    try {
-      const url = await uploadImage(file)
-      setPostImage(url)
-    } catch (err) {
-      console.error('Upload failed:', err)
-      alert('アップロードに失敗しました')
-    } finally {
-      setUploadingPostImage(false)
+  const handlePostImageSelect = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+
+    const remainingSlots = MAX_IMAGES - imageFiles.length
+    const filesToAdd = files.slice(0, remainingSlots)
+
+    if (filesToAdd.length === 0) {
+      alert(`最大${MAX_IMAGES}枚まで画像を追加できます`)
+      return
     }
+
+    // Create previews for each file
+    filesToAdd.forEach(file => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreviews(prev => [...prev, reader.result])
+      }
+      reader.readAsDataURL(file)
+    })
+
+    setImageFiles(prev => [...prev, ...filesToAdd])
+
+    // Reset file inputs
+    if (postImageInputRef.current) postImageInputRef.current.value = ''
+    if (postImageAddRef.current) postImageAddRef.current.value = ''
+  }
+
+  const handleRemovePostImage = (index) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index))
+    setImagePreviews(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Upload image with retry logic
+  const uploadImageWithRetry = async (file, retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const url = await uploadImage(file)
+        if (url) return url
+      } catch (e) {
+        console.error(`Upload attempt ${i + 1} failed:`, e)
+        if (i === retries - 1) throw e
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)))
+      }
+    }
+    return null
   }
 
   const handlePost = async () => {
-    if ((!newPost.trim() && !postImage) || !pubkey) return
+    if ((!newPost.trim() && imageFiles.length === 0) || !pubkey) return
     setPosting(true)
 
     try {
-      // Add image URL to content if present
       let content = newPost.trim()
-      if (postImage) {
-        content = content ? `${content}\n${postImage}` : postImage
+
+      // Upload images if selected
+      if (imageFiles.length > 0) {
+        try {
+          setUploadingPostImage(true)
+          const uploadedUrls = []
+
+          for (let i = 0; i < imageFiles.length; i++) {
+            setUploadProgress(`画像をアップロード中... (${i + 1}/${imageFiles.length})`)
+            const imageUrl = await uploadImageWithRetry(imageFiles[i])
+            if (imageUrl) {
+              uploadedUrls.push(imageUrl)
+            }
+          }
+
+          if (uploadedUrls.length > 0) {
+            const imageUrlsStr = uploadedUrls.join('\n')
+            content = content ? `${content}\n${imageUrlsStr}` : imageUrlsStr
+          }
+        } catch (e) {
+          console.error('Image upload failed:', e)
+          alert(`画像のアップロードに失敗しました: ${e.message}`)
+          return
+        } finally {
+          setUploadingPostImage(false)
+          setUploadProgress('')
+        }
       }
-      
+
       const event = createEventTemplate(1, content)
       event.pubkey = pubkey
-      
+
       // Add client tag
       event.tags = [...event.tags, ['client', 'nullnull']]
-      
+
       // Add emoji tags if any
       if (emojiTags.length > 0) {
         event.tags = [...event.tags, ...emojiTags]
@@ -1010,12 +1072,13 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       if (success) {
         setPosts([signed, ...posts])
         setNewPost('')
-        setPostImage(null)
+        setImageFiles([])
+        setImagePreviews([])
         setEmojiTags([])
         setContentWarning('')
         setShowCWInput(false)
         setShowPostModal(false)
-        
+
         // Notify parent to refresh home tab
         if (onPostPublished) {
           onPostPublished()
@@ -1120,22 +1183,22 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
 
       {/* Post Modal */}
       {showPostModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay" onClick={() => { setShowPostModal(false); setPostImage(null) }}>
-          <div 
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay" onClick={() => { setShowPostModal(false); setImageFiles([]); setImagePreviews([]) }}>
+          <div
             className="w-full h-full sm:h-auto sm:max-w-lg bg-[var(--bg-primary)] sm:rounded-2xl flex flex-col overflow-hidden animate-scaleIn"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)] flex-shrink-0">
-              <button onClick={() => { setShowPostModal(false); setPostImage(null) }} className="text-[var(--text-secondary)] action-btn">
+              <button onClick={() => { setShowPostModal(false); setImageFiles([]); setImagePreviews([]) }} className="text-[var(--text-secondary)] action-btn">
                 キャンセル
               </button>
               <span className="font-semibold text-[var(--text-primary)]">新規投稿</span>
               <button
                 onClick={handlePost}
-                disabled={posting || (!newPost.trim() && !postImage)}
+                disabled={posting || uploadingPostImage || (!newPost.trim() && imageFiles.length === 0)}
                 className="btn-line text-sm py-1.5 px-4 disabled:opacity-50"
               >
-                {posting ? '...' : '投稿'}
+                {uploadingPostImage ? uploadProgress : posting ? '投稿中...' : '投稿'}
               </button>
             </div>
             <div className="flex-1 p-4 pb-20 sm:pb-4 flex flex-col overflow-y-auto">
@@ -1183,19 +1246,51 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                 )}
               </div>
 
-              {/* Image preview */}
-              {postImage && (
-                <div className="relative mt-3 inline-block flex-shrink-0">
-                  <img src={postImage} alt="Upload preview" className="max-h-48 max-w-full object-contain rounded-xl" />
-                  <button
-                    onClick={() => setPostImage(null)}
-                    className="absolute top-2 right-2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80 transition-colors"
-                  >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/>
-                      <line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
+              {/* Image previews - Grid layout */}
+              {imagePreviews.length > 0 && (
+                <div className="mt-3">
+                  <div className="flex flex-wrap gap-2">
+                    {imagePreviews.map((preview, index) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={preview}
+                          alt={`プレビュー ${index + 1}`}
+                          className="h-20 w-20 rounded-lg object-cover"
+                        />
+                        <button
+                          onClick={() => handleRemovePostImage(index)}
+                          className="absolute -top-1 -right-1 p-1 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+                          aria-label="画像を削除"
+                        >
+                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                    {/* Add more button */}
+                    {imageFiles.length < MAX_IMAGES && (
+                      <label
+                        htmlFor="timeline-post-image-add"
+                        className="h-20 w-20 rounded-lg border-2 border-dashed border-[var(--border-color)] flex items-center justify-center cursor-pointer hover:border-[var(--line-green)] transition-colors"
+                      >
+                        <svg className="w-6 h-6 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      </label>
+                    )}
+                  </div>
+                  <input
+                    ref={postImageAddRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePostImageSelect}
+                    className="hidden"
+                    id="timeline-post-image-add"
+                  />
                 </div>
               )}
               
@@ -1205,34 +1300,30 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                   ref={postImageInputRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   className="hidden"
-                  onChange={handlePostImageUpload}
+                  onChange={handlePostImageSelect}
                 />
                 <div className="flex items-center gap-4">
-                  <button
-                    onClick={() => postImageInputRef.current?.click()}
-                    disabled={uploadingPostImage}
-                    className="flex items-center gap-2 text-[var(--line-green)] text-sm"
+                  <label
+                    htmlFor="timeline-post-image-input"
+                    className={`flex items-center gap-2 text-[var(--line-green)] text-sm cursor-pointer ${imageFiles.length >= MAX_IMAGES ? 'opacity-50 pointer-events-none' : ''}`}
                   >
-                    {uploadingPostImage ? (
-                      <>
-                        <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
-                          <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
-                        </svg>
-                        アップロード中...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                          <circle cx="8.5" cy="8.5" r="1.5"/>
-                          <polyline points="21 15 16 10 5 21"/>
-                        </svg>
-                        画像
-                      </>
-                    )}
-                  </button>
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                      <circle cx="8.5" cy="8.5" r="1.5"/>
+                      <polyline points="21 15 16 10 5 21"/>
+                    </svg>
+                    画像 {imageFiles.length > 0 && `(${imageFiles.length}/${MAX_IMAGES})`}
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handlePostImageSelect}
+                    className="hidden"
+                    id="timeline-post-image-input"
+                  />
 
                   {/* Content Warning toggle (NIP-36) */}
                   <button

@@ -387,27 +387,29 @@ export default function PostItem({
     return parts.length > 0 ? parts : text
   }
   
+  // State for expanded images
+  const [showAllImages, setShowAllImages] = useState(false)
+
   // Render content with nostr: links, URLs, images, hashtags, and custom emoji
   const renderContent = (content) => {
     if (!content) return null
 
-    // Use non-capturing group (?:...) to avoid duplicate parts in split result
-    // Require at least 58 characters after the prefix for valid bech32 (e.g., note1 + 58 chars = 63 total)
-    // Also capture hashtags (#tag)
     const combinedRegex = /(https?:\/\/[^\s]+|nostr:(?:note1|nevent1|npub1|nprofile1|naddr1)[a-z0-9]{58,}|#[^\s#\u3000]+)/gi
-
     const parts = content.split(combinedRegex).filter(Boolean)
 
-    // Track URLs for preview (excluding images/videos)
+    // Collect images, videos, and other content separately
+    const images = []
+    const videos = []
     const previewUrls = []
+    const textParts = []
 
-    const renderedParts = parts.map((part, i) => {
+    parts.forEach((part, i) => {
       // Check for hashtags
       if (part.startsWith('#') && part.length > 1) {
-        const hashtag = part.slice(1) // Remove # prefix
-        return (
+        const hashtag = part.slice(1)
+        textParts.push(
           <span
-            key={i}
+            key={`text-${i}`}
             onClick={(e) => {
               e.stopPropagation()
               if (onHashtagClick) onHashtagClick(hashtag)
@@ -417,77 +419,59 @@ export default function PostItem({
             {part}
           </span>
         )
+        return
       }
 
       // Check for nostr: links
       if (part.toLowerCase().startsWith('nostr:')) {
-        const bech32 = part.slice(6) // Remove 'nostr:' prefix
-        
-        // Validate minimum length before parsing
+        const bech32 = part.slice(6)
         if (bech32.length < 59) {
-          // Too short, just render as text
-          return <span key={i}>{part}</span>
+          textParts.push(<span key={`text-${i}`}>{part}</span>)
+          return
         }
-        
         const parsed = parseNostrLink(bech32)
-        
         if (parsed) {
           if (parsed.type === 'note') {
-            return <EmbeddedNote key={i} noteId={parsed.id} />
+            textParts.push(<EmbeddedNote key={`text-${i}`} noteId={parsed.id} />)
+            return
           }
           if (parsed.type === 'nevent') {
-            return <EmbeddedNote key={i} noteId={parsed.id} relays={parsed.relays} />
+            textParts.push(<EmbeddedNote key={`text-${i}`} noteId={parsed.id} relays={parsed.relays} />)
+            return
           }
           if (parsed.type === 'npub') {
-            return <EmbeddedProfile key={i} pubkey={parsed.pubkey} />
+            textParts.push(<EmbeddedProfile key={`text-${i}`} pubkey={parsed.pubkey} />)
+            return
           }
           if (parsed.type === 'nprofile') {
-            return <EmbeddedProfile key={i} pubkey={parsed.pubkey} relays={parsed.relays} />
+            textParts.push(<EmbeddedProfile key={`text-${i}`} pubkey={parsed.pubkey} relays={parsed.relays} />)
+            return
           }
         }
-        
-        // Fallback: show as link
-        return (
-          <span key={i} className="text-[var(--line-green)]">
-            {part}
-          </span>
-        )
+        textParts.push(<span key={`text-${i}`} className="text-[var(--line-green)]">{part}</span>)
+        return
       }
-      
+
       // Check for image URLs
       if (part.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i)) {
-        return (
-          <img 
-            key={i} 
-            src={part} 
-            alt="" 
-            className="mt-2 rounded-lg max-h-72 w-full object-cover"
-            loading="lazy"
-          />
-        )
+        images.push(part)
+        return
       }
-      
+
       // Check for video URLs
       if (part.match(/^https?:\/\/.*\.(mp4|webm|mov)(\?.*)?$/i)) {
-        return (
-          <video 
-            key={i} 
-            src={part} 
-            controls
-            className="mt-2 rounded-lg max-h-72 w-full"
-          />
-        )
+        videos.push(part)
+        return
       }
-      
+
       // Check for regular URLs
       if (part.match(/^https?:\/\//)) {
-        // Track URL for preview
         if (!previewUrls.includes(part)) {
           previewUrls.push(part)
         }
-        return (
+        textParts.push(
           <a
-            key={i}
+            key={`text-${i}`}
             href={part}
             target="_blank"
             rel="noopener noreferrer"
@@ -496,16 +480,118 @@ export default function PostItem({
             {part.length > 50 ? part.slice(0, 50) + '...' : part}
           </a>
         )
+        return
       }
 
       // Apply custom emoji to text parts
       const emojified = emojifyContent(part)
-      return <span key={i}>{emojified}</span>
+      textParts.push(<span key={`text-${i}`}>{emojified}</span>)
     })
+
+    // Determine how many images to show
+    const maxVisibleImages = 4
+    const visibleImages = showAllImages ? images : images.slice(0, maxVisibleImages)
+    const hiddenCount = images.length - maxVisibleImages
+
+    // Render images in grid layout
+    const renderImages = () => {
+      if (images.length === 0) return null
+
+      // Single image - full width
+      if (images.length === 1) {
+        return (
+          <div className="mt-2">
+            <img
+              src={images[0]}
+              alt=""
+              className="rounded-lg max-h-72 w-full object-cover cursor-pointer"
+              loading="lazy"
+              onClick={(e) => {
+                e.stopPropagation()
+                window.open(images[0], '_blank')
+              }}
+            />
+          </div>
+        )
+      }
+
+      // Multiple images - grid layout
+      return (
+        <div className="mt-2 grid gap-1" style={{
+          gridTemplateColumns: images.length === 2 ? 'repeat(2, 1fr)' : 'repeat(2, 1fr)',
+        }}>
+          {visibleImages.map((url, idx) => (
+            <div
+              key={idx}
+              className={`relative ${
+                images.length === 3 && idx === 0 ? 'row-span-2' : ''
+              }`}
+            >
+              <img
+                src={url}
+                alt=""
+                className={`rounded-lg w-full object-cover cursor-pointer ${
+                  images.length === 3 && idx === 0 ? 'h-full' : 'h-36'
+                }`}
+                style={{ maxHeight: images.length === 3 && idx === 0 ? '296px' : '144px' }}
+                loading="lazy"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  window.open(url, '_blank')
+                }}
+              />
+              {/* Show "+X" overlay on last visible image if there are hidden images */}
+              {!showAllImages && hiddenCount > 0 && idx === maxVisibleImages - 1 && (
+                <div
+                  className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowAllImages(true)
+                  }}
+                >
+                  <span className="text-white text-2xl font-bold">+{hiddenCount}</span>
+                </div>
+              )}
+            </div>
+          ))}
+          {/* Show remaining images when expanded */}
+          {showAllImages && images.slice(maxVisibleImages).map((url, idx) => (
+            <div key={`extra-${idx}`} className="relative">
+              <img
+                src={url}
+                alt=""
+                className="rounded-lg w-full h-36 object-cover cursor-pointer"
+                loading="lazy"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  window.open(url, '_blank')
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    // Render videos
+    const renderVideos = () => {
+      if (videos.length === 0) return null
+      return videos.map((url, idx) => (
+        <video
+          key={`video-${idx}`}
+          src={url}
+          controls
+          className="mt-2 rounded-lg max-h-72 w-full"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ))
+    }
 
     return (
       <>
-        {renderedParts}
+        {textParts}
+        {renderImages()}
+        {renderVideos()}
         {/* Show URL previews for non-media URLs (max 2) */}
         {previewUrls.slice(0, 2).map((url, i) => (
           <URLPreview key={`preview-${i}`} url={url} />
