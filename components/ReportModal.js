@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 // NIP-56 Report Types
 const REPORT_TYPES = [
@@ -23,8 +24,21 @@ export default function ReportModal({
   const [selectedType, setSelectedType] = useState(null)
   const [additionalInfo, setAdditionalInfo] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
-  if (!isOpen) return null
+  useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedType(null)
+      setAdditionalInfo('')
+    }
+  }, [isOpen])
+
+  if (!isOpen || !mounted) return null
 
   const handleSubmit = async () => {
     if (!selectedType) return
@@ -52,12 +66,13 @@ export default function ReportModal({
     }
   }
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70"
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
+      style={{ isolation: 'isolate' }}
     >
       <div
         className="w-full max-w-md mx-4 rounded-2xl overflow-hidden animate-scaleIn shadow-2xl border border-[var(--border-color)]"
@@ -153,4 +168,6 @@ export default function ReportModal({
       </div>
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 }

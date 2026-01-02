@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { shortenPubkey, formatTimestamp } from '@/lib/nostr'
 
 // Birdwatch context types
@@ -26,9 +27,15 @@ export default function BirdwatchModal({
   const [sourceUrl, setSourceUrl] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showExisting, setShowExisting] = useState(true)
+  const [mounted, setMounted] = useState(false)
 
   // Check if user already submitted a note for this post
   const hasUserNote = existingNotes.some(note => note.pubkey === myPubkey)
+
+  useEffect(() => {
+    setMounted(true)
+    return () => setMounted(false)
+  }, [])
 
   useEffect(() => {
     if (isOpen) {
@@ -39,7 +46,7 @@ export default function BirdwatchModal({
     }
   }, [isOpen])
 
-  if (!isOpen) return null
+  if (!isOpen || !mounted) return null
 
   const handleSubmit = async () => {
     if (!contextType || !noteContent.trim()) return
@@ -68,12 +75,13 @@ export default function BirdwatchModal({
     }
   }
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70"
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
+      style={{ isolation: 'isolate' }}
     >
       <div
         className="w-full max-w-lg mx-4 rounded-2xl overflow-hidden animate-scaleIn shadow-2xl max-h-[90vh] flex flex-col border border-[var(--border-color)]"
@@ -256,4 +264,6 @@ export default function BirdwatchModal({
       </div>
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 }
