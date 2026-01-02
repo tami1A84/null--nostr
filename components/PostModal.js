@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { publishEvent, uploadImage, nip19 } from '@/lib/nostr'
+import { publishEvent, nip19 } from '@/lib/nostr'
+import { uploadImagesInParallel } from '@/lib/imageUtils'
 import EmojiPicker from './EmojiPicker'
 
 // Extract hashtags from content (NIP-01)
@@ -136,22 +137,6 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
     setShowEmojiPicker(false)
   }
 
-  // Upload image with retry logic
-  const uploadImageWithRetry = async (file, retries = 3) => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const url = await uploadImage(file)
-        if (url) return url
-      } catch (e) {
-        console.error(`Upload attempt ${i + 1} failed:`, e)
-        if (i === retries - 1) throw e
-        // Wait before retry (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)))
-      }
-    }
-    return null
-  }
-
   const handlePost = async () => {
     const content = postContent.trim()
     if (!content && imageFiles.length === 0) return
@@ -165,13 +150,29 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
       if (imageFiles.length > 0) {
         try {
           setUploadingImage(true)
-          const uploadedUrls = []
+          setUploadProgress(`画像をアップロード中... (0/${imageFiles.length})`)
 
-          for (let i = 0; i < imageFiles.length; i++) {
-            setUploadProgress(`画像をアップロード中... (${i + 1}/${imageFiles.length})`)
-            const imageUrl = await uploadImageWithRetry(imageFiles[i])
-            if (imageUrl) {
-              uploadedUrls.push(imageUrl)
+          const { urls: uploadedUrls, errors } = await uploadImagesInParallel(imageFiles, {
+            onProgress: (current, total, result) => {
+              setUploadProgress(`画像をアップロード中... (${current}/${total})`)
+            }
+          })
+
+          if (errors.length > 0) {
+            const errorMessages = errors.map(e => `${e.fileName}: ${e.error.message}`).join('\n')
+            console.error('Some uploads failed:', errors)
+            if (uploadedUrls.length === 0) {
+              alert(`すべての画像のアップロードに失敗しました:\n${errorMessages}`)
+              return
+            } else {
+              // Some uploads succeeded, ask user if they want to continue
+              const continueWithPartial = confirm(
+                `${errors.length}枚の画像のアップロードに失敗しました。\n` +
+                `成功した${uploadedUrls.length}枚で投稿を続けますか?`
+              )
+              if (!continueWithPartial) {
+                return
+              }
             }
           }
 

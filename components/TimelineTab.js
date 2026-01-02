@@ -23,13 +23,13 @@ import {
   getAllCachedProfiles,
   getReadRelays,
   getWriteRelays,
-  uploadImage,
   reportEvent,
   createBirdwatchLabel,
   fetchBirdwatchLabels,
   rateBirdwatchLabel,
   RELAYS
 } from '@/lib/nostr'
+import { uploadImagesInParallel } from '@/lib/imageUtils'
 import { setCachedMuteList } from '@/lib/cache'
 import PostItem from './PostItem'
 import UserProfileView from './UserProfileView'
@@ -1064,21 +1064,6 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     setImagePreviews(prev => prev.filter((_, i) => i !== index))
   }
 
-  // Upload image with retry logic
-  const uploadImageWithRetry = async (file, retries = 3) => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const url = await uploadImage(file)
-        if (url) return url
-      } catch (e) {
-        console.error(`Upload attempt ${i + 1} failed:`, e)
-        if (i === retries - 1) throw e
-        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)))
-      }
-    }
-    return null
-  }
-
   const handlePost = async () => {
     if ((!newPost.trim() && imageFiles.length === 0) || !pubkey) return
     setPosting(true)
@@ -1090,13 +1075,28 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       if (imageFiles.length > 0) {
         try {
           setUploadingPostImage(true)
-          const uploadedUrls = []
+          setUploadProgress(`画像をアップロード中... (0/${imageFiles.length})`)
 
-          for (let i = 0; i < imageFiles.length; i++) {
-            setUploadProgress(`画像をアップロード中... (${i + 1}/${imageFiles.length})`)
-            const imageUrl = await uploadImageWithRetry(imageFiles[i])
-            if (imageUrl) {
-              uploadedUrls.push(imageUrl)
+          const { urls: uploadedUrls, errors } = await uploadImagesInParallel(imageFiles, {
+            onProgress: (current, total) => {
+              setUploadProgress(`画像をアップロード中... (${current}/${total})`)
+            }
+          })
+
+          if (errors.length > 0) {
+            const errorMessages = errors.map(e => `${e.fileName}: ${e.error.message}`).join('\n')
+            console.error('Some uploads failed:', errors)
+            if (uploadedUrls.length === 0) {
+              alert(`すべての画像のアップロードに失敗しました:\n${errorMessages}`)
+              return
+            } else {
+              const continueWithPartial = confirm(
+                `${errors.length}枚の画像のアップロードに失敗しました。\n` +
+                `成功した${uploadedUrls.length}枚で投稿を続けますか?`
+              )
+              if (!continueWithPartial) {
+                return
+              }
             }
           }
 
