@@ -39,7 +39,10 @@
 
 ### Search
 
-- NIP-50 全文検索
+- NIP-50 全文検索（[searchnos](https://github.com/darashi/searchnos) を使用）
+- 公開鍵検索（npub1... / hex形式）
+- NIP-05検索（user@domain.tld）
+- イベントID検索（note1... / nevent1... / naddr1...）
 - 検索結果からいいね・リポスト・Zap
 - 最近の検索履歴
 
@@ -66,6 +69,7 @@
 
 ### Passkey（推奨）
 
+[Nosskey SDK](https://github.com/ocknamo/nosskey-sdk) を使用したパスキー認証。
 Face ID / Touch ID / Windows Hello を使って、パスワード不要で安全にログインできます。
 
 - 秘密鍵はデバイスのセキュアエリアに保存
@@ -103,7 +107,8 @@ npm run dev
 | Framework | Next.js 14.2 |
 | UI | React 18.3, Tailwind CSS 3.4 |
 | Protocol | nostr-tools 2.17 |
-| Auth | nosskey-sdk 0.0.4 |
+| Auth | [nosskey-sdk](https://github.com/ocknamo/nosskey-sdk) 0.0.4 |
+| Search | [searchnos](https://github.com/darashi/searchnos) (NIP-50) |
 | Mobile | Capacitor 8.0 |
 
 ---
