@@ -7,7 +7,41 @@ const ogDataCache = new Map()
 
 // Rate limiting - track last request time per domain
 const domainLastRequest = new Map()
-const MIN_REQUEST_INTERVAL = 500 // ms between requests to same domain
+const MIN_REQUEST_INTERVAL = 1000 // ms between requests to same domain
+
+// Global rate limiting for microlink.io API
+let lastMicrolinkRequest = 0
+const MICROLINK_MIN_INTERVAL = 1000 // ms between any requests to microlink
+const requestQueue = []
+let isProcessingQueue = false
+
+// Track 429 errors to back off temporarily
+let rateLimitBackoffUntil = 0
+const RATE_LIMIT_BACKOFF_MS = 60000 // Back off for 60 seconds on 429
+
+/**
+ * Validate URL to prevent invalid requests
+ */
+function isValidUrl(urlString) {
+  try {
+    const url = new URL(urlString)
+    // Check for valid protocol
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      return false
+    }
+    // Check for valid hostname
+    if (!url.hostname || url.hostname.length === 0) {
+      return false
+    }
+    // Check for malformed URLs (e.g., trailing quotes)
+    if (urlString.includes("'") || urlString.match(/['"]\s*$/)) {
+      return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * URLPreview Component
@@ -32,6 +66,13 @@ export default function URLPreview({ url, compact = false }) {
 
   useEffect(() => {
     if (!url || fetchAttemptedRef.current) {
+      return
+    }
+
+    // Validate URL first
+    if (!isValidUrl(url)) {
+      setLoading(false)
+      setError(true)
       return
     }
 
@@ -78,6 +119,24 @@ export default function URLPreview({ url, compact = false }) {
     } catch {}
 
     const fetchOGData = async () => {
+      // Check if we're in rate limit backoff period
+      if (Date.now() < rateLimitBackoffUntil) {
+        if (mountedRef.current) {
+          ogDataCache.set(url, { error: true })
+          setError(true)
+          setLoading(false)
+        }
+        return
+      }
+
+      // Global rate limiting for microlink API
+      const timeSinceMicrolinkRequest = Date.now() - lastMicrolinkRequest
+      if (timeSinceMicrolinkRequest < MICROLINK_MIN_INTERVAL) {
+        await new Promise(resolve =>
+          setTimeout(resolve, MICROLINK_MIN_INTERVAL - timeSinceMicrolinkRequest)
+        )
+      }
+
       // Rate limiting per domain
       try {
         const domain = new URL(url).hostname
@@ -91,7 +150,7 @@ export default function URLPreview({ url, compact = false }) {
         domainLastRequest.set(domain, Date.now())
       } catch {}
 
-      // Retry logic
+      // Retry logic with exponential backoff
       const maxRetries = 2
       let lastError = null
 
@@ -99,8 +158,11 @@ export default function URLPreview({ url, compact = false }) {
         try {
           if (!mountedRef.current) return
 
+          // Update last request timestamp
+          lastMicrolinkRequest = Date.now()
+
           const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 8000)
+          const timeoutId = setTimeout(() => controller.abort(), 10000)
 
           const response = await fetch(
             `https://api.microlink.io?url=${encodeURIComponent(url)}`,
@@ -113,6 +175,23 @@ export default function URLPreview({ url, compact = false }) {
           clearTimeout(timeoutId)
 
           if (!mountedRef.current) return
+
+          // Handle rate limiting
+          if (response.status === 429) {
+            // Set global backoff
+            rateLimitBackoffUntil = Date.now() + RATE_LIMIT_BACKOFF_MS
+
+            // Try to get Retry-After header
+            const retryAfter = response.headers.get('Retry-After')
+            if (retryAfter) {
+              const retryMs = parseInt(retryAfter) * 1000
+              if (!isNaN(retryMs)) {
+                rateLimitBackoffUntil = Date.now() + retryMs
+              }
+            }
+
+            throw new Error('Rate limited')
+          }
 
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`)
@@ -154,9 +233,15 @@ export default function URLPreview({ url, compact = false }) {
 
         } catch (e) {
           lastError = e
+
+          // Don't retry on rate limit errors
+          if (e.message === 'Rate limited') {
+            break
+          }
+
           if (attempt < maxRetries) {
-            // Wait before retry with exponential backoff
-            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+            // Wait before retry with exponential backoff (2s, 4s, 8s)
+            await new Promise(resolve => setTimeout(resolve, 2000 * Math.pow(2, attempt)))
           }
         }
       }
@@ -176,7 +261,9 @@ export default function URLPreview({ url, compact = false }) {
     }
 
     // Delay fetch slightly to avoid overwhelming the API
-    const timeoutId = setTimeout(fetchOGData, 100)
+    // Use random delay to distribute requests over time
+    const delay = 200 + Math.random() * 500 // 200-700ms
+    const timeoutId = setTimeout(fetchOGData, delay)
     return () => clearTimeout(timeoutId)
   }, [url])
 
