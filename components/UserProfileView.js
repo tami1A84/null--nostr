@@ -19,6 +19,10 @@ import {
   isFollowing,
   followUser,
   unfollowUser,
+  reportEvent,
+  createBirdwatchLabel,
+  fetchBirdwatchLabels,
+  rateBirdwatchLabel,
   RELAYS,
   SEARCH_RELAY
 } from '@/lib/nostr'
@@ -163,6 +167,8 @@ export default function UserProfileView({
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching] = useState(false)
+  // Birdwatch state
+  const [birdwatchLabels, setBirdwatchLabels] = useState({})
   // Follow state
   const [following, setFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
@@ -292,6 +298,16 @@ export default function UserProfileView({
         setReactions(counts)
         setUserReactions(myReactions)
 
+        // Fetch Birdwatch labels
+        try {
+          const labels = await fetchBirdwatchLabels(eventIds)
+          if (Object.keys(labels).length > 0) {
+            setBirdwatchLabels(labels)
+          }
+        } catch (e) {
+          console.error('Failed to fetch Birdwatch labels:', e)
+        }
+
         // Fetch user's reposts
         const myReposts = await fetchEvents(
           { kinds: [6], authors: [myPubkey], '#e': eventIds, limit: 100 },
@@ -397,6 +413,50 @@ export default function UserProfileView({
     setTimeout(() => setZapAnimating(null), 600)
 
     alert(`⚡ Zap送信\n\n対象: ${profile.name || shortenPubkey(event.pubkey)}\nLN: ${profile.lud16}`)
+  }
+
+  // NIP-56: Report handler
+  const handleReport = async (reportData) => {
+    if (!myPubkey) return
+    try {
+      await reportEvent(reportData)
+      alert('通報を送信しました')
+    } catch (e) {
+      console.error('Failed to report:', e)
+      throw e
+    }
+  }
+
+  // NIP-32: Birdwatch handler
+  const handleBirdwatch = async (birdwatchData) => {
+    if (!myPubkey) return
+    try {
+      const result = await createBirdwatchLabel(birdwatchData)
+      if (result.success && result.event) {
+        setBirdwatchLabels(prev => ({
+          ...prev,
+          [birdwatchData.eventId]: [
+            ...(prev[birdwatchData.eventId] || []),
+            result.event
+          ]
+        }))
+      }
+      alert('コンテキストを追加しました')
+    } catch (e) {
+      console.error('Failed to create Birdwatch label:', e)
+      throw e
+    }
+  }
+
+  // NIP-32: Birdwatch rate handler
+  const handleBirdwatchRate = async (labelEventId, rating) => {
+    if (!myPubkey) return
+    try {
+      await rateBirdwatchLabel(labelEventId, rating)
+    } catch (e) {
+      console.error('Failed to rate Birdwatch label:', e)
+      throw e
+    }
   }
 
   const handleSearch = async () => {
@@ -769,6 +829,12 @@ export default function UserProfileView({
                   onLike={handleLike}
                   onRepost={handleRepost}
                   onZap={handleZap}
+                  onReport={handleReport}
+                  onBirdwatch={handleBirdwatch}
+                  onBirdwatchRate={handleBirdwatchRate}
+                  birdwatchNotes={birdwatchLabels[post.id] || []}
+                  myPubkey={myPubkey}
+                  isOwnPost={post.pubkey === myPubkey}
                   showActions={true}
                 />
               ))}
