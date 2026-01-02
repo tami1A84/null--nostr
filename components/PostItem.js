@@ -13,6 +13,9 @@ import {
 } from '@/lib/nostr'
 import BadgeDisplay from './BadgeDisplay'
 import URLPreview from './URLPreview'
+import ReportModal from './ReportModal'
+import BirdwatchModal from './BirdwatchModal'
+import BirdwatchDisplay from './BirdwatchDisplay'
 
 // NIP-05 verified badge component
 function Nip05Badge({ nip05, pubkey }) {
@@ -289,6 +292,11 @@ export default function PostItem({
   onHashtagClick,
   onMute,
   onDelete,
+  onReport,
+  onBirdwatch,
+  onBirdwatchRate,
+  birdwatchNotes = [],
+  myPubkey,
   isOwnPost = false,
   isRepost = false,
   repostedBy = null,
@@ -297,6 +305,8 @@ export default function PostItem({
   const [showMenu, setShowMenu] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
   const [isCWExpanded, setIsCWExpanded] = useState(false) // Content warning expand state
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [showBirdwatchModal, setShowBirdwatchModal] = useState(false)
   const displayProfile = isRepost ? profiles?.[post.pubkey] : profile
 
   // Extract content warning tag (NIP-36)
@@ -637,6 +647,28 @@ export default function PostItem({
     }
   }
 
+  const handleReport = () => {
+    setShowMenu(false)
+    setShowReportModal(true)
+  }
+
+  const handleBirdwatch = () => {
+    setShowMenu(false)
+    setShowBirdwatchModal(true)
+  }
+
+  const handleReportSubmit = async (reportData) => {
+    if (onReport) {
+      await onReport(reportData)
+    }
+  }
+
+  const handleBirdwatchSubmit = async (birdwatchData) => {
+    if (onBirdwatch) {
+      await onBirdwatch(birdwatchData)
+    }
+  }
+
   return (
     <article className="px-4 py-3 lg:px-5 lg:py-4 relative transition-colors hover:bg-[var(--bg-secondary)]/30">
       {/* Repost indicator */}
@@ -730,58 +762,83 @@ export default function PostItem({
             </span>
             
             {/* Menu button */}
-            {(onMute || (isOwnPost && onDelete)) && (
-              <div className="relative flex-shrink-0">
-                <button
-                  onClick={() => setShowMenu(!showMenu)}
-                  className="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] action-btn"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <circle cx="12" cy="5" r="2"/>
-                    <circle cx="12" cy="12" r="2"/>
-                    <circle cx="12" cy="19" r="2"/>
-                  </svg>
-                </button>
-                
-                {/* Dropdown menu */}
-                {showMenu && (
-                  <>
-                    <div 
-                      className="fixed inset-0 z-40" 
-                      onClick={() => setShowMenu(false)}
-                    />
-                    <div className="absolute right-0 top-6 z-50 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[140px]">
-                      {isOwnPost && onDelete && (
-                        <button
-                          onClick={handleDelete}
-                          className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                            <line x1="10" y1="11" x2="10" y2="17"/>
-                            <line x1="14" y1="11" x2="14" y2="17"/>
-                          </svg>
-                          削除
-                        </button>
-                      )}
-                      {onMute && !isOwnPost && (
-                        <button
-                          onClick={handleMute}
-                          className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="10"/>
-                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-                          </svg>
-                          ミュート
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+            <div className="relative flex-shrink-0">
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] action-btn"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="12" cy="5" r="2"/>
+                  <circle cx="12" cy="12" r="2"/>
+                  <circle cx="12" cy="19" r="2"/>
+                </svg>
+              </button>
+
+              {/* Dropdown menu */}
+              {showMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowMenu(false)}
+                  />
+                  <div className="absolute right-0 top-6 z-50 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[160px]">
+                    {/* Birdwatch button */}
+                    {onBirdwatch && !isOwnPost && (
+                      <button
+                        onClick={handleBirdwatch}
+                        className="w-full px-4 py-2 text-left text-sm text-blue-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        Birdwatch
+                      </button>
+                    )}
+                    {/* Report button */}
+                    {onReport && !isOwnPost && (
+                      <button
+                        onClick={handleReport}
+                        className="w-full px-4 py-2 text-left text-sm text-orange-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+                          <line x1="4" y1="22" x2="4" y2="15"/>
+                        </svg>
+                        通報
+                      </button>
+                    )}
+                    {/* Mute button */}
+                    {onMute && !isOwnPost && (
+                      <button
+                        onClick={handleMute}
+                        className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/>
+                          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                        </svg>
+                        ミュート
+                      </button>
+                    )}
+                    {/* Delete button */}
+                    {isOwnPost && onDelete && (
+                      <button
+                        onClick={handleDelete}
+                        className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                          <line x1="10" y1="11" x2="10" y2="17"/>
+                          <line x1="14" y1="11" x2="14" y2="17"/>
+                        </svg>
+                        削除
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           
           {/* Content Warning Display (NIP-36) */}
@@ -908,8 +965,39 @@ export default function PostItem({
               )}
             </div>
           )}
+
+          {/* Birdwatch Display (Community Notes) */}
+          {birdwatchNotes.length > 0 && (
+            <BirdwatchDisplay
+              notes={birdwatchNotes}
+              profiles={profiles}
+              onRate={onBirdwatchRate}
+              onAuthorClick={onAvatarClick}
+              compact={true}
+            />
+          )}
         </div>
       </div>
+
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        onReport={handleReportSubmit}
+        targetEvent={post}
+        targetPubkey={post.pubkey}
+      />
+
+      {/* Birdwatch Modal */}
+      <BirdwatchModal
+        isOpen={showBirdwatchModal}
+        onClose={() => setShowBirdwatchModal(false)}
+        onSubmit={handleBirdwatchSubmit}
+        targetEvent={post}
+        existingNotes={birdwatchNotes}
+        profiles={profiles}
+        myPubkey={myPubkey}
+      />
     </article>
   )
 }
