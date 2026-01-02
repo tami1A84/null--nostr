@@ -24,6 +24,10 @@ import {
   getReadRelays,
   getWriteRelays,
   uploadImage,
+  reportEvent,
+  createBirdwatchLabel,
+  fetchBirdwatchLabels,
+  rateBirdwatchLabel,
   RELAYS
 } from '@/lib/nostr'
 import { setCachedMuteList } from '@/lib/cache'
@@ -138,6 +142,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const [zapping, setZapping] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [searchQuery, setSearchQuery] = useState('') // Initial query for search modal
+  // Birdwatch (NIP-32) state
+  const [birdwatchLabels, setBirdwatchLabels] = useState({}) // eventId -> array of label events
   // Follow timeline state
   const [timelineMode, setTimelineMode] = useState('global') // 'global' or 'following'
   const [followList, setFollowList] = useState([])
@@ -388,6 +394,64 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     }
   }
 
+  // NIP-56: Report handler
+  const handleReport = async (reportData) => {
+    if (!pubkey) return
+    try {
+      await reportEvent(reportData)
+      alert('通報を送信しました')
+    } catch (e) {
+      console.error('Failed to report:', e)
+      throw e
+    }
+  }
+
+  // NIP-32: Birdwatch handler
+  const handleBirdwatch = async (birdwatchData) => {
+    if (!pubkey) return
+    try {
+      const result = await createBirdwatchLabel(birdwatchData)
+      if (result.success && result.event) {
+        // Add the new label to state
+        setBirdwatchLabels(prev => ({
+          ...prev,
+          [birdwatchData.eventId]: [
+            ...(prev[birdwatchData.eventId] || []),
+            result.event
+          ]
+        }))
+      }
+      alert('コンテキストを追加しました')
+    } catch (e) {
+      console.error('Failed to create Birdwatch label:', e)
+      throw e
+    }
+  }
+
+  // NIP-32: Birdwatch rate handler
+  const handleBirdwatchRate = async (labelEventId, rating) => {
+    if (!pubkey) return
+    try {
+      await rateBirdwatchLabel(labelEventId, rating)
+    } catch (e) {
+      console.error('Failed to rate Birdwatch label:', e)
+      throw e
+    }
+  }
+
+  // Fetch Birdwatch labels for posts
+  const fetchBirdwatchForPosts = async (postIds) => {
+    if (!postIds || postIds.length === 0) return
+    try {
+      const labels = await fetchBirdwatchLabels(postIds)
+      if (Object.keys(labels).length > 0) {
+        setBirdwatchLabels(prev => ({ ...prev, ...labels }))
+      }
+    } catch (e) {
+      console.error('Failed to fetch Birdwatch labels:', e)
+    }
+  }
+
   // Quick initial load - just 20 events for fast display (global timeline)
   const loadTimelineQuick = async () => {
     setLoading(true)
@@ -541,6 +605,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         setUserReposts(myReposts)
         setUserReactionIds(myReactionIds)
         setUserRepostIds(myRepostIdsMap)
+
+        // Fetch Birdwatch labels in background
+        fetchBirdwatchForPosts(eventIds)
       }
     } catch (e) {
       console.error('Failed to load full timeline:', e)
@@ -610,6 +677,10 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         const profileMap = await fetchProfilesBatch(Array.from(authors))
         setProfiles(prev => ({ ...prev, ...profileMap }))
       }
+
+      // Fetch Birdwatch labels in background
+      const eventIds = allPosts.map(p => p.id)
+      fetchBirdwatchForPosts(eventIds)
     } catch (e) {
       console.error('Failed to load following timeline:', e)
     } finally {
@@ -1571,6 +1642,11 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                     onHashtagClick={handleHashtagClick}
                     onMute={handleMute}
                     onDelete={handleDelete}
+                    onReport={handleReport}
+                    onBirdwatch={handleBirdwatch}
+                    onBirdwatchRate={handleBirdwatchRate}
+                    birdwatchNotes={birdwatchLabels[post.id] || []}
+                    myPubkey={pubkey}
                     isOwnPost={post.pubkey === pubkey}
                     isRepost={post._isRepost}
                     repostedBy={post._repostedBy ? profiles[post._repostedBy] || { pubkey: post._repostedBy } : null}
@@ -1578,7 +1654,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                 </div>
               )
             })}
-            
+
             {loadingMore && (
               <div className="flex justify-center py-4">
                 <div className="flex items-center gap-2 text-[var(--text-tertiary)] text-sm">
@@ -1672,6 +1748,11 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                         onHashtagClick={handleHashtagClick}
                         onMute={handleMute}
                         onDelete={handleDelete}
+                        onReport={handleReport}
+                        onBirdwatch={handleBirdwatch}
+                        onBirdwatchRate={handleBirdwatchRate}
+                        birdwatchNotes={birdwatchLabels[post.id] || []}
+                        myPubkey={pubkey}
                         isOwnPost={post.pubkey === pubkey}
                         isRepost={post._isRepost}
                         repostedBy={post._repostedBy ? profiles[post._repostedBy] || { pubkey: post._repostedBy } : null}
@@ -1767,6 +1848,11 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                         onHashtagClick={handleHashtagClick}
                         onMute={handleMute}
                         onDelete={handleDelete}
+                        onReport={handleReport}
+                        onBirdwatch={handleBirdwatch}
+                        onBirdwatchRate={handleBirdwatchRate}
+                        birdwatchNotes={birdwatchLabels[post.id] || []}
+                        myPubkey={pubkey}
                         isOwnPost={post.pubkey === pubkey}
                         isRepost={post._isRepost}
                         repostedBy={post._repostedBy ? profiles[post._repostedBy] || { pubkey: post._repostedBy } : null}

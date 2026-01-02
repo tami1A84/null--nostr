@@ -12,6 +12,10 @@ import {
   publishEvent,
   fetchLightningInvoice,
   getWriteRelays,
+  reportEvent,
+  createBirdwatchLabel,
+  fetchBirdwatchLabels,
+  rateBirdwatchLabel,
   RELAYS
 } from '@/lib/nostr'
 import PostItem from './PostItem'
@@ -28,6 +32,7 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
   const [userReposts, setUserReposts] = useState(new Set())
   const [likeAnimating, setLikeAnimating] = useState(null)
   const [zapAnimating, setZapAnimating] = useState(null)
+  const [birdwatchLabels, setBirdwatchLabels] = useState({})
   const [mounted, setMounted] = useState(false)
   const inputRef = useRef(null)
   const modalRef = useRef(null)
@@ -141,12 +146,66 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
           setReactions(reactionCounts)
           setUserReactions(myReactions)
           setUserReposts(myReposts)
+
+          // Fetch Birdwatch labels in background
+          try {
+            const labels = await fetchBirdwatchLabels(eventIds)
+            if (Object.keys(labels).length > 0) {
+              setBirdwatchLabels(labels)
+            }
+          } catch (e) {
+            console.error('Failed to fetch Birdwatch labels:', e)
+          }
         }
       }
     } catch (e) {
       console.error('Search error:', e)
     } finally {
       setSearching(false)
+    }
+  }
+
+  // NIP-56: Report handler
+  const handleReport = async (reportData) => {
+    if (!pubkey) return
+    try {
+      await reportEvent(reportData)
+      alert('通報を送信しました')
+    } catch (e) {
+      console.error('Failed to report:', e)
+      throw e
+    }
+  }
+
+  // NIP-32: Birdwatch handler
+  const handleBirdwatch = async (birdwatchData) => {
+    if (!pubkey) return
+    try {
+      const result = await createBirdwatchLabel(birdwatchData)
+      if (result.success && result.event) {
+        setBirdwatchLabels(prev => ({
+          ...prev,
+          [birdwatchData.eventId]: [
+            ...(prev[birdwatchData.eventId] || []),
+            result.event
+          ]
+        }))
+      }
+      alert('コンテキストを追加しました')
+    } catch (e) {
+      console.error('Failed to create Birdwatch label:', e)
+      throw e
+    }
+  }
+
+  // NIP-32: Birdwatch rate handler
+  const handleBirdwatchRate = async (labelEventId, rating) => {
+    if (!pubkey) return
+    try {
+      await rateBirdwatchLabel(labelEventId, rating)
+    } catch (e) {
+      console.error('Failed to rate Birdwatch label:', e)
+      throw e
     }
   }
 
@@ -476,6 +535,12 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
             onRepost={handleRepost}
             onZap={handleZap}
             onAvatarClick={(pk) => onViewProfile?.(pk)}
+            onReport={handleReport}
+            onBirdwatch={handleBirdwatch}
+            onBirdwatchRate={handleBirdwatchRate}
+            birdwatchNotes={birdwatchLabels[post.id] || []}
+            myPubkey={pubkey}
+            isOwnPost={post.pubkey === pubkey}
           />
         ))}
       </div>
