@@ -12,9 +12,9 @@ import {
   decryptNip44,
   fetchProfilesBatch,
   getAllCachedProfiles,
-  uploadImage,
   RELAYS
 } from '@/lib/nostr'
+import { uploadImagesInParallel } from '@/lib/imageUtils'
 import EmojiPicker from './EmojiPicker'
 import URLPreview from './URLPreview'
 
@@ -579,21 +579,6 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
     }
   }
 
-  // Upload image with retry logic
-  const uploadImageWithRetry = async (file, retries = 3) => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const url = await uploadImage(file)
-        if (url) return url
-      } catch (e) {
-        console.error(`Upload attempt ${i + 1} failed:`, e)
-        if (i === retries - 1) throw e
-        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)))
-      }
-    }
-    return null
-  }
-
   const handleSendMessage = async () => {
     if ((!newMessage.trim() && imageFiles.length === 0) || !selectedChat || sending) return
     setSending(true)
@@ -606,13 +591,27 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
       if (imageFiles.length > 0) {
         try {
           setUploadingImage(true)
-          const uploadedUrls = []
 
-          // Upload all images with retry
-          for (const file of imageFiles) {
-            const imageUrl = await uploadImageWithRetry(file)
-            if (imageUrl) {
-              uploadedUrls.push(imageUrl)
+          const { urls: uploadedUrls, errors } = await uploadImagesInParallel(imageFiles)
+
+          if (errors.length > 0) {
+            const errorMessages = errors.map(e => `${e.fileName}: ${e.error.message}`).join('\n')
+            console.error('Some uploads failed:', errors)
+            if (uploadedUrls.length === 0) {
+              alert(`すべての画像のアップロードに失敗しました:\n${errorMessages}`)
+              setSending(false)
+              setUploadingImage(false)
+              return
+            } else {
+              const continueWithPartial = confirm(
+                `${errors.length}枚の画像のアップロードに失敗しました。\n` +
+                `成功した${uploadedUrls.length}枚で送信を続けますか?`
+              )
+              if (!continueWithPartial) {
+                setSending(false)
+                setUploadingImage(false)
+                return
+              }
             }
           }
 
