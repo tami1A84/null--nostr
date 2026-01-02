@@ -18,6 +18,8 @@ import {
   rateBirdwatchLabel,
   addToMuteList,
   deleteEvent,
+  parseNostrLink,
+  resolveNip05,
   RELAYS
 } from '@/lib/nostr'
 import PostItem from './PostItem'
@@ -94,14 +96,142 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
     localStorage.setItem('recentSearches', JSON.stringify(updated))
   }
 
+  // Check if query is a hex pubkey (64 character hex string)
+  const isHexPubkey = (q) => /^[0-9a-fA-F]{64}$/.test(q)
+
+  // Check if query is a hex event ID (64 character hex string)
+  const isHexEventId = (q) => /^[0-9a-fA-F]{64}$/.test(q)
+
+  // Check if query looks like a NIP-05 identifier (user@domain.tld or domain.tld)
+  const isNip05 = (q) => {
+    // user@domain.tld format
+    if (/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(q)) return true
+    // domain.tld format (will be treated as _@domain.tld)
+    if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(q) && !q.includes(' ')) return true
+    return false
+  }
+
   const handleSearch = async (searchQuery = query) => {
     if (!searchQuery.trim()) return
 
+    const trimmedQuery = searchQuery.trim()
     setSearching(true)
     setHasSearched(true)
-    saveRecentSearch(searchQuery.trim())
+    saveRecentSearch(trimmedQuery)
 
     try {
+      // Check for special search patterns
+
+      // 1. Check for bech32 encoded Nostr identifiers (npub, nprofile, note, nevent, naddr)
+      const parsed = parseNostrLink(trimmedQuery)
+      if (parsed) {
+        if (parsed.type === 'npub' || parsed.type === 'nprofile') {
+          // Navigate to user profile
+          setSearching(false)
+          onClose()
+          onViewProfile?.(parsed.pubkey)
+          return
+        } else if (parsed.type === 'note' || parsed.type === 'nevent') {
+          // Fetch single event
+          const eventId = parsed.id
+          const events = await fetchEvents(
+            { ids: [eventId], limit: 1 },
+            parsed.relays?.length ? parsed.relays : RELAYS
+          )
+          if (events.length > 0) {
+            setResults(events)
+          } else {
+            setResults([])
+          }
+          setSearching(false)
+          // Continue to fetch profiles for the result
+          if (events.length > 0) {
+            const authors = [...new Set(events.map(n => n.pubkey))]
+            const profileEvents = await fetchEvents(
+              { kinds: [0], authors, limit: authors.length },
+              RELAYS
+            )
+            const profileMap = {}
+            profileEvents.forEach(e => {
+              profileMap[e.pubkey] = parseProfile(e)
+            })
+            setProfiles(profileMap)
+          }
+          return
+        } else if (parsed.type === 'naddr') {
+          // Fetch replaceable event by naddr
+          const events = await fetchEvents(
+            {
+              kinds: [parsed.kind],
+              authors: [parsed.pubkey],
+              '#d': [parsed.identifier],
+              limit: 1
+            },
+            parsed.relays?.length ? parsed.relays : RELAYS
+          )
+          if (events.length > 0) {
+            setResults(events)
+            // Fetch profile
+            const profileEvents = await fetchEvents(
+              { kinds: [0], authors: [parsed.pubkey], limit: 1 },
+              RELAYS
+            )
+            const profileMap = {}
+            profileEvents.forEach(e => {
+              profileMap[e.pubkey] = parseProfile(e)
+            })
+            setProfiles(profileMap)
+          } else {
+            setResults([])
+          }
+          setSearching(false)
+          return
+        }
+      }
+
+      // 2. Check for hex pubkey (64 character hex)
+      if (isHexPubkey(trimmedQuery)) {
+        // Could be pubkey or event ID, try fetching as event first
+        const events = await fetchEvents(
+          { ids: [trimmedQuery], limit: 1 },
+          RELAYS
+        )
+        if (events.length > 0) {
+          // It's an event ID
+          setResults(events)
+          const authors = [...new Set(events.map(n => n.pubkey))]
+          const profileEvents = await fetchEvents(
+            { kinds: [0], authors, limit: authors.length },
+            RELAYS
+          )
+          const profileMap = {}
+          profileEvents.forEach(e => {
+            profileMap[e.pubkey] = parseProfile(e)
+          })
+          setProfiles(profileMap)
+          setSearching(false)
+          return
+        }
+        // Not an event ID, treat as pubkey and go to profile
+        setSearching(false)
+        onClose()
+        onViewProfile?.(trimmedQuery.toLowerCase())
+        return
+      }
+
+      // 3. Check for NIP-05 identifier
+      if (isNip05(trimmedQuery)) {
+        const resolvedPubkey = await resolveNip05(trimmedQuery)
+        if (resolvedPubkey) {
+          setSearching(false)
+          onClose()
+          onViewProfile?.(resolvedPubkey)
+          return
+        }
+        // NIP-05 resolution failed, fall through to text search
+      }
+
+      // 4. Default: Full-text search using NIP-50
       const notes = await searchNotes(searchQuery, { limit: 50 })
       setResults(notes)
 
@@ -359,7 +489,7 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="キーワードを検索"
+                placeholder="キーワード / npub / NIP-05 / note"
                 className="w-full h-10 pl-10 pr-10 rounded-full bg-[var(--bg-secondary)] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none text-sm border border-transparent focus:border-[var(--line-green)] transition-colors"
               />
               {query && (
@@ -422,7 +552,7 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="キーワードを検索"
+                placeholder="キーワード / npub / NIP-05 / note"
                 className="w-full h-12 pl-12 pr-10 rounded-full bg-[var(--bg-secondary)] text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none text-base border border-transparent focus:border-[var(--line-green)] transition-colors"
               />
               {query && (
@@ -509,7 +639,7 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
                 </svg>
               </div>
               <p className="text-[var(--text-secondary)] text-center text-sm">
-                キーワードを入力して検索
+                キーワード、npub、note、NIP-05で検索
               </p>
             </div>
           )}
@@ -536,7 +666,7 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
             </svg>
           </div>
           <p className="text-[var(--text-secondary)] text-center text-sm">
-            「{query}」に一致する投稿が見つかりませんでした
+            「{query}」に一致する結果が見つかりませんでした
           </p>
         </div>
       )

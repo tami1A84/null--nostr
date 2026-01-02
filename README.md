@@ -18,6 +18,8 @@
 - ユーザープロフィール表示
 - フォロー/アンフォロー機能
 - ミュート機能（NIP-51対応）
+- 通報機能（NIP-56対応）
+- Birdwatch（NIP-32対応、コンテキスト追加・評価）
 
 ### Talk
 
@@ -39,7 +41,10 @@
 
 ### Search
 
-- NIP-50 全文検索
+- NIP-50 全文検索（[searchnos](https://github.com/darashi/searchnos) を使用）
+- 公開鍵検索（npub1... / hex形式）
+- NIP-05検索（user@domain.tld）
+- イベントID検索（note1... / nevent1... / naddr1...）
 - 検索結果からいいね・リポスト・Zap
 - 最近の検索履歴
 
@@ -66,6 +71,7 @@
 
 ### Passkey（推奨）
 
+[Nosskey SDK](https://github.com/ocknamo/nosskey-sdk) を使用したパスキー認証。
 Face ID / Touch ID / Windows Hello を使って、パスワード不要で安全にログインできます。
 
 - 秘密鍵はデバイスのセキュアエリアに保存
@@ -103,7 +109,8 @@ npm run dev
 | Framework | Next.js 14.2 |
 | UI | React 18.3, Tailwind CSS 3.4 |
 | Protocol | nostr-tools 2.17 |
-| Auth | nosskey-sdk 0.0.4 |
+| Auth | [nosskey-sdk](https://github.com/ocknamo/nosskey-sdk) 0.0.4 |
+| Search | [searchnos](https://github.com/darashi/searchnos) (NIP-50) |
 | Mobile | Capacitor 8.0 |
 
 ---
@@ -114,18 +121,20 @@ npm run dev
 |-----|-------------|
 | NIP-01 | Basic protocol |
 | NIP-02 | Follow List（フォロー/アンフォロー） |
-| NIP-05 | NIP-05認証・検証 |
+| NIP-05 | NIP-05認証・検証・検索 |
 | NIP-07 | ブラウザ拡張機能（Alby, nos2x等） |
 | NIP-09 | Event Deletion（投稿削除、いいね取消、リポスト取消） |
 | NIP-17 | Private Direct Messages |
-| NIP-19 | bech32エンコード（npub/nsec/note/nevent） |
+| NIP-19 | bech32エンコード（npub/nsec/note/nevent/naddr） |
 | NIP-25 | Reactions（いいね/いいね取消） |
 | NIP-27 | Text Note References |
 | NIP-30 | Custom Emoji |
+| NIP-32 | Labeling（Birdwatchコンテキスト追加・評価） |
 | NIP-44 | Encrypted Payloads |
 | NIP-46 | Nostr Connect（nsec.app等リモート署名） |
-| NIP-50 | Search Capability |
+| NIP-50 | Search Capability（[searchnos](https://github.com/darashi/searchnos)使用） |
 | NIP-51 | Mute List |
+| NIP-56 | Reporting（通報機能） |
 | NIP-57 | Lightning Zaps |
 | NIP-58 | Badges（表示・プロフィールバッジ管理） |
 | NIP-59 | Gift Wrap |
