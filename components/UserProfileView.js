@@ -10,6 +10,7 @@ import {
   verifyNip05,
   encodeNpub,
   addToMuteList,
+  deleteEvent,
   signEventNip07,
   createEventTemplate,
   publishEvent,
@@ -144,12 +145,13 @@ function ProfileNip05Badge({ nip05, pubkey }) {
   )
 }
 
-export default function UserProfileView({ 
-  targetPubkey, 
+export default function UserProfileView({
+  targetPubkey,
   myPubkey,
   onClose,
   onMute,
-  onStartDM // New prop for DM
+  onStartDM, // New prop for DM
+  onViewProfile // Navigation to another profile
 }) {
   const [profile, setProfile] = useState(null)
   const [posts, setPosts] = useState([])
@@ -456,6 +458,34 @@ export default function UserProfileView({
     } catch (e) {
       console.error('Failed to rate Birdwatch label:', e)
       throw e
+    }
+  }
+
+  // Mute handler for posts (different users within profile view)
+  const handleMuteFromPost = async (targetPk) => {
+    if (!myPubkey) return
+    try {
+      await addToMuteList(myPubkey, 'pubkey', targetPk)
+      // Remove muted user's posts from view
+      setPosts(prev => prev.filter(p => p.pubkey !== targetPk))
+      alert('ミュートしました')
+    } catch (e) {
+      console.error('Failed to mute:', e)
+    }
+  }
+
+  // Delete handler
+  const handleDelete = async (eventId) => {
+    if (!confirm('この投稿を削除しますか？')) return
+
+    try {
+      const result = await deleteEvent(eventId)
+      if (result.success) {
+        setPosts(prev => prev.filter(p => p.id !== eventId))
+      }
+    } catch (e) {
+      console.error('Failed to delete:', e)
+      alert('削除に失敗しました')
     }
   }
 
@@ -829,6 +859,13 @@ export default function UserProfileView({
                   onLike={handleLike}
                   onRepost={handleRepost}
                   onZap={handleZap}
+                  onAvatarClick={(pk, prof) => {
+                    if (pk !== targetPubkey && onViewProfile) {
+                      onViewProfile(pk)
+                    }
+                  }}
+                  onMute={handleMuteFromPost}
+                  onDelete={handleDelete}
                   onReport={handleReport}
                   onBirdwatch={handleBirdwatch}
                   onBirdwatchRate={handleBirdwatchRate}

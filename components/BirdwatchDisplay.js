@@ -16,6 +16,7 @@ export default function BirdwatchDisplay({
   notes = [],
   profiles = {},
   onRate,
+  onAuthorClick,
   compact = false
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
@@ -114,7 +115,17 @@ export default function BirdwatchDisplay({
               {/* Author and rating */}
               <div className="flex items-center justify-between text-xs text-[var(--text-tertiary)]">
                 <div className="flex items-center gap-2">
-                  <span>{profile?.name || shortenPubkey(note.pubkey, 6)}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (onAuthorClick) {
+                        onAuthorClick(note.pubkey, profile)
+                      }
+                    }}
+                    className="text-[var(--text-primary)] hover:text-blue-500 hover:underline transition-colors"
+                  >
+                    {profile?.name || shortenPubkey(note.pubkey, 6)}
+                  </button>
                   <span>·</span>
                   <span>{formatTimestamp(note.created_at)}</span>
                 </div>

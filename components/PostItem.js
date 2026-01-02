@@ -972,6 +972,7 @@ export default function PostItem({
               notes={birdwatchNotes}
               profiles={profiles}
               onRate={onBirdwatchRate}
+              onAuthorClick={onAvatarClick}
               compact={true}
             />
           )}

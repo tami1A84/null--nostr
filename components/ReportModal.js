@@ -54,13 +54,14 @@ export default function ReportModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center modal-overlay bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="w-full max-w-md mx-4 bg-[var(--bg-primary)] rounded-2xl overflow-hidden animate-scaleIn shadow-xl"
+        className="w-full max-w-md mx-4 rounded-2xl overflow-hidden animate-scaleIn shadow-2xl border border-[var(--border-color)]"
+        style={{ backgroundColor: 'var(--bg-primary)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
