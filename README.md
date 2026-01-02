@@ -119,18 +119,20 @@ npm run dev
 |-----|-------------|
 | NIP-01 | Basic protocol |
 | NIP-02 | Follow List（フォロー/アンフォロー） |
-| NIP-05 | NIP-05認証・検証 |
+| NIP-05 | NIP-05認証・検証・検索 |
 | NIP-07 | ブラウザ拡張機能（Alby, nos2x等） |
 | NIP-09 | Event Deletion（投稿削除、いいね取消、リポスト取消） |
 | NIP-17 | Private Direct Messages |
-| NIP-19 | bech32エンコード（npub/nsec/note/nevent） |
+| NIP-19 | bech32エンコード（npub/nsec/note/nevent/naddr） |
 | NIP-25 | Reactions（いいね/いいね取消） |
 | NIP-27 | Text Note References |
 | NIP-30 | Custom Emoji |
+| NIP-32 | Labeling（Birdwatchコンテキスト追加・評価） |
 | NIP-44 | Encrypted Payloads |
 | NIP-46 | Nostr Connect（nsec.app等リモート署名） |
-| NIP-50 | Search Capability |
+| NIP-50 | Search Capability（[searchnos](https://github.com/darashi/searchnos)使用） |
 | NIP-51 | Mute List |
+| NIP-56 | Reporting（通報機能） |
 | NIP-57 | Lightning Zaps |
 | NIP-58 | Badges（表示・プロフィールバッジ管理） |
 | NIP-59 | Gift Wrap |
