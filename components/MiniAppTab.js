@@ -266,7 +266,7 @@ const UPLOAD_SERVERS = [
   { id: 'blossom.nostr', name: 'Blossom (nostr.build)', url: 'https://blossom.nostr.build' },
 ]
 
-export default function MiniAppTab({ pubkey, onLogout }) {
+export default function MiniAppTab({ pubkey, onLogout, onShareToTimeline }) {
   const [defaultZap, setDefaultZap] = useState(21)
   const [muteList, setMuteList] = useState({ pubkeys: [], eventIds: [], hashtags: [], words: [] })
   const [mutedProfiles, setMutedProfiles] = useState({})
@@ -1994,7 +1994,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
 
           {showZapGoal && (
             <div className="mt-4">
-              <ZapGoalApp pubkey={pubkey} />
+              <ZapGoalApp pubkey={pubkey} onShareToTimeline={onShareToTimeline} />
             </div>
           )}
         </section>

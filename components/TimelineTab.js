@@ -171,7 +171,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     closeProfile: () => setViewingProfile(null),
     openPostModal: () => setShowPostModal(true),
     closeSearch: () => { setShowSearch(false); setSearchQuery('') },
-    openSearch: (query) => { setSearchQuery(query); setShowSearch(true) }
+    openSearch: (query) => { setSearchQuery(query); setShowSearch(true) },
+    setPostContent: (content) => { setNewPost(content); setShowPostModal(true) }
   }))
 
   // Save scroll position when switching modes - use scrollContainerRef from parent

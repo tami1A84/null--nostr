@@ -7,7 +7,8 @@ import {
   signEventNip07,
   publishEvent,
   getDefaultRelay,
-  shortenPubkey
+  shortenPubkey,
+  fetchLightningInvoice
 } from '@/lib/nostr'
 
 // NIP-75 Zap Goal event kind
@@ -114,6 +115,22 @@ function formatSats(msats) {
     return `${(sats / 1000).toFixed(1)}K`
   }
   return sats.toLocaleString()
+}
+
+// Copy to clipboard helper
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    return true
+  }
 }
 
 // Create Zap Goal Form Component
@@ -287,7 +304,6 @@ function CreateGoalForm({ pubkey, onCreated, onCancel }) {
 function GoalCard({ goal, zapReceipts, profiles, onSelect }) {
   const amountTag = goal.tags.find(t => t[0] === 'amount')
   const targetMsats = amountTag ? parseInt(amountTag[1]) : 0
-  const targetSats = targetMsats / 1000
 
   const closedAtTag = goal.tags.find(t => t[0] === 'closed_at')
   const closedAt = closedAtTag ? parseInt(closedAtTag[1]) : null
@@ -319,8 +335,7 @@ function GoalCard({ goal, zapReceipts, profiles, onSelect }) {
       return sum
     }, 0)
 
-  const receivedSats = receivedMsats / 1000
-  const progress = targetSats > 0 ? Math.min((receivedSats / targetSats) * 100, 100) : 0
+  const progress = targetMsats > 0 ? Math.min((receivedMsats / targetMsats) * 100, 100) : 0
 
   const profile = profiles[goal.pubkey]
   const displayName = profile?.name || profile?.display_name || shortenPubkey(goal.pubkey)
@@ -399,8 +414,12 @@ function GoalCard({ goal, zapReceipts, profiles, onSelect }) {
   )
 }
 
-// Goal Detail Modal Component
-function GoalDetailModal({ goal, zapReceipts, profiles, onClose }) {
+// Goal Detail Modal Component with Zap support
+function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeline }) {
+  const [zapAmount, setZapAmount] = useState('100')
+  const [zapping, setZapping] = useState(false)
+  const [copied, setCopied] = useState(false)
+
   const amountTag = goal.tags.find(t => t[0] === 'amount')
   const targetMsats = amountTag ? parseInt(amountTag[1]) : 0
 
@@ -450,17 +469,47 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose }) {
   })
 
   const handleCopyNevent = async () => {
+    const success = await copyToClipboard(nevent)
+    if (success) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const handleShareToTimeline = () => {
+    onShareToTimeline(nevent)
+    onClose()
+  }
+
+  const handleZap = async () => {
+    const amount = parseInt(zapAmount)
+    if (!amount || amount < 1) {
+      alert('有効な金額を入力してください')
+      return
+    }
+
+    if (!profile?.lud16) {
+      alert('このGoalの作成者はLightningアドレスを設定していません')
+      return
+    }
+
     try {
-      await navigator.clipboard.writeText(nevent)
-      alert('コピーしました')
-    } catch {
-      const textarea = document.createElement('textarea')
-      textarea.value = nevent
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      alert('コピーしました')
+      setZapping(true)
+      const result = await fetchLightningInvoice(profile.lud16, amount, `Zap Goal支援: ${goal.content}`)
+
+      if (result.invoice) {
+        const copied = await copyToClipboard(result.invoice)
+        if (copied) {
+          alert(`⚡ ${amount} sats のインボイスをコピーしました！\n\nお好きなLightningウォレットで支払いできます。`)
+        } else {
+          prompt('インボイスをコピーしてください:', result.invoice)
+        }
+      }
+    } catch (e) {
+      console.error('Failed to create invoice:', e)
+      alert(`インボイスの作成に失敗しました: ${e.message}`)
+    } finally {
+      setZapping(false)
     }
   }
 
@@ -535,6 +584,47 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose }) {
             )}
           </div>
 
+          {/* Zap Support Section */}
+          {!isExpired && profile?.lud16 && (
+            <div className="bg-[var(--bg-tertiary)] rounded-xl p-3 space-y-3">
+              <h3 className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                <svg className="w-5 h-5 text-yellow-500" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+                Zap支援
+              </h3>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={zapAmount}
+                  onChange={(e) => setZapAmount(e.target.value)}
+                  placeholder="金額 (sats)"
+                  min="1"
+                  className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg border border-[var(--border-color)] focus:outline-none focus:border-[var(--line-green)]"
+                  disabled={zapping}
+                />
+                <button
+                  onClick={handleZap}
+                  disabled={zapping}
+                  className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50 font-semibold"
+                >
+                  {zapping ? '...' : '⚡ Zap'}
+                </button>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {[21, 100, 500, 1000].map(amount => (
+                  <button
+                    key={amount}
+                    onClick={() => setZapAmount(String(amount))}
+                    className="px-3 py-1 text-sm bg-[var(--bg-secondary)] text-[var(--text-secondary)] rounded-full hover:bg-[var(--line-green)] hover:text-white transition-colors"
+                  >
+                    {amount} sats
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {goalZaps.length > 0 && (
             <div>
               <h3 className="font-semibold text-[var(--text-primary)] mb-2">
@@ -572,14 +662,20 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose }) {
 
           <div className="space-y-2">
             <button
+              onClick={handleShareToTimeline}
+              className="w-full py-2 px-4 bg-[var(--line-green)] text-white rounded-lg hover:opacity-80 transition-opacity"
+            >
+              タイムラインに共有
+            </button>
+            <button
               onClick={handleCopyNevent}
               className="w-full py-2 px-4 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg hover:opacity-80 transition-opacity text-sm"
             >
-              イベントIDをコピー (nevent)
+              {copied ? 'コピーしました!' : 'イベントIDをコピー (nevent)'}
             </button>
             <button
               onClick={onClose}
-              className="w-full py-2 px-4 bg-[var(--line-green)] text-white rounded-lg hover:opacity-80 transition-opacity"
+              className="w-full py-2 px-4 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] rounded-lg hover:opacity-80 transition-opacity"
             >
               閉じる
             </button>
@@ -591,22 +687,27 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose }) {
 }
 
 // Main ZapGoalApp Component
-export default function ZapGoalApp({ pubkey }) {
+export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
   const [goals, setGoals] = useState([])
   const [zapReceipts, setZapReceipts] = useState([])
   const [profiles, setProfiles] = useState({})
   const [loading, setLoading] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [selectedGoal, setSelectedGoal] = useState(null)
-  const [viewMode, setViewMode] = useState('all') // 'all', 'mine', 'active'
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchedGoal, setSearchedGoal] = useState(null)
+  const [searching, setSearching] = useState(false)
 
+  // Load only user's own goals
   const loadGoals = useCallback(async () => {
+    if (!pubkey) return
     setLoading(true)
     try {
-      // Fetch all zap goals
+      // Fetch only user's zap goals
       const goalFilter = {
         kinds: [KIND_ZAP_GOAL],
-        limit: 100
+        authors: [pubkey],
+        limit: 50
       }
 
       const fetchedGoals = await fastFetch(goalFilter, ZAP_GOAL_RELAYS)
@@ -614,31 +715,6 @@ export default function ZapGoalApp({ pubkey }) {
       // Sort by created_at descending
       fetchedGoals.sort((a, b) => b.created_at - a.created_at)
       setGoals(fetchedGoals)
-
-      // Collect pubkeys to fetch profiles
-      const pubkeys = [...new Set(fetchedGoals.map(g => g.pubkey))]
-
-      // Fetch profiles
-      if (pubkeys.length > 0) {
-        const profileFilter = {
-          kinds: [0],
-          authors: pubkeys
-        }
-        const profileEvents = await fastFetch(profileFilter, ZAP_GOAL_RELAYS)
-
-        const profileMap = {}
-        profileEvents.forEach(event => {
-          if (!profileMap[event.pubkey] || event.created_at > profileMap[event.pubkey].created_at) {
-            try {
-              profileMap[event.pubkey] = {
-                ...JSON.parse(event.content),
-                created_at: event.created_at
-              }
-            } catch {}
-          }
-        })
-        setProfiles(profileMap)
-      }
 
       // Fetch zap receipts for these goals
       const goalIds = fetchedGoals.map(g => g.id)
@@ -665,28 +741,25 @@ export default function ZapGoalApp({ pubkey }) {
           }
         })
 
-        const newPubkeys = [...zapperPubkeys].filter(pk => !profiles[pk])
-        if (newPubkeys.length > 0) {
+        if (zapperPubkeys.size > 0) {
           const zapperProfileFilter = {
             kinds: [0],
-            authors: newPubkeys
+            authors: [...zapperPubkeys]
           }
           const zapperProfileEvents = await fastFetch(zapperProfileFilter, ZAP_GOAL_RELAYS)
 
-          setProfiles(prev => {
-            const updated = { ...prev }
-            zapperProfileEvents.forEach(event => {
-              if (!updated[event.pubkey] || event.created_at > updated[event.pubkey].created_at) {
-                try {
-                  updated[event.pubkey] = {
-                    ...JSON.parse(event.content),
-                    created_at: event.created_at
-                  }
-                } catch {}
-              }
-            })
-            return updated
+          const profileMap = {}
+          zapperProfileEvents.forEach(event => {
+            if (!profileMap[event.pubkey] || event.created_at > profileMap[event.pubkey].created_at) {
+              try {
+                profileMap[event.pubkey] = {
+                  ...JSON.parse(event.content),
+                  created_at: event.created_at
+                }
+              } catch {}
+            }
           })
+          setProfiles(profileMap)
         }
       }
     } catch (e) {
@@ -694,7 +767,7 @@ export default function ZapGoalApp({ pubkey }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [pubkey])
 
   useEffect(() => {
     loadGoals()
@@ -705,76 +778,194 @@ export default function ZapGoalApp({ pubkey }) {
     setShowCreateForm(false)
   }
 
-  const filteredGoals = goals.filter(goal => {
-    const closedAtTag = goal.tags.find(t => t[0] === 'closed_at')
-    const closedAt = closedAtTag ? parseInt(closedAtTag[1]) : null
-    const isExpired = closedAt && closedAt < Math.floor(Date.now() / 1000)
+  // Search for a goal by nevent/note/hex ID
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return
 
-    switch (viewMode) {
-      case 'mine':
-        return goal.pubkey === pubkey
-      case 'active':
-        return !isExpired
-      default:
-        return true
+    setSearching(true)
+    setSearchedGoal(null)
+
+    try {
+      let eventId = null
+      let relayHints = []
+      let authorHint = null
+
+      const query = searchQuery.trim()
+
+      // Try to decode nevent
+      if (query.startsWith('nevent1')) {
+        try {
+          const decoded = nip19.decode(query)
+          if (decoded.type === 'nevent') {
+            eventId = decoded.data.id
+            relayHints = decoded.data.relays || []
+            authorHint = decoded.data.author
+          }
+        } catch {}
+      }
+      // Try to decode note
+      else if (query.startsWith('note1')) {
+        try {
+          const decoded = nip19.decode(query)
+          if (decoded.type === 'note') {
+            eventId = decoded.data
+          }
+        } catch {}
+      }
+      // Assume hex ID
+      else if (/^[a-f0-9]{64}$/i.test(query)) {
+        eventId = query.toLowerCase()
+      }
+
+      if (!eventId) {
+        alert('有効なイベントIDを入力してください（nevent, note, またはhex形式）')
+        return
+      }
+
+      // Fetch the goal event
+      const searchRelays = relayHints.length > 0
+        ? [...new Set([...relayHints, ...ZAP_GOAL_RELAYS])]
+        : ZAP_GOAL_RELAYS
+
+      const goalFilter = {
+        ids: [eventId],
+        kinds: [KIND_ZAP_GOAL]
+      }
+
+      const foundGoals = await fastFetch(goalFilter, searchRelays)
+
+      if (foundGoals.length === 0) {
+        alert('Zap Goalが見つかりませんでした')
+        return
+      }
+
+      const foundGoal = foundGoals[0]
+
+      // Fetch zap receipts for this goal
+      const zapFilter = {
+        kinds: [KIND_ZAP_RECEIPT],
+        '#e': [foundGoal.id],
+        limit: 100
+      }
+      const zaps = await fastFetch(zapFilter, searchRelays)
+
+      // Merge zap receipts
+      setZapReceipts(prev => {
+        const existing = new Set(prev.map(z => z.id))
+        const newZaps = zaps.filter(z => !existing.has(z.id))
+        return [...prev, ...newZaps]
+      })
+
+      // Fetch profile of goal creator
+      const profileFilter = {
+        kinds: [0],
+        authors: [foundGoal.pubkey]
+      }
+      const profileEvents = await fastFetch(profileFilter, searchRelays)
+
+      if (profileEvents.length > 0) {
+        const latestProfile = profileEvents.reduce((latest, event) =>
+          !latest || event.created_at > latest.created_at ? event : latest
+        , null)
+
+        if (latestProfile) {
+          try {
+            setProfiles(prev => ({
+              ...prev,
+              [foundGoal.pubkey]: {
+                ...JSON.parse(latestProfile.content),
+                created_at: latestProfile.created_at
+              }
+            }))
+          } catch {}
+        }
+      }
+
+      // Fetch profiles of zappers
+      const zapperPubkeys = new Set()
+      zaps.forEach(zap => {
+        const descTag = zap.tags.find(t => t[0] === 'description')
+        if (descTag) {
+          try {
+            const desc = JSON.parse(descTag[1])
+            if (desc.pubkey) {
+              zapperPubkeys.add(desc.pubkey)
+            }
+          } catch {}
+        }
+      })
+
+      if (zapperPubkeys.size > 0) {
+        const zapperProfileFilter = {
+          kinds: [0],
+          authors: [...zapperPubkeys]
+        }
+        const zapperProfileEvents = await fastFetch(zapperProfileFilter, searchRelays)
+
+        setProfiles(prev => {
+          const updated = { ...prev }
+          zapperProfileEvents.forEach(event => {
+            if (!updated[event.pubkey] || event.created_at > updated[event.pubkey].created_at) {
+              try {
+                updated[event.pubkey] = {
+                  ...JSON.parse(event.content),
+                  created_at: event.created_at
+                }
+              } catch {}
+            }
+          })
+          return updated
+        })
+      }
+
+      setSearchedGoal(foundGoal)
+      setSelectedGoal(foundGoal)
+    } catch (e) {
+      console.error('Search failed:', e)
+      alert('検索に失敗しました')
+    } finally {
+      setSearching(false)
     }
-  })
+  }
+
+  const handleShareToTimelineLocal = (nevent) => {
+    if (onShareToTimeline) {
+      onShareToTimeline(nevent)
+    }
+  }
 
   return (
     <div className="space-y-4">
+      {/* Search Section */}
+      <div className="bg-[var(--bg-tertiary)] rounded-xl p-3">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="イベントID (nevent, note, hex)で検索..."
+            className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg border border-[var(--border-color)] focus:outline-none focus:border-[var(--line-green)] text-sm"
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+          />
+          <button
+            onClick={handleSearch}
+            disabled={searching || !searchQuery.trim()}
+            className="px-4 py-2 bg-[var(--line-green)] text-white rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
+          >
+            {searching ? '...' : '検索'}
+          </button>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setViewMode('all')}
-            className={`px-3 py-1 text-sm rounded-full transition-colors ${
-              viewMode === 'all'
-                ? 'bg-[var(--line-green)] text-white'
-                : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
-            }`}
-          >
-            すべて
-          </button>
-          <button
-            onClick={() => setViewMode('active')}
-            className={`px-3 py-1 text-sm rounded-full transition-colors ${
-              viewMode === 'active'
-                ? 'bg-[var(--line-green)] text-white'
-                : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
-            }`}
-          >
-            進行中
-          </button>
-          <button
-            onClick={() => setViewMode('mine')}
-            className={`px-3 py-1 text-sm rounded-full transition-colors ${
-              viewMode === 'mine'
-                ? 'bg-[var(--line-green)] text-white'
-                : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
-            }`}
-          >
-            自分の目標
-          </button>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={loadGoals}
-            disabled={loading}
-            className="p-2 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
-            title="更新"
-          >
-            <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M23 4v6h-6M1 20v-6h6"/>
-              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-            </svg>
-          </button>
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="px-4 py-2 bg-[var(--line-green)] text-white rounded-lg hover:opacity-80 transition-opacity"
-          >
-            + 新規作成
-          </button>
-        </div>
+        <h3 className="font-semibold text-[var(--text-primary)]">自分のZap Goal</h3>
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="px-4 py-2 bg-[var(--line-green)] text-white rounded-lg hover:opacity-80 transition-opacity text-sm"
+        >
+          + 新規作成
+        </button>
       </div>
 
       {/* Create Form */}
@@ -797,14 +988,14 @@ export default function ZapGoalApp({ pubkey }) {
       )}
 
       {/* Goals Grid */}
-      {!loading && filteredGoals.length === 0 && (
+      {!loading && goals.length === 0 && (
         <div className="text-center py-8 text-[var(--text-secondary)]">
-          {viewMode === 'mine' ? '自分のZap Goalはまだありません' : 'Zap Goalが見つかりません'}
+          Zap Goalはまだありません
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {filteredGoals.map(goal => (
+      <div className="grid gap-4">
+        {goals.map(goal => (
           <GoalCard
             key={goal.id}
             goal={goal}
@@ -822,8 +1013,12 @@ export default function ZapGoalApp({ pubkey }) {
           zapReceipts={zapReceipts}
           profiles={profiles}
           onClose={() => setSelectedGoal(null)}
+          onShareToTimeline={handleShareToTimelineLocal}
         />
       )}
     </div>
   )
 }
+
+// Export for use in TimelineTab
+export { KIND_ZAP_GOAL, ZAP_GOAL_RELAYS, fastFetch, formatSats, formatDate }

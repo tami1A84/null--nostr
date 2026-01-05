@@ -61,6 +61,149 @@ function Nip05Badge({ nip05, pubkey }) {
   )
 }
 
+// NIP-75 Zap Goal kind
+const KIND_ZAP_GOAL = 9041
+const KIND_ZAP_RECEIPT = 9735
+
+// Format sats amount for Zap Goal
+function formatGoalSats(msats) {
+  const sats = Math.floor(msats / 1000)
+  if (sats >= 1000000) {
+    return `${(sats / 1000000).toFixed(2)}M`
+  } else if (sats >= 1000) {
+    return `${(sats / 1000).toFixed(1)}K`
+  }
+  return sats.toLocaleString()
+}
+
+// Embedded Zap Goal component for kind:9041
+function EmbeddedZapGoal({ goal, profile }) {
+  const [zapReceipts, setZapReceipts] = useState([])
+  const [loadingZaps, setLoadingZaps] = useState(true)
+
+  const amountTag = goal.tags.find(t => t[0] === 'amount')
+  const targetMsats = amountTag ? parseInt(amountTag[1]) : 0
+
+  const closedAtTag = goal.tags.find(t => t[0] === 'closed_at')
+  const closedAt = closedAtTag ? parseInt(closedAtTag[1]) : null
+  const isExpired = closedAt && closedAt < Math.floor(Date.now() / 1000)
+
+  const summaryTag = goal.tags.find(t => t[0] === 'summary')
+  const summary = summaryTag ? summaryTag[1] : null
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadZaps = async () => {
+      try {
+        const zaps = await fetchEvents(
+          { kinds: [KIND_ZAP_RECEIPT], '#e': [goal.id], limit: 100 },
+          RELAYS
+        )
+        if (mounted) {
+          setZapReceipts(zaps)
+        }
+      } catch (e) {
+        console.log('Failed to load zap receipts:', e)
+      } finally {
+        if (mounted) setLoadingZaps(false)
+      }
+    }
+
+    loadZaps()
+    return () => { mounted = false }
+  }, [goal.id])
+
+  const receivedMsats = zapReceipts.reduce((sum, zap) => {
+    const descTag = zap.tags.find(t => t[0] === 'description')
+    if (descTag) {
+      try {
+        const desc = JSON.parse(descTag[1])
+        const amountTag = desc.tags?.find(t => t[0] === 'amount')
+        if (amountTag) {
+          return sum + parseInt(amountTag[1])
+        }
+      } catch {}
+    }
+    return sum
+  }, 0)
+
+  const progress = targetMsats > 0 ? Math.min((receivedMsats / targetMsats) * 100, 100) : 0
+
+  return (
+    <div className="border border-[var(--border-color)] rounded-lg p-3 my-2 bg-[var(--bg-secondary)]">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-5 h-5 rounded-full overflow-hidden bg-[var(--bg-tertiary)] flex-shrink-0">
+          {profile?.picture ? (
+            <img
+              src={getImageUrl(profile.picture)}
+              alt=""
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+              onError={(e) => { e.target.style.display = 'none' }}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <svg className="w-3 h-3 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+              </svg>
+            </div>
+          )}
+        </div>
+        <span className="text-xs font-medium text-[var(--text-primary)] truncate">
+          {profile?.name || shortenPubkey(goal.pubkey, 6)}
+        </span>
+        <span className="text-xs text-yellow-500 font-medium flex items-center gap-1">
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          Zap Goal
+        </span>
+        {isExpired && (
+          <span className="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">終了</span>
+        )}
+      </div>
+
+      {/* Title */}
+      <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">
+        {goal.content}
+      </p>
+
+      {/* Summary */}
+      {summary && (
+        <p className="text-xs text-[var(--text-secondary)] mb-2 line-clamp-2">
+          {summary}
+        </p>
+      )}
+
+      {/* Progress */}
+      <div className="mb-1">
+        <div className="flex justify-between text-xs mb-1">
+          <span className="text-[var(--text-secondary)]">
+            {loadingZaps ? '...' : formatGoalSats(receivedMsats)} / {formatGoalSats(targetMsats)} sats
+          </span>
+          <span className="text-[var(--line-green)] font-medium">
+            {progress.toFixed(1)}%
+          </span>
+        </div>
+        <div className="h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+          <div
+            className="h-full bg-[var(--line-green)] rounded-full transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="text-xs text-[var(--text-tertiary)]">
+        {formatTimestamp(goal.created_at)}
+        {closedAt && !isExpired && ` · 期限: ${new Date(closedAt * 1000).toLocaleDateString('ja-JP')}`}
+      </div>
+    </div>
+  )
+}
+
 // Embedded note component for nostr:note1... and nostr:nevent1...
 function EmbeddedNote({ noteId, relays }) {
   const [note, setNote] = useState(null)
@@ -70,19 +213,20 @@ function EmbeddedNote({ noteId, relays }) {
 
   useEffect(() => {
     let mounted = true
-    
+
     const loadNote = async () => {
       try {
+        // Fetch without kind filter to support any event type including Zap Goals
         const events = await fetchEvents(
           { ids: [noteId], limit: 1 },
           relays?.length ? relays : RELAYS
         )
-        
+
         if (!mounted) return
-        
+
         if (events.length > 0) {
           setNote(events[0])
-          
+
           const profileEvents = await fetchEvents(
             { kinds: [0], authors: [events[0].pubkey], limit: 1 },
             RELAYS
@@ -122,6 +266,11 @@ function EmbeddedNote({ noteId, relays }) {
         📝 引用ノートを読み込めませんでした
       </div>
     )
+  }
+
+  // Handle Zap Goal (kind:9041) specially
+  if (note.kind === KIND_ZAP_GOAL) {
+    return <EmbeddedZapGoal goal={note} profile={profile} />
   }
 
   // Extract images and URLs from content
