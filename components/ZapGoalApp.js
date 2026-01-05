@@ -585,7 +585,7 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
           </div>
 
           {/* Zap Support Section */}
-          {!isExpired && profile?.lud16 && (
+          {!isExpired && (
             <div className="bg-[var(--bg-tertiary)] rounded-xl p-3 space-y-3">
               <h3 className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
                 <svg className="w-5 h-5 text-yellow-500" viewBox="0 0 24 24" fill="currentColor">
@@ -593,35 +593,43 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
                 </svg>
                 Zap支援
               </h3>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={zapAmount}
-                  onChange={(e) => setZapAmount(e.target.value)}
-                  placeholder="金額 (sats)"
-                  min="1"
-                  className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg border border-[var(--border-color)] focus:outline-none focus:border-[var(--line-green)]"
-                  disabled={zapping}
-                />
-                <button
-                  onClick={handleZap}
-                  disabled={zapping}
-                  className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50 font-semibold"
-                >
-                  {zapping ? '...' : '⚡ Zap'}
-                </button>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {[21, 100, 500, 1000].map(amount => (
-                  <button
-                    key={amount}
-                    onClick={() => setZapAmount(String(amount))}
-                    className="px-3 py-1 text-sm bg-[var(--bg-secondary)] text-[var(--text-secondary)] rounded-full hover:bg-[var(--line-green)] hover:text-white transition-colors"
-                  >
-                    {amount} sats
-                  </button>
-                ))}
-              </div>
+              {profile?.lud16 ? (
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={zapAmount}
+                      onChange={(e) => setZapAmount(e.target.value)}
+                      placeholder="金額 (sats)"
+                      min="1"
+                      className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg border border-[var(--border-color)] focus:outline-none focus:border-[var(--line-green)]"
+                      disabled={zapping}
+                    />
+                    <button
+                      onClick={handleZap}
+                      disabled={zapping}
+                      className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50 font-semibold"
+                    >
+                      {zapping ? '...' : '⚡ Zap'}
+                    </button>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {[21, 100, 500, 1000].map(amount => (
+                      <button
+                        key={amount}
+                        onClick={() => setZapAmount(String(amount))}
+                        className="px-3 py-1 text-sm bg-[var(--bg-secondary)] text-[var(--text-secondary)] rounded-full hover:bg-[var(--line-green)] hover:text-white transition-colors"
+                      >
+                        {amount} sats
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-[var(--text-tertiary)]">
+                  この目標の作成者はLightningアドレスを設定していないため、Zapを送れません。
+                </p>
+              )}
             </div>
           )}
 
