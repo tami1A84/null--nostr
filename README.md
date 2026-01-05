@@ -65,6 +65,9 @@
   - 全イベントのJSON形式エクスポート
   - 保護イベント（NIP-70）の適切な処理
   - バックアップからのイベントインポート
+- NIP-62削除リクエスト
+  - 特定リレーへの削除リクエスト
+  - 全リレーへの削除リクエスト
 
 ### PWA
 
@@ -130,22 +133,178 @@ npm run dev
 | NIP-05 | NIP-05認証・検証・検索 |
 | NIP-07 | ブラウザ拡張機能（Alby, nos2x等） |
 | NIP-09 | Event Deletion（投稿削除、いいね取消、リポスト取消） |
+| NIP-11 | Relay Information Document（リレー情報取得） |
 | NIP-17 | Private Direct Messages（kind 15/10050対応） |
 | NIP-19 | bech32エンコード（npub/nsec/note/nevent/naddr） |
 | NIP-25 | Reactions（いいね/いいね取消） |
 | NIP-27 | Text Note References |
 | NIP-30 | Custom Emoji |
 | NIP-32 | Labeling（Birdwatchコンテキスト追加・評価） |
+| NIP-42 | Client Authentication（リレー認証） |
 | NIP-44 | Encrypted Payloads |
 | NIP-46 | Nostr Connect（nsec.app等リモート署名） |
 | NIP-50 | Search Capability（[searchnos](https://github.com/darashi/searchnos)使用） |
 | NIP-51 | Mute List |
+| NIP-55 | Amber Android Signer |
 | NIP-56 | Reporting（通報機能） |
 | NIP-57 | Lightning Zaps |
 | NIP-58 | Badges（表示・プロフィールバッジ管理） |
 | NIP-59 | Gift Wrap |
+| NIP-62 | Request to Vanish（削除リクエスト） |
 | NIP-70 | Protected Events（保護イベントの検出・作成） |
 | NIP-98 | HTTP Auth（画像アップロード用） |
+
+---
+
+## NIP-11: Relay Information Document
+
+リレーの情報ドキュメントを取得・管理する機能を提供します。
+
+### Functions
+
+| Function | Description |
+|----------|-------------|
+| `fetchRelayInfo(relayUrl)` | リレー情報ドキュメントの取得 |
+| `getRelaySupportedNips(relayUrl)` | サポートNIP一覧取得 |
+| `relaySupportsNip(relayUrl, nip)` | 特定NIPサポート確認 |
+| `getRelayLimitations(relayUrl)` | リレー制限情報取得 |
+| `relayRequiresAuth(relayUrl)` | 認証要否確認 |
+| `relayRequiresPayment(relayUrl)` | 支払い要否確認 |
+| `getRelayInfoForDisplay(relayUrl)` | 表示用リレー情報取得 |
+| `clearRelayInfoCache(relayUrl?)` | キャッシュクリア |
+
+### Features
+
+- **1時間キャッシュ**による効率化
+- Accept: `application/nostr+json` ヘッダー対応
+- 制限情報（`limitation`）の取得
+- 対応言語・国情報の取得
+- 支払い情報・投稿ポリシーの取得
+
+---
+
+## NIP-42: Client Authentication
+
+リレーとの認証を管理する機能を提供します。
+
+### Functions
+
+| Function | Description |
+|----------|-------------|
+| `handleAuthChallenge(relayUrl, challenge)` | AUTHチャレンジ処理 |
+| `createAuthEvent(relayUrl, challenge)` | 認証イベント作成 (kind 22242) |
+| `authenticateWithRelay(relayUrl, challenge)` | リレー認証実行 |
+| `getPendingAuthChallenge(relayUrl)` | 保留中チャレンジ取得 |
+| `markRelayAuthenticated(relayUrl, pubkey)` | 認証状態管理 |
+| `isRelayAuthenticated(relayUrl)` | 認証状態確認 |
+| `getRelayAuthPubkey(relayUrl)` | 認証済み公開鍵取得 |
+| `clearRelayAuth(relayUrl?)` | 認証状態クリア |
+| `isAuthRequiredMessage(message)` | auth-requiredメッセージ解析 |
+
+### Features
+
+- **10分間有効なチャレンジ管理**
+- **24時間有効な認証状態管理**
+- kind 22242 認証イベントの自動作成・署名
+- `auth-required` CLOSEDメッセージの解析
+- リレーごとの認証状態追跡
+
+---
+
+## NIP-62: Request to Vanish
+
+リレーからのデータ削除をリクエストする機能を提供します。
+
+### Functions
+
+| Function | Description |
+|----------|-------------|
+| `createVanishRequest(options)` | 削除リクエストイベント作成 (kind 62) |
+| `requestVanish(options)` | 削除リクエスト送信 |
+| `requestVanishFromRelay(relayUrl, reason?)` | 特定リレーへの削除リクエスト |
+| `requestGlobalVanish(reason?, additionalRelays?)` | 全リレーへの削除リクエスト |
+| `isVanishRequest(event)` | イベント種類判定 |
+| `getVanishTargetRelays(event)` | 対象リレー取得 |
+| `isGlobalVanishRequest(event)` | グローバルリクエスト判定 |
+
+### Features
+
+- `ALL_RELAYS` タグによるグローバル削除リクエスト
+- 特定リレーを指定した削除リクエスト
+- 削除理由（reason）の指定
+- 複数リレーへの同時ブロードキャスト
+
+### Usage Example
+
+```javascript
+import { requestVanishFromRelay, requestGlobalVanish } from './lib/nostr'
+
+// 特定リレーからの削除
+await requestVanishFromRelay('wss://relay.example.com', '個人情報の削除')
+
+// 全リレーからの削除（注意: 不可逆）
+await requestGlobalVanish('アカウント削除のため')
+```
+
+---
+
+## Security
+
+### Secure Key Storage
+
+秘密鍵はモジュールプライベートなクロージャに保存され、グローバルスコープからアクセスできません。
+
+- ページアンロード時に自動クリア
+- ゼロフィルによる安全な削除
+- `window` オブジェクトへの露出なし
+
+### Input Validation (`lib/validation.js`)
+
+入力検証とサニタイズのユーティリティを提供します。
+
+| Function | Description |
+|----------|-------------|
+| `escapeHtml(str)` | HTML エンティティエスケープ |
+| `sanitizeText(text)` | テキストサニタイズ |
+| `validateUrl(url, options)` | URL検証 |
+| `isValidRelayUrl(url)` | リレーURL検証 |
+| `isValidPubkey(pubkey)` | 公開鍵検証 |
+| `isValidEventId(eventId)` | イベントID検証 |
+| `isValidNip05(nip05)` | NIP-05識別子検証 |
+| `validateEventContent(content, kind)` | イベントコンテンツ検証 |
+| `validateEventTags(tags)` | イベントタグ検証 |
+| `validateProfile(profile)` | プロフィール検証 |
+
+### Error Handling (`lib/errors.js`)
+
+構造化されたエラーハンドリングを提供します。
+
+| Error Class | Description |
+|-------------|-------------|
+| `NostrError` | 基本エラークラス |
+| `NetworkError` | ネットワークエラー |
+| `AuthError` | 認証エラー |
+| `EncryptionError` | 暗号化エラー |
+| `ValidationError` | 検証エラー |
+| `RelayError` | リレーエラー |
+| `EventError` | イベントエラー |
+| `StorageError` | ストレージエラー |
+
+### Security Utilities (`lib/security.js`)
+
+セキュリティ関連のユーティリティを提供します。
+
+| Function | Description |
+|----------|-------------|
+| `generateSecureToken()` | 暗号学的安全なトークン生成 |
+| `getCsrfToken()` | CSRFトークン取得 |
+| `validateCsrfToken(token)` | CSRFトークン検証 |
+| `secureStore(key, value)` | 暗号化ストレージ保存 |
+| `secureRetrieve(key)` | 暗号化ストレージ取得 |
+| `analyzeContentSecurity(content)` | コンテンツセキュリティ分析 |
+| `sanitizeContent(content)` | 危険なコンテンツの除去 |
+| `getBrowserFingerprint()` | ブラウザフィンガープリント |
+| `initSessionSecurity()` | セッションセキュリティ初期化 |
 
 ---
 
@@ -174,6 +333,7 @@ npm run dev
 - カスタム絵文字・バッジのキャッシュ
 - バッチプロフィール取得
 - バッジ定義の複数リレー検索
+- リレー情報の1時間キャッシュ（NIP-11）
 
 ---
 
@@ -197,8 +357,12 @@ lib/
   connection-manager.js   WebSocket pool management
   cache.js           Data caching layer
   secure-key-store.js     Secure key storage
+  validation.js      Input validation & sanitization
+  errors.js          Custom error classes
+  security.js        Security utilities
   nip46.js           Nostr Connect
   imageUtils.js      Image processing
+  constants.js       Application constants
 ```
 
 ---
