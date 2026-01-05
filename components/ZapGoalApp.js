@@ -543,7 +543,7 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
           </div>
 
           {summary && (
-            <p className="text-[var(--text-secondary)]">
+            <p className="text-[var(--text-secondary)] whitespace-pre-wrap break-words">
               {summary}
             </p>
           )}
@@ -943,14 +943,14 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="イベントID (nevent, note, hex)で検索..."
-            className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg border border-[var(--border-color)] focus:outline-none focus:border-[var(--line-green)] text-sm"
+            placeholder="nevent/note/hexで検索..."
+            className="flex-1 min-w-0 px-3 py-2 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg border border-[var(--border-color)] focus:outline-none focus:border-[var(--line-green)] text-sm"
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           />
           <button
             onClick={handleSearch}
             disabled={searching || !searchQuery.trim()}
-            className="px-4 py-2 bg-[var(--line-green)] text-white rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
+            className="px-3 py-2 bg-[var(--line-green)] text-white rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50 text-sm shrink-0"
           >
             {searching ? '...' : '検索'}
           </button>

@@ -172,7 +172,7 @@ function EmbeddedZapGoal({ goal, profile }) {
 
       {/* Summary */}
       {summary && (
-        <p className="text-xs text-[var(--text-secondary)] mb-2 line-clamp-2">
+        <p className="text-xs text-[var(--text-secondary)] mb-2 whitespace-pre-wrap break-words line-clamp-4">
           {summary}
         </p>
       )}
@@ -459,6 +459,15 @@ export default function PostItem({
   const [showReportModal, setShowReportModal] = useState(false)
   const [showBirdwatchModal, setShowBirdwatchModal] = useState(false)
   const displayProfile = isRepost ? profiles?.[post.pubkey] : profile
+
+  // Handle Zap Goal (kind:9041) as a special case
+  if (post.kind === KIND_ZAP_GOAL) {
+    return (
+      <div className="p-4 bg-[var(--bg-secondary)] border-b border-[var(--border-color)]">
+        <EmbeddedZapGoal goal={post} profile={profile} />
+      </div>
+    )
+  }
 
   // Extract content warning tag (NIP-36)
   const cwTag = post.tags?.find(t => t[0] === 'content-warning')
