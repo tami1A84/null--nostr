@@ -24,6 +24,8 @@
 ### Talk
 
 - NIP-17 暗号化DM（NIP-44/59対応）
+  - kind 15 ファイルメッセージ対応
+  - kind 10050 DMリレーリスト対応
 - リアルタイムメッセージ送受信
 - 会話リスト表示
 - プロフィールからDM開始
@@ -59,6 +61,10 @@
   - 獲得済みバッジ表示（kind:8アワード）
   - プロフィールバッジ追加/削除（kind:30008）
 - パスキー設定（秘密鍵エクスポート/自動署名）
+- イベントバックアップ
+  - 全イベントのJSON形式エクスポート
+  - 保護イベント（NIP-70）の適切な処理
+  - バックアップからのイベントインポート
 
 ### PWA
 
@@ -124,7 +130,7 @@ npm run dev
 | NIP-05 | NIP-05認証・検証・検索 |
 | NIP-07 | ブラウザ拡張機能（Alby, nos2x等） |
 | NIP-09 | Event Deletion（投稿削除、いいね取消、リポスト取消） |
-| NIP-17 | Private Direct Messages |
+| NIP-17 | Private Direct Messages（kind 15/10050対応） |
 | NIP-19 | bech32エンコード（npub/nsec/note/nevent/naddr） |
 | NIP-25 | Reactions（いいね/いいね取消） |
 | NIP-27 | Text Note References |
@@ -138,6 +144,7 @@ npm run dev
 | NIP-57 | Lightning Zaps |
 | NIP-58 | Badges（表示・プロフィールバッジ管理） |
 | NIP-59 | Gift Wrap |
+| NIP-70 | Protected Events（保護イベントの検出・作成） |
 | NIP-98 | HTTP Auth（画像アップロード用） |
 
 ---
