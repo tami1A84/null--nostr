@@ -11,6 +11,7 @@ import {
   encodeNpub,
   RELAYS
 } from '@/lib/nostr'
+import { getImageUrl } from '@/lib/imageUtils'
 import BadgeDisplay from './BadgeDisplay'
 import URLPreview from './URLPreview'
 import ReportModal from './ReportModal'
@@ -148,7 +149,7 @@ function EmbeddedNote({ noteId, relays }) {
         <div className="w-5 h-5 rounded-full overflow-hidden bg-[var(--bg-tertiary)] flex-shrink-0">
           {profile?.picture ? (
             <img
-              src={profile.picture}
+              src={getImageUrl(profile.picture)}
               alt=""
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
@@ -187,12 +188,13 @@ function EmbeddedNote({ noteId, relays }) {
       {images.length > 0 && (
         <div className={`mt-2 ${images.length > 1 ? 'grid grid-cols-2 gap-1' : ''}`}>
           {images.slice(0, 2).map((img, i) => (
-            <img 
+            <img
               key={i}
-              src={img} 
-              alt="" 
+              src={getImageUrl(img)}
+              alt=""
               className="rounded-md max-h-32 w-full object-cover"
               loading="lazy"
+              referrerPolicy="no-referrer"
             />
           ))}
           {images.length > 2 && (
@@ -373,13 +375,14 @@ export default function PostItem({
       // Add emoji image or keep original text
       if (emojiUrl) {
         parts.push(
-          <img 
+          <img
             key={`emoji-${match.index}`}
-            src={emojiUrl} 
+            src={getImageUrl(emojiUrl)}
             alt={`:${shortcode}:`}
             title={`:${shortcode}:`}
             className="inline-block w-5 h-5 align-middle mx-0.5"
             loading="lazy"
+            referrerPolicy="no-referrer"
           />
         )
       } else {
@@ -512,10 +515,11 @@ export default function PostItem({
         return (
           <div className="mt-2">
             <img
-              src={images[0]}
+              src={getImageUrl(images[0])}
               alt=""
               className="rounded-lg max-h-72 w-full object-cover cursor-pointer"
               loading="lazy"
+              referrerPolicy="no-referrer"
               onClick={(e) => {
                 e.stopPropagation()
                 window.open(images[0], '_blank')
@@ -538,13 +542,14 @@ export default function PostItem({
               }`}
             >
               <img
-                src={url}
+                src={getImageUrl(url)}
                 alt=""
                 className={`rounded-lg w-full object-cover cursor-pointer ${
                   images.length === 3 && idx === 0 ? 'h-full' : 'h-36'
                 }`}
                 style={{ maxHeight: images.length === 3 && idx === 0 ? '296px' : '144px' }}
                 loading="lazy"
+                referrerPolicy="no-referrer"
                 onClick={(e) => {
                   e.stopPropagation()
                   window.open(url, '_blank')
@@ -568,10 +573,11 @@ export default function PostItem({
           {showAllImages && images.slice(maxVisibleImages).map((url, idx) => (
             <div key={`extra-${idx}`} className="relative">
               <img
-                src={url}
+                src={getImageUrl(url)}
                 alt=""
                 className="rounded-lg w-full h-36 object-cover cursor-pointer"
                 loading="lazy"
+                referrerPolicy="no-referrer"
                 onClick={(e) => {
                   e.stopPropagation()
                   window.open(url, '_blank')
@@ -713,7 +719,7 @@ export default function PostItem({
         >
           {displayProfile?.picture ? (
             <img
-              src={displayProfile.picture}
+              src={getImageUrl(displayProfile.picture)}
               alt=""
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"

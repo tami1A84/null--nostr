@@ -27,6 +27,7 @@ import {
   RELAYS,
   SEARCH_RELAY
 } from '@/lib/nostr'
+import { getImageUrl } from '@/lib/imageUtils'
 import PostItem from './PostItem'
 import BadgeDisplay from './BadgeDisplay'
 
@@ -681,7 +682,7 @@ export default function UserProfileView({
                 <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-[var(--bg-primary)] bg-[var(--bg-tertiary)]">
                   {profile?.picture ? (
                     <img
-                      src={profile.picture}
+                      src={getImageUrl(profile.picture)}
                       alt=""
                       className="w-full h-full object-cover"
                       referrerPolicy="no-referrer"
