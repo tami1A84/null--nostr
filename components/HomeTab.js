@@ -23,7 +23,7 @@ import {
   DEFAULT_RELAY,
   RELAYS
 } from '@/lib/nostr'
-import { uploadImagesInParallel } from '@/lib/imageUtils'
+import { uploadImagesInParallel, getImageUrl } from '@/lib/imageUtils'
 import { setCachedProfile, getCachedProfile, setCachedFollowList } from '@/lib/cache'
 import PostItem from './PostItem'
 import UserProfileView from './UserProfileView'
@@ -944,10 +944,11 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
               <div className="relative -mt-10">
                 <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-[var(--bg-primary)] bg-[var(--bg-tertiary)]">
                   {profile?.picture ? (
-                    <img 
-                      src={profile.picture} 
-                      alt="" 
+                    <img
+                      src={getImageUrl(profile.picture)}
+                      alt=""
                       className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -1126,9 +1127,10 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                           className="flex items-center gap-3 flex-1 min-w-0 text-left"
                         >
                           <img
-                            src={p?.picture || `https://api.dicebear.com/7.x/identicon/svg?seed=${pk}`}
+                            src={p?.picture ? getImageUrl(p.picture) : `https://api.dicebear.com/7.x/identicon/svg?seed=${pk}`}
                             alt=""
                             className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                            referrerPolicy="no-referrer"
                             onError={(e) => {
                               e.target.src = `https://api.dicebear.com/7.x/identicon/svg?seed=${pk}`
                             }}

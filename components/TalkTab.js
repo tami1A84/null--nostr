@@ -14,7 +14,7 @@ import {
   getAllCachedProfiles,
   RELAYS
 } from '@/lib/nostr'
-import { uploadImagesInParallel } from '@/lib/imageUtils'
+import { uploadImagesInParallel, getImageUrl } from '@/lib/imageUtils'
 import EmojiPicker from './EmojiPicker'
 import URLPreview from './URLPreview'
 
@@ -871,7 +871,7 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
                 >
                   <div className="w-12 h-12 rounded-full overflow-hidden bg-[var(--bg-tertiary)] flex-shrink-0">
                     {profile?.picture ? (
-                      <img src={profile.picture} alt="" className="w-full h-full object-cover" />
+                      <img src={getImageUrl(profile.picture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <svg className="w-6 h-6 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="currentColor">
@@ -920,7 +920,7 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
           </button>
           <div className="w-9 h-9 rounded-full overflow-hidden bg-[var(--bg-tertiary)] flex-shrink-0">
             {chatProfile?.picture ? (
-              <img src={chatProfile.picture} alt="" className="w-full h-full object-cover" />
+              <img src={getImageUrl(chatProfile.picture)} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
                 <svg className="w-5 h-5 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="currentColor">
