@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { nip19 } from 'nostr-tools'
 import {
   parseProfile,
   signEventNip07,
   publishEvent,
+  deleteEvent,
   getDefaultRelay,
   shortenPubkey,
-  fetchLightningInvoice
+  fetchLightningInvoice,
+  getUploadServer
 } from '@/lib/nostr'
 
 // NIP-75 Zap Goal event kind
@@ -106,7 +108,22 @@ function formatDate(timestamp) {
   })
 }
 
-// Format sats amount
+// Parse amount from tag - handle both msats and sats (some clients use sats directly)
+function parseAmount(amountStr) {
+  const amount = parseInt(amountStr)
+  if (isNaN(amount)) return 0
+  // If amount is very large (>1M), assume it's already in msats
+  // If small, assume it's in sats and needs no conversion
+  // NIP-75 specifies msats, but some clients use sats
+  // Heuristic: if divisible by 1000 and > 1000, treat as msats
+  if (amount >= 1000 && amount % 1000 === 0) {
+    return amount // msats
+  }
+  // Otherwise treat as sats and convert to msats
+  return amount * 1000
+}
+
+// Format sats amount (input is msats)
 function formatSats(msats) {
   const sats = Math.floor(msats / 1000)
   if (sats >= 1000000) {
@@ -133,15 +150,74 @@ async function copyToClipboard(text) {
   }
 }
 
+// Upload image to server
+async function uploadImage(file) {
+  const uploadServer = getUploadServer()
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  let uploadUrl = 'https://nostr.build/api/v2/upload/files'
+
+  if (uploadServer === 'nostrcheck.me') {
+    uploadUrl = 'https://nostrcheck.me/api/v2/media'
+  } else if (uploadServer === 'void.cat') {
+    uploadUrl = 'https://void.cat/upload'
+  }
+
+  const response = await fetch(uploadUrl, {
+    method: 'POST',
+    body: formData
+  })
+
+  if (!response.ok) {
+    throw new Error('Upload failed')
+  }
+
+  const result = await response.json()
+
+  // Handle different response formats
+  if (result.data?.[0]?.url) {
+    return result.data[0].url
+  } else if (result.url) {
+    return result.url
+  } else if (result.file?.url) {
+    return result.file.url
+  }
+
+  throw new Error('Could not get URL from upload response')
+}
+
 // Create Zap Goal Form Component
 function CreateGoalForm({ pubkey, onCreated, onCancel }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [targetAmount, setTargetAmount] = useState('')
-  const [closedAt, setClosedAt] = useState('')
+  const [closedAtDate, setClosedAtDate] = useState('')
+  const [closedAtTime, setClosedAtTime] = useState('23:59')
   const [imageUrl, setImageUrl] = useState('')
   const [creating, setCreating] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState(null)
+  const fileInputRef = useRef(null)
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    setError(null)
+
+    try {
+      const url = await uploadImage(file)
+      setImageUrl(url)
+    } catch (e) {
+      console.error('Failed to upload image:', e)
+      setError('画像のアップロードに失敗しました')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -166,8 +242,9 @@ function CreateGoalForm({ pubkey, onCreated, onCancel }) {
         ['relays', ...ZAP_GOAL_RELAYS]
       ]
 
-      if (closedAt) {
-        const closedAtTimestamp = Math.floor(new Date(closedAt).getTime() / 1000)
+      if (closedAtDate) {
+        const dateTimeStr = closedAtTime ? `${closedAtDate}T${closedAtTime}` : `${closedAtDate}T23:59`
+        const closedAtTimestamp = Math.floor(new Date(dateTimeStr).getTime() / 1000)
         tags.push(['closed_at', String(closedAtTimestamp)])
       }
 
@@ -252,27 +329,63 @@ function CreateGoalForm({ pubkey, onCreated, onCancel }) {
         <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           期限（オプション）
         </label>
-        <input
-          type="datetime-local"
-          value={closedAt}
-          onChange={(e) => setClosedAt(e.target.value)}
-          className="w-full px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg border border-[var(--border-color)] focus:outline-none focus:border-[var(--line-green)]"
-          disabled={creating}
-        />
+        <div className="flex gap-2">
+          <input
+            type="date"
+            value={closedAtDate}
+            onChange={(e) => setClosedAtDate(e.target.value)}
+            className="flex-1 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg border border-[var(--border-color)] focus:outline-none focus:border-[var(--line-green)]"
+            disabled={creating}
+          />
+          <input
+            type="time"
+            value={closedAtTime}
+            onChange={(e) => setClosedAtTime(e.target.value)}
+            className="w-24 px-2 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg border border-[var(--border-color)] focus:outline-none focus:border-[var(--line-green)]"
+            disabled={creating}
+          />
+        </div>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-          画像URL（オプション）
+          画像（オプション）
         </label>
-        <input
-          type="url"
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-          placeholder="https://..."
-          className="w-full px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg border border-[var(--border-color)] focus:outline-none focus:border-[var(--line-green)]"
-          disabled={creating}
-        />
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="https://..."
+              className="flex-1 min-w-0 px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg border border-[var(--border-color)] focus:outline-none focus:border-[var(--line-green)] text-sm"
+              disabled={creating || uploading}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={creating || uploading}
+              className="px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] rounded-lg border border-[var(--border-color)] hover:bg-[var(--line-green)] hover:text-white transition-colors shrink-0"
+            >
+              {uploading ? '...' : '📷'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+          </div>
+          {imageUrl && (
+            <img
+              src={imageUrl}
+              alt="プレビュー"
+              className="w-full h-32 object-cover rounded-lg"
+              onError={(e) => { e.target.style.display = 'none' }}
+            />
+          )}
+        </div>
       </div>
 
       {error && (
@@ -290,7 +403,7 @@ function CreateGoalForm({ pubkey, onCreated, onCancel }) {
         </button>
         <button
           type="submit"
-          disabled={creating}
+          disabled={creating || uploading}
           className="flex-1 py-2 px-4 bg-[var(--line-green)] text-white rounded-lg hover:opacity-80 transition-opacity disabled:opacity-50"
         >
           {creating ? '作成中...' : '作成'}
@@ -301,9 +414,9 @@ function CreateGoalForm({ pubkey, onCreated, onCancel }) {
 }
 
 // Goal Card Component
-function GoalCard({ goal, zapReceipts, profiles, onSelect }) {
+function GoalCard({ goal, zapReceipts, profiles, onSelect, onDelete, isOwn }) {
   const amountTag = goal.tags.find(t => t[0] === 'amount')
-  const targetMsats = amountTag ? parseInt(amountTag[1]) : 0
+  const targetMsats = amountTag ? parseAmount(amountTag[1]) : 0
 
   const closedAtTag = goal.tags.find(t => t[0] === 'closed_at')
   const closedAt = closedAtTag ? parseInt(closedAtTag[1]) : null
@@ -340,11 +453,29 @@ function GoalCard({ goal, zapReceipts, profiles, onSelect }) {
   const profile = profiles[goal.pubkey]
   const displayName = profile?.name || profile?.display_name || shortenPubkey(goal.pubkey)
 
+  const handleDelete = async (e) => {
+    e.stopPropagation()
+    if (!confirm('このZap Goalを削除しますか？')) return
+    onDelete(goal.id)
+  }
+
   return (
     <div
       onClick={() => onSelect(goal)}
-      className="bg-[var(--bg-tertiary)] rounded-xl p-4 cursor-pointer hover:opacity-90 transition-opacity"
+      className="bg-[var(--bg-tertiary)] rounded-xl p-4 cursor-pointer hover:opacity-90 transition-opacity relative"
     >
+      {isOwn && (
+        <button
+          onClick={handleDelete}
+          className="absolute top-2 right-2 p-1.5 bg-red-500/20 text-red-400 rounded-full hover:bg-red-500/40 transition-colors"
+          title="削除"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+          </svg>
+        </button>
+      )}
+
       {imageUrl && (
         <div className="mb-3 rounded-lg overflow-hidden">
           <img
@@ -356,7 +487,7 @@ function GoalCard({ goal, zapReceipts, profiles, onSelect }) {
         </div>
       )}
 
-      <div className="flex items-start justify-between mb-2">
+      <div className="flex items-start justify-between mb-2 pr-8">
         <h3 className="font-semibold text-[var(--text-primary)] line-clamp-2">
           {goal.content}
         </h3>
@@ -415,13 +546,13 @@ function GoalCard({ goal, zapReceipts, profiles, onSelect }) {
 }
 
 // Goal Detail Modal Component with Zap support
-function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeline }) {
+function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeline, onDelete, isOwn, myPubkey }) {
   const [zapAmount, setZapAmount] = useState('100')
   const [zapping, setZapping] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const amountTag = goal.tags.find(t => t[0] === 'amount')
-  const targetMsats = amountTag ? parseInt(amountTag[1]) : 0
+  const targetMsats = amountTag ? parseAmount(amountTag[1]) : 0
 
   const closedAtTag = goal.tags.find(t => t[0] === 'closed_at')
   const closedAt = closedAtTag ? parseInt(closedAtTag[1]) : null
@@ -488,14 +619,15 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
       return
     }
 
-    if (!profile?.lud16) {
+    const lud16 = profile?.lud16 || profile?.lud06
+    if (!lud16) {
       alert('このGoalの作成者はLightningアドレスを設定していません')
       return
     }
 
     try {
       setZapping(true)
-      const result = await fetchLightningInvoice(profile.lud16, amount, `Zap Goal支援: ${goal.content}`)
+      const result = await fetchLightningInvoice(lud16, amount, `Zap Goal支援: ${goal.content}`)
 
       if (result.invoice) {
         const copied = await copyToClipboard(result.invoice)
@@ -513,10 +645,18 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
     }
   }
 
+  const handleDelete = async () => {
+    if (!confirm('このZap Goalを削除しますか？')) return
+    onDelete(goal.id)
+    onClose()
+  }
+
+  const hasLightningAddress = profile?.lud16 || profile?.lud06
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-[var(--bg-secondary)] rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+        className="bg-[var(--bg-secondary)] rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         {imageUrl && (
@@ -530,7 +670,7 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
           </div>
         )}
 
-        <div className="p-4 space-y-4">
+        <div className="p-4 space-y-4 pb-6">
           <div className="flex items-start justify-between">
             <h2 className="text-xl font-bold text-[var(--text-primary)]">
               {goal.content}
@@ -593,7 +733,7 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
                 </svg>
                 Zap支援
               </h3>
-              {profile?.lud16 ? (
+              {hasLightningAddress ? (
                 <>
                   <div className="flex gap-2">
                     <input
@@ -641,14 +781,14 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {goalZaps.map(zap => {
                   const descTag = zap.tags.find(t => t[0] === 'description')
-                  let zapAmount = 0
+                  let zapAmt = 0
                   let zapperPubkey = null
                   if (descTag) {
                     try {
                       const desc = JSON.parse(descTag[1])
                       const amountTag = desc.tags?.find(t => t[0] === 'amount')
                       if (amountTag) {
-                        zapAmount = parseInt(amountTag[1])
+                        zapAmt = parseInt(amountTag[1])
                       }
                       zapperPubkey = desc.pubkey
                     } catch {}
@@ -660,7 +800,7 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
                   return (
                     <div key={zap.id} className="flex items-center justify-between text-sm bg-[var(--bg-tertiary)] p-2 rounded-lg">
                       <span className="text-[var(--text-secondary)]">{zapperName}</span>
-                      <span className="text-[var(--line-green)]">{formatSats(zapAmount)} sats</span>
+                      <span className="text-[var(--line-green)]">{formatSats(zapAmt)} sats</span>
                     </div>
                   )
                 })}
@@ -681,6 +821,14 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
             >
               {copied ? 'コピーしました!' : 'イベントIDをコピー (nevent)'}
             </button>
+            {isOwn && (
+              <button
+                onClick={handleDelete}
+                className="w-full py-2 px-4 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-opacity text-sm"
+              >
+                削除
+              </button>
+            )}
             <button
               onClick={onClose}
               className="w-full py-2 px-4 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] rounded-lg hover:opacity-80 transition-opacity"
@@ -703,7 +851,6 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [selectedGoal, setSelectedGoal] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchedGoal, setSearchedGoal] = useState(null)
   const [searching, setSearching] = useState(false)
 
   // Load only user's own goals
@@ -786,17 +933,29 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
     setShowCreateForm(false)
   }
 
+  const handleDeleteGoal = async (goalId) => {
+    try {
+      const result = await deleteEvent(goalId)
+      if (result.success) {
+        setGoals(prev => prev.filter(g => g.id !== goalId))
+      } else {
+        alert('削除に失敗しました')
+      }
+    } catch (e) {
+      console.error('Failed to delete goal:', e)
+      alert('削除に失敗しました: ' + e.message)
+    }
+  }
+
   // Search for a goal by nevent/note/hex ID
   const handleSearch = async () => {
     if (!searchQuery.trim()) return
 
     setSearching(true)
-    setSearchedGoal(null)
 
     try {
       let eventId = null
       let relayHints = []
-      let authorHint = null
 
       const query = searchQuery.trim()
 
@@ -807,7 +966,6 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
           if (decoded.type === 'nevent') {
             eventId = decoded.data.id
             relayHints = decoded.data.relays || []
-            authorHint = decoded.data.author
           }
         } catch {}
       }
@@ -836,18 +994,23 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
         : ZAP_GOAL_RELAYS
 
       const goalFilter = {
-        ids: [eventId],
-        kinds: [KIND_ZAP_GOAL]
+        ids: [eventId]
       }
 
       const foundGoals = await fastFetch(goalFilter, searchRelays)
 
       if (foundGoals.length === 0) {
-        alert('Zap Goalが見つかりませんでした')
+        alert('イベントが見つかりませんでした')
         return
       }
 
       const foundGoal = foundGoals[0]
+
+      // Check if it's a Zap Goal
+      if (foundGoal.kind !== KIND_ZAP_GOAL) {
+        alert('このイベントはZap Goalではありません')
+        return
+      }
 
       // Fetch zap receipts for this goal
       const zapFilter = {
@@ -864,7 +1027,7 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
         return [...prev, ...newZaps]
       })
 
-      // Fetch profile of goal creator
+      // Fetch profile of goal creator with full data
       const profileFilter = {
         kinds: [0],
         authors: [foundGoal.pubkey]
@@ -878,10 +1041,11 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
 
         if (latestProfile) {
           try {
+            const profileData = JSON.parse(latestProfile.content)
             setProfiles(prev => ({
               ...prev,
               [foundGoal.pubkey]: {
-                ...JSON.parse(latestProfile.content),
+                ...profileData,
                 created_at: latestProfile.created_at
               }
             }))
@@ -926,7 +1090,6 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
         })
       }
 
-      setSearchedGoal(foundGoal)
       setSelectedGoal(foundGoal)
     } catch (e) {
       console.error('Search failed:', e)
@@ -1010,6 +1173,8 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
             zapReceipts={zapReceipts}
             profiles={profiles}
             onSelect={setSelectedGoal}
+            onDelete={handleDeleteGoal}
+            isOwn={true}
           />
         ))}
       </div>
@@ -1022,6 +1187,9 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
           profiles={profiles}
           onClose={() => setSelectedGoal(null)}
           onShareToTimeline={handleShareToTimelineLocal}
+          onDelete={handleDeleteGoal}
+          isOwn={selectedGoal.pubkey === pubkey}
+          myPubkey={pubkey}
         />
       )}
     </div>
@@ -1029,4 +1197,4 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
 }
 
 // Export for use in TimelineTab
-export { KIND_ZAP_GOAL, ZAP_GOAL_RELAYS, fastFetch, formatSats, formatDate }
+export { KIND_ZAP_GOAL, ZAP_GOAL_RELAYS, fastFetch, formatSats, formatDate, parseAmount }
