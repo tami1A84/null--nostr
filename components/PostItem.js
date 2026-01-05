@@ -65,9 +65,8 @@ function Nip05Badge({ nip05, pubkey }) {
 const KIND_ZAP_GOAL = 9041
 const KIND_ZAP_RECEIPT = 9735
 
-// Format sats amount for Zap Goal
-function formatGoalSats(msats) {
-  const sats = Math.floor(msats / 1000)
+// Format sats amount for Zap Goal (input is sats)
+function formatGoalSats(sats) {
   if (sats >= 1000000) {
     return `${(sats / 1000000).toFixed(2)}M`
   } else if (sats >= 1000) {
@@ -82,7 +81,7 @@ function EmbeddedZapGoal({ goal, profile }) {
   const [loadingZaps, setLoadingZaps] = useState(true)
 
   const amountTag = goal.tags.find(t => t[0] === 'amount')
-  const targetMsats = amountTag ? parseInt(amountTag[1]) : 0
+  const targetSats = amountTag ? parseInt(amountTag[1]) : 0
 
   const closedAtTag = goal.tags.find(t => t[0] === 'closed_at')
   const closedAt = closedAtTag ? parseInt(closedAtTag[1]) : null
@@ -114,7 +113,8 @@ function EmbeddedZapGoal({ goal, profile }) {
     return () => { mounted = false }
   }, [goal.id])
 
-  const receivedMsats = zapReceipts.reduce((sum, zap) => {
+  // Calculate received amount (msats -> sats)
+  const receivedSats = Math.floor(zapReceipts.reduce((sum, zap) => {
     const descTag = zap.tags.find(t => t[0] === 'description')
     if (descTag) {
       try {
@@ -126,9 +126,9 @@ function EmbeddedZapGoal({ goal, profile }) {
       } catch {}
     }
     return sum
-  }, 0)
+  }, 0) / 1000)
 
-  const progress = targetMsats > 0 ? Math.min((receivedMsats / targetMsats) * 100, 100) : 0
+  const progress = targetSats > 0 ? Math.min((receivedSats / targetSats) * 100, 100) : 0
 
   return (
     <div className="border border-[var(--border-color)] rounded-lg p-3 my-2 bg-[var(--bg-secondary)]">
@@ -181,7 +181,7 @@ function EmbeddedZapGoal({ goal, profile }) {
       <div className="mb-1">
         <div className="flex justify-between text-xs mb-1">
           <span className="text-[var(--text-secondary)]">
-            {loadingZaps ? '...' : formatGoalSats(receivedMsats)} / {formatGoalSats(targetMsats)} sats
+            {loadingZaps ? '...' : formatGoalSats(receivedSats)} / {formatGoalSats(targetSats)} sats
           </span>
           <span className="text-[var(--line-green)] font-medium">
             {progress.toFixed(1)}%

@@ -10,7 +10,7 @@ import {
   getDefaultRelay,
   shortenPubkey,
   fetchLightningInvoice,
-  getUploadServer
+  uploadImage
 } from '@/lib/nostr'
 
 // NIP-75 Zap Goal event kind
@@ -108,24 +108,15 @@ function formatDate(timestamp) {
   })
 }
 
-// Parse amount from tag - handle both msats and sats (some clients use sats directly)
+// Parse amount from tag - stored in sats
 function parseAmount(amountStr) {
   const amount = parseInt(amountStr)
   if (isNaN(amount)) return 0
-  // If amount is very large (>1M), assume it's already in msats
-  // If small, assume it's in sats and needs no conversion
-  // NIP-75 specifies msats, but some clients use sats
-  // Heuristic: if divisible by 1000 and > 1000, treat as msats
-  if (amount >= 1000 && amount % 1000 === 0) {
-    return amount // msats
-  }
-  // Otherwise treat as sats and convert to msats
-  return amount * 1000
+  return amount // sats
 }
 
-// Format sats amount (input is msats)
-function formatSats(msats) {
-  const sats = Math.floor(msats / 1000)
+// Format sats amount (input is sats)
+function formatSats(sats) {
   if (sats >= 1000000) {
     return `${(sats / 1000000).toFixed(2)}M`
   } else if (sats >= 1000) {
@@ -148,44 +139,6 @@ async function copyToClipboard(text) {
     document.body.removeChild(textarea)
     return true
   }
-}
-
-// Upload image to server
-async function uploadImage(file) {
-  const uploadServer = getUploadServer()
-
-  const formData = new FormData()
-  formData.append('file', file)
-
-  let uploadUrl = 'https://nostr.build/api/v2/upload/files'
-
-  if (uploadServer === 'nostrcheck.me') {
-    uploadUrl = 'https://nostrcheck.me/api/v2/media'
-  } else if (uploadServer === 'void.cat') {
-    uploadUrl = 'https://void.cat/upload'
-  }
-
-  const response = await fetch(uploadUrl, {
-    method: 'POST',
-    body: formData
-  })
-
-  if (!response.ok) {
-    throw new Error('Upload failed')
-  }
-
-  const result = await response.json()
-
-  // Handle different response formats
-  if (result.data?.[0]?.url) {
-    return result.data[0].url
-  } else if (result.url) {
-    return result.url
-  } else if (result.file?.url) {
-    return result.file.url
-  }
-
-  throw new Error('Could not get URL from upload response')
 }
 
 // Create Zap Goal Form Component
@@ -238,7 +191,7 @@ function CreateGoalForm({ pubkey, onCreated, onCancel }) {
 
     try {
       const tags = [
-        ['amount', String(amount * 1000)], // Convert sats to msats
+        ['amount', String(amount)], // Store in sats
         ['relays', ...ZAP_GOAL_RELAYS]
       ]
 
@@ -367,7 +320,13 @@ function CreateGoalForm({ pubkey, onCreated, onCancel }) {
               disabled={creating || uploading}
               className="px-3 py-2 bg-[var(--bg-tertiary)] text-[var(--text-secondary)] rounded-lg border border-[var(--border-color)] hover:bg-[var(--line-green)] hover:text-white transition-colors shrink-0"
             >
-              {uploading ? '...' : '📷'}
+              {uploading ? '...' : (
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21,15 16,10 5,21"/>
+                </svg>
+              )}
             </button>
             <input
               ref={fileInputRef}
@@ -416,7 +375,7 @@ function CreateGoalForm({ pubkey, onCreated, onCancel }) {
 // Goal Card Component
 function GoalCard({ goal, zapReceipts, profiles, onSelect, onDelete, isOwn }) {
   const amountTag = goal.tags.find(t => t[0] === 'amount')
-  const targetMsats = amountTag ? parseAmount(amountTag[1]) : 0
+  const targetSats = amountTag ? parseAmount(amountTag[1]) : 0
 
   const closedAtTag = goal.tags.find(t => t[0] === 'closed_at')
   const closedAt = closedAtTag ? parseInt(closedAtTag[1]) : null
@@ -428,8 +387,8 @@ function GoalCard({ goal, zapReceipts, profiles, onSelect, onDelete, isOwn }) {
   const summaryTag = goal.tags.find(t => t[0] === 'summary')
   const summary = summaryTag ? summaryTag[1] : null
 
-  // Calculate received amount from zap receipts
-  const receivedMsats = zapReceipts
+  // Calculate received amount from zap receipts (msats -> sats)
+  const receivedSats = Math.floor(zapReceipts
     .filter(zap => {
       const goalTag = zap.tags.find(t => t[0] === 'e' && t[1] === goal.id)
       return goalTag != null
@@ -446,9 +405,9 @@ function GoalCard({ goal, zapReceipts, profiles, onSelect, onDelete, isOwn }) {
         } catch {}
       }
       return sum
-    }, 0)
+    }, 0) / 1000)
 
-  const progress = targetMsats > 0 ? Math.min((receivedMsats / targetMsats) * 100, 100) : 0
+  const progress = targetSats > 0 ? Math.min((receivedSats / targetSats) * 100, 100) : 0
 
   const profile = profiles[goal.pubkey]
   const displayName = profile?.name || profile?.display_name || shortenPubkey(goal.pubkey)
@@ -507,7 +466,7 @@ function GoalCard({ goal, zapReceipts, profiles, onSelect, onDelete, isOwn }) {
       <div className="mb-3">
         <div className="flex justify-between text-sm mb-1">
           <span className="text-[var(--text-secondary)]">
-            {formatSats(receivedMsats)} / {formatSats(targetMsats)} sats
+            {formatSats(receivedSats)} / {formatSats(targetSats)} sats
           </span>
           <span className="text-[var(--line-green)]">
             {progress.toFixed(1)}%
@@ -552,7 +511,7 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
   const [copied, setCopied] = useState(false)
 
   const amountTag = goal.tags.find(t => t[0] === 'amount')
-  const targetMsats = amountTag ? parseAmount(amountTag[1]) : 0
+  const targetSats = amountTag ? parseAmount(amountTag[1]) : 0
 
   const closedAtTag = goal.tags.find(t => t[0] === 'closed_at')
   const closedAt = closedAtTag ? parseInt(closedAtTag[1]) : null
@@ -573,7 +532,8 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
     return goalTag != null
   })
 
-  const receivedMsats = goalZaps.reduce((sum, zap) => {
+  // Calculate received amount (msats -> sats)
+  const receivedSats = Math.floor(goalZaps.reduce((sum, zap) => {
     const descTag = zap.tags.find(t => t[0] === 'description')
     if (descTag) {
       try {
@@ -585,9 +545,9 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
       } catch {}
     }
     return sum
-  }, 0)
+  }, 0) / 1000)
 
-  const progress = targetMsats > 0 ? Math.min((receivedMsats / targetMsats) * 100, 100) : 0
+  const progress = targetSats > 0 ? Math.min((receivedSats / targetSats) * 100, 100) : 0
 
   const profile = profiles[goal.pubkey]
   const displayName = profile?.name || profile?.display_name || shortenPubkey(goal.pubkey)
@@ -691,7 +651,7 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
           <div>
             <div className="flex justify-between text-sm mb-2">
               <span className="text-[var(--text-secondary)]">
-                {formatSats(receivedMsats)} / {formatSats(targetMsats)} sats
+                {formatSats(receivedSats)} / {formatSats(targetSats)} sats
               </span>
               <span className="text-[var(--line-green)] font-semibold">
                 {progress.toFixed(1)}%
@@ -781,14 +741,14 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {goalZaps.map(zap => {
                   const descTag = zap.tags.find(t => t[0] === 'description')
-                  let zapAmt = 0
+                  let zapAmtSats = 0
                   let zapperPubkey = null
                   if (descTag) {
                     try {
                       const desc = JSON.parse(descTag[1])
                       const amountTag = desc.tags?.find(t => t[0] === 'amount')
                       if (amountTag) {
-                        zapAmt = parseInt(amountTag[1])
+                        zapAmtSats = Math.floor(parseInt(amountTag[1]) / 1000) // msats -> sats
                       }
                       zapperPubkey = desc.pubkey
                     } catch {}
@@ -800,7 +760,7 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
                   return (
                     <div key={zap.id} className="flex items-center justify-between text-sm bg-[var(--bg-tertiary)] p-2 rounded-lg">
                       <span className="text-[var(--text-secondary)]">{zapperName}</span>
-                      <span className="text-[var(--line-green)]">{formatSats(zapAmt)} sats</span>
+                      <span className="text-[var(--line-green)]">{formatSats(zapAmtSats)} sats</span>
                     </div>
                   )
                 })}
