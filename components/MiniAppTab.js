@@ -18,6 +18,7 @@ import {
 } from '@/lib/nostr'
 import { clearBadgeCache } from './BadgeDisplay'
 import SchedulerApp from './SchedulerApp'
+import EventBackupApp from './EventBackupApp'
 
 // Nosskey Settings Component
 function NosskeySettings({ pubkey }) {
@@ -285,6 +286,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
   const [showZapSettings, setShowZapSettings] = useState(false)
   const [showMuteSettings, setShowMuteSettings] = useState(false)
   const [showBadgeSettings, setShowBadgeSettings] = useState(false)
+  const [showEventBackup, setShowEventBackup] = useState(false)
 
   // Badge settings
   const [profileBadges, setProfileBadges] = useState([])
@@ -1947,6 +1949,32 @@ export default function MiniAppTab({ pubkey, onLogout }) {
           {showScheduler && (
             <div className="mt-4">
               <SchedulerApp pubkey={pubkey} />
+            </div>
+          )}
+        </section>
+
+        {/* Event Backup Mini App - イベントバックアップ */}
+        <section id="event-backup-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+          <button
+            onClick={() => setShowEventBackup(!showEventBackup)}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <h2 className="font-semibold text-[var(--text-primary)]">イベントバックアップ</h2>
+            </div>
+            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showEventBackup ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          {showEventBackup && (
+            <div className="mt-4">
+              <EventBackupApp pubkey={pubkey} />
             </div>
           )}
         </section>
