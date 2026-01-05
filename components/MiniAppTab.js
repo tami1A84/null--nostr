@@ -14,7 +14,11 @@ import {
   setUploadServer,
   getLoginMethod,
   getAutoSignEnabled,
-  setAutoSignEnabled
+  setAutoSignEnabled,
+  requestVanishFromRelay,
+  requestGlobalVanish,
+  canSign,
+  FALLBACK_RELAYS
 } from '@/lib/nostr'
 import { clearBadgeCache } from './BadgeDisplay'
 import SchedulerApp from './SchedulerApp'
@@ -287,6 +291,15 @@ export default function MiniAppTab({ pubkey, onLogout }) {
   const [showMuteSettings, setShowMuteSettings] = useState(false)
   const [showBadgeSettings, setShowBadgeSettings] = useState(false)
   const [showEventBackup, setShowEventBackup] = useState(false)
+  const [showVanishRequest, setShowVanishRequest] = useState(false)
+
+  // Vanish Request states
+  const [vanishMode, setVanishMode] = useState('relay') // 'relay' or 'global'
+  const [vanishRelay, setVanishRelay] = useState('')
+  const [vanishReason, setVanishReason] = useState('')
+  const [vanishConfirm, setVanishConfirm] = useState('')
+  const [vanishLoading, setVanishLoading] = useState(false)
+  const [vanishResult, setVanishResult] = useState(null)
 
   // Badge settings
   const [profileBadges, setProfileBadges] = useState([])
@@ -1975,6 +1988,236 @@ export default function MiniAppTab({ pubkey, onLogout }) {
           {showEventBackup && (
             <div className="mt-4">
               <EventBackupApp pubkey={pubkey} />
+            </div>
+          )}
+        </section>
+
+        {/* NIP-62: Request to Vanish - 削除リクエスト */}
+        <section id="vanish-request-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+          <button
+            onClick={() => setShowVanishRequest(!showVanishRequest)}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M3 6h18"/>
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
+                <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                <line x1="10" y1="11" x2="10" y2="17"/>
+                <line x1="14" y1="11" x2="14" y2="17"/>
+              </svg>
+              <h2 className="font-semibold text-[var(--text-primary)]">削除リクエスト (NIP-62)</h2>
+            </div>
+            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showVanishRequest ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          {showVanishRequest && (
+            <div className="mt-4 space-y-4">
+              {/* Warning */}
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
+                <p className="text-sm text-red-400 font-medium flex items-center gap-2">
+                  <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                  </svg>
+                  この操作は取り消せません
+                </p>
+                <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                  削除リクエスト(kind 62)を送信すると、対象リレーはあなたの全イベントを削除します。
+                  リレーがNIP-62に対応している場合のみ有効です。
+                </p>
+              </div>
+
+              {/* Mode Selection */}
+              <div className="space-y-2">
+                <p className="text-sm text-[var(--text-secondary)]">削除範囲</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setVanishMode('relay')}
+                    className={`flex-1 py-2 px-3 text-sm rounded-lg transition-colors ${
+                      vanishMode === 'relay'
+                        ? 'bg-[var(--line-green)] text-white'
+                        : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
+                    }`}
+                  >
+                    特定リレー
+                  </button>
+                  <button
+                    onClick={() => setVanishMode('global')}
+                    className={`flex-1 py-2 px-3 text-sm rounded-lg transition-colors ${
+                      vanishMode === 'global'
+                        ? 'bg-red-500 text-white'
+                        : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
+                    }`}
+                  >
+                    全リレー
+                  </button>
+                </div>
+              </div>
+
+              {/* Relay Selection (for relay mode) */}
+              {vanishMode === 'relay' && (
+                <div className="space-y-2">
+                  <label className="text-sm text-[var(--text-secondary)]">対象リレー</label>
+                  <input
+                    type="text"
+                    value={vanishRelay}
+                    onChange={(e) => setVanishRelay(e.target.value)}
+                    placeholder="wss://relay.example.com"
+                    className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--line-green)]/50"
+                  />
+                  <div className="flex flex-wrap gap-1">
+                    <button
+                      onClick={() => setVanishRelay(getDefaultRelay())}
+                      className="text-xs px-2 py-1 rounded bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                    >
+                      現在のリレー
+                    </button>
+                    {FALLBACK_RELAYS.slice(0, 3).map(relay => (
+                      <button
+                        key={relay}
+                        onClick={() => setVanishRelay(relay)}
+                        className="text-xs px-2 py-1 rounded bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] truncate max-w-[120px]"
+                      >
+                        {relay.replace('wss://', '')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Global Warning */}
+              {vanishMode === 'global' && (
+                <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3">
+                  <p className="text-sm text-red-300 font-medium">
+                    ⚠️ 全リレーへの削除リクエスト
+                  </p>
+                  <p className="text-xs text-red-300/80 mt-1">
+                    この操作は全てのリレーにあなたの全イベント削除をリクエストします。
+                    一度実行すると、投稿・いいね・フォローリストなど全てのデータが削除される可能性があります。
+                  </p>
+                </div>
+              )}
+
+              {/* Reason (optional) */}
+              <div className="space-y-2">
+                <label className="text-sm text-[var(--text-secondary)]">理由（任意）</label>
+                <textarea
+                  value={vanishReason}
+                  onChange={(e) => setVanishReason(e.target.value)}
+                  placeholder="削除理由を入力..."
+                  rows={2}
+                  className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--line-green)]/50 resize-none"
+                />
+              </div>
+
+              {/* Confirmation */}
+              <div className="space-y-2">
+                <label className="text-sm text-[var(--text-secondary)]">
+                  確認のため「削除」と入力してください
+                </label>
+                <input
+                  type="text"
+                  value={vanishConfirm}
+                  onChange={(e) => setVanishConfirm(e.target.value)}
+                  placeholder="削除"
+                  className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                />
+              </div>
+
+              {/* Submit Button */}
+              <button
+                onClick={async () => {
+                  if (vanishConfirm !== '削除') {
+                    alert('確認のため「削除」と入力してください')
+                    return
+                  }
+                  if (vanishMode === 'relay' && !vanishRelay) {
+                    alert('リレーURLを入力してください')
+                    return
+                  }
+                  if (!canSign()) {
+                    alert('署名機能が利用できません')
+                    return
+                  }
+
+                  const confirmMessage = vanishMode === 'global'
+                    ? '本当に全リレーへ削除リクエストを送信しますか？この操作は取り消せません。'
+                    : `${vanishRelay} への削除リクエストを送信しますか？`
+
+                  if (!confirm(confirmMessage)) return
+
+                  setVanishLoading(true)
+                  setVanishResult(null)
+
+                  try {
+                    let result
+                    if (vanishMode === 'global') {
+                      result = await requestGlobalVanish(vanishReason)
+                    } else {
+                      result = await requestVanishFromRelay(vanishRelay, vanishReason)
+                    }
+
+                    setVanishResult({
+                      success: result.success,
+                      message: result.success
+                        ? `削除リクエストを送信しました（${vanishMode === 'global' ? '全リレー' : vanishRelay}）`
+                        : '送信に失敗しました'
+                    })
+
+                    // Reset form on success
+                    if (result.success) {
+                      setVanishConfirm('')
+                      setVanishReason('')
+                    }
+                  } catch (e) {
+                    console.error('Vanish request failed:', e)
+                    setVanishResult({
+                      success: false,
+                      message: 'エラー: ' + e.message
+                    })
+                  } finally {
+                    setVanishLoading(false)
+                  }
+                }}
+                disabled={vanishLoading || vanishConfirm !== '削除' || (vanishMode === 'relay' && !vanishRelay)}
+                className={`w-full py-3 text-sm font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                  vanishMode === 'global'
+                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                    : 'bg-orange-500 hover:bg-orange-600 text-white'
+                }`}
+              >
+                {vanishLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+                      <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
+                    </svg>
+                    送信中...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 6h18"/>
+                      <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
+                      <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    </svg>
+                    {vanishMode === 'global' ? '全リレーに削除リクエスト送信' : '削除リクエスト送信'}
+                  </span>
+                )}
+              </button>
+
+              {/* Result Message */}
+              {vanishResult && (
+                <div className={`p-3 rounded-xl ${
+                  vanishResult.success
+                    ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+                    : 'bg-red-500/10 border border-red-500/30 text-red-400'
+                }`}>
+                  <p className="text-sm">{vanishResult.message}</p>
+                </div>
+              )}
             </div>
           )}
         </section>
