@@ -22,6 +22,7 @@ import {
 } from '@/lib/nostr'
 import { clearBadgeCache } from './BadgeDisplay'
 import SchedulerApp from './SchedulerApp'
+import ZapGoalApp from './ZapGoalApp'
 import EventBackupApp from './EventBackupApp'
 
 // Nosskey Settings Component
@@ -287,6 +288,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
 
   // Collapsed section states
   const [showScheduler, setShowScheduler] = useState(false)
+  const [showZapGoal, setShowZapGoal] = useState(false)
   const [showZapSettings, setShowZapSettings] = useState(false)
   const [showMuteSettings, setShowMuteSettings] = useState(false)
   const [showBadgeSettings, setShowBadgeSettings] = useState(false)
@@ -975,6 +977,12 @@ export default function MiniAppTab({ pubkey, onLogout }) {
           document.querySelector('#scheduler-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }, 100)
         break
+      case 'zapgoal':
+        setShowZapGoal(true)
+        setTimeout(() => {
+          document.querySelector('#zapgoal-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
       case 'zap':
         setShowZapSettings(true)
         setTimeout(() => {
@@ -1027,6 +1035,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
   // Available mini apps that can be added to favorites
   const availableMiniApps = [
     { id: 'scheduler', name: '調整くん' },
+    { id: 'zapgoal', name: 'Zap Goal' },
     { id: 'zap', name: 'Zap設定' },
     { id: 'relay', name: 'リレー設定' },
     { id: 'upload', name: 'アップロード設定' },
@@ -1962,6 +1971,30 @@ export default function MiniAppTab({ pubkey, onLogout }) {
           {showScheduler && (
             <div className="mt-4">
               <SchedulerApp pubkey={pubkey} />
+            </div>
+          )}
+        </section>
+
+        {/* Zap Goal Mini App - NIP-75 */}
+        <section id="zapgoal-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+          <button
+            onClick={() => setShowZapGoal(!showZapGoal)}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+              </svg>
+              <h2 className="font-semibold text-[var(--text-primary)]">Zap Goal</h2>
+            </div>
+            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showZapGoal ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          {showZapGoal && (
+            <div className="mt-4">
+              <ZapGoalApp pubkey={pubkey} />
             </div>
           )}
         </section>
