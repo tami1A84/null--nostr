@@ -10,7 +10,8 @@ import {
   getDefaultRelay,
   shortenPubkey,
   fetchLightningInvoice,
-  uploadImage
+  uploadImage,
+  FALLBACK_RELAYS
 } from '@/lib/nostr'
 
 // NIP-75 Zap Goal event kind
@@ -568,7 +569,7 @@ function GoalDetailModal({ goal, zapReceipts, profiles, onClose, onShareToTimeli
   }
 
   const handleShareToTimeline = () => {
-    onShareToTimeline(nevent)
+    onShareToTimeline(`nostr:${nevent}`)
     onClose()
   }
 
@@ -987,12 +988,14 @@ export default function ZapGoalApp({ pubkey, onShareToTimeline }) {
         return [...prev, ...newZaps]
       })
 
-      // Fetch profile of goal creator with full data
+      // Fetch profile of goal creator with full data from multiple relays
       const profileFilter = {
         kinds: [0],
         authors: [foundGoal.pubkey]
       }
-      const profileEvents = await fastFetch(profileFilter, searchRelays)
+      // Use more relays for profile fetching to ensure we get lud16/lud06
+      const profileRelays = [...new Set([...searchRelays, ...FALLBACK_RELAYS])]
+      const profileEvents = await fastFetch(profileFilter, profileRelays)
 
       if (profileEvents.length > 0) {
         const latestProfile = profileEvents.reduce((latest, event) =>
