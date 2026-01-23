@@ -26,7 +26,13 @@ import {
   autoDetectRelays,
   loadUserGeohash,
   saveUserGeohash,
-  encodeGeohash
+  encodeGeohash,
+  findNearestRelays,
+  generateRelayListByLocation,
+  loadUserLocation,
+  formatDistance,
+  GPS_RELAY_DATABASE,
+  DIRECTORY_RELAYS
 } from '@/lib/geohash'
 import {
   fetchUserRelayList,
@@ -294,8 +300,13 @@ export default function MiniAppTab({ pubkey, onLogout }) {
   // Geolocation relay auto-setup
   const [detectingLocation, setDetectingLocation] = useState(false)
   const [userGeohash, setUserGeohash] = useState(null)
+  const [userLocation, setUserLocation] = useState(null)
   const [recommendedRelays, setRecommendedRelays] = useState([])
   const [publishingNip65, setPublishingNip65] = useState(false)
+  // NIP-65 Outbox Model configuration
+  const [nip65Config, setNip65Config] = useState(null)
+  const [nearestRelays, setNearestRelays] = useState([])
+  const [showNip65Details, setShowNip65Details] = useState(false)
 
   // Upload server settings
   const [uploadServerState, setUploadServerState] = useState('nostr.build')
@@ -915,16 +926,22 @@ export default function MiniAppTab({ pubkey, onLogout }) {
     )
   }
 
-  // Auto-detect location and recommend relays
+  // Auto-detect location and recommend relays with NIP-65 configuration
   const handleAutoDetectLocation = async () => {
     setDetectingLocation(true)
     try {
       const result = await autoDetectRelays()
       if (result.geohash) {
         setUserGeohash(result.geohash)
+        setUserLocation(result.location)
         setRecommendedRelays(result.relays)
-        // Auto-select the first recommended relay
-        if (result.relays.length > 0) {
+        setNip65Config(result.nip65Config)
+        setNearestRelays(result.nearestRelays || [])
+
+        // Auto-select the first recommended relay (nearest outbox relay)
+        if (result.nip65Config?.outbox?.length > 0) {
+          handleChangeRelay(result.nip65Config.outbox[0].url)
+        } else if (result.relays.length > 0) {
           handleChangeRelay(result.relays[0].url)
         }
       } else if (result.error) {
@@ -938,7 +955,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
     }
   }
 
-  // Publish relay list to NIP-65 (kind:10002)
+  // Publish relay list to NIP-65 (kind:10002) using auto-detected config
   const handlePublishRelayList = async () => {
     if (!pubkey || !canSign()) {
       alert('リレーリストを発行するにはログインが必要です')
@@ -946,10 +963,19 @@ export default function MiniAppTab({ pubkey, onLogout }) {
     }
     setPublishingNip65(true)
     try {
-      const relayList = [{ url: currentRelay, read: true, write: true }]
+      // Use NIP-65 config if available, otherwise use current relay
+      let relayList
+      if (nip65Config?.combined?.length > 0) {
+        relayList = nip65Config.combined
+      } else {
+        relayList = [{ url: currentRelay, read: true, write: true }]
+      }
+
       const result = await publishRelayListMetadata(relayList)
       if (result.success) {
-        alert('リレーリストを発行しました (NIP-65)')
+        const outboxCount = relayList.filter(r => r.write).length
+        const inboxCount = relayList.filter(r => r.read).length
+        alert(`リレーリストを発行しました (NIP-65)\nOutbox: ${outboxCount}リレー\nInbox: ${inboxCount}リレー`)
       }
     } catch (e) {
       console.error('Failed to publish relay list:', e)
@@ -1435,24 +1461,106 @@ export default function MiniAppTab({ pubkey, onLogout }) {
                     </>
                   )}
                 </button>
-                {recommendedRelays.length > 0 && (
+                {/* Show nearest relays with distance */}
+                {nearestRelays.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
-                    <p className="text-xs text-[var(--text-tertiary)] mb-2">おすすめリレー:</p>
+                    <p className="text-xs text-[var(--text-tertiary)] mb-2">最寄りのリレー:</p>
                     <div className="space-y-1">
-                      {recommendedRelays.map(relay => (
+                      {nearestRelays.slice(0, 5).map(relay => (
                         <button
                           key={relay.url}
                           onClick={() => handleChangeRelay(relay.url)}
-                          className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${
                             currentRelay === relay.url
                               ? 'bg-[var(--line-green)] text-white'
                               : 'bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--border-color)]'
                           }`}
                         >
-                          {relay.name} ({relay.region})
+                          <span>{relay.name} ({relay.region})</span>
+                          <span className="opacity-70">{formatDistance(relay.distance)}</span>
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* NIP-65 Outbox Model Configuration */}
+                {nip65Config && (
+                  <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                    <button
+                      onClick={() => setShowNip65Details(!showNip65Details)}
+                      className="w-full flex items-center justify-between text-xs text-[var(--text-secondary)] mb-2"
+                    >
+                      <span className="font-medium">NIP-65 Outbox Model 設定</span>
+                      <svg className={`w-4 h-4 transition-transform ${showNip65Details ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="6,9 12,15 18,9"/>
+                      </svg>
+                    </button>
+
+                    {showNip65Details && (
+                      <div className="space-y-3">
+                        {/* Outbox (Write) Relays */}
+                        {nip65Config.outbox?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                              </svg>
+                              Outbox (投稿先) - {nip65Config.outbox.length}リレー
+                            </p>
+                            <div className="space-y-1">
+                              {nip65Config.outbox.map(relay => (
+                                <div key={relay.url} className="px-2 py-1 bg-green-500 bg-opacity-10 rounded text-xs text-[var(--text-primary)] flex justify-between">
+                                  <span className="truncate">{relay.name}</span>
+                                  <span className="text-green-500 opacity-70">{formatDistance(relay.distance)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Inbox (Read) Relays */}
+                        {nip65Config.inbox?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                              </svg>
+                              Inbox (受信先) - {nip65Config.inbox.length}リレー
+                            </p>
+                            <div className="space-y-1">
+                              {nip65Config.inbox.map(relay => (
+                                <div key={relay.url} className="px-2 py-1 bg-blue-500 bg-opacity-10 rounded text-xs text-[var(--text-primary)] flex justify-between">
+                                  <span className="truncate">{relay.name}</span>
+                                  <span className="text-blue-500 opacity-70">{formatDistance(relay.distance)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Discovery Relays */}
+                        {nip65Config.discover?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                              </svg>
+                              Discover (NIP-65検索) - {nip65Config.discover.length}リレー
+                            </p>
+                            <div className="space-y-1">
+                              {nip65Config.discover.map(relay => (
+                                <div key={relay.url} className="px-2 py-1 bg-purple-500 bg-opacity-10 rounded text-xs text-[var(--text-primary)]">
+                                  <span className="truncate">{relay.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
