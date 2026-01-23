@@ -297,12 +297,14 @@ export default function PostItem({
   onReport,
   onBirdwatch,
   onBirdwatchRate,
+  onNotInterested,
   birdwatchNotes = [],
   myPubkey,
   isOwnPost = false,
   isRepost = false,
   repostedBy = null,
-  showActions = true
+  showActions = true,
+  showNotInterested = false
 }) {
   const [showMenu, setShowMenu] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -788,6 +790,24 @@ export default function PostItem({
                     onClick={() => setShowMenu(false)}
                   />
                   <div className="absolute right-0 top-6 z-50 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[160px]">
+                    {/* Not interested button (for recommendation feed) */}
+                    {showNotInterested && onNotInterested && !isOwnPost && (
+                      <button
+                        onClick={() => {
+                          onNotInterested(post.id, post.pubkey)
+                          setShowMenu(false)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M8 15h8"/>
+                          <path d="M9 9h.01"/>
+                          <path d="M15 9h.01"/>
+                        </svg>
+                        この投稿に興味がない
+                      </button>
+                    )}
                     {/* Birdwatch button */}
                     {onBirdwatch && !isOwnPost && (
                       <button

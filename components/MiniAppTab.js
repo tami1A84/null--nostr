@@ -18,8 +18,26 @@ import {
   requestVanishFromRelay,
   requestGlobalVanish,
   canSign,
-  FALLBACK_RELAYS
+  FALLBACK_RELAYS,
+  publishRelayListMetadata,
+  fetchRelayListMetadata
 } from '@/lib/nostr'
+import {
+  autoDetectRelays,
+  loadUserGeohash,
+  saveUserGeohash,
+  encodeGeohash,
+  findNearestRelays,
+  generateRelayListByLocation,
+  loadUserLocation,
+  formatDistance,
+  GPS_RELAY_DATABASE,
+  DIRECTORY_RELAYS
+} from '@/lib/geohash'
+import {
+  fetchUserRelayList,
+  RELAY_LIST_DISCOVERY_RELAYS
+} from '@/lib/outbox'
 import { clearBadgeCache } from './BadgeDisplay'
 import SchedulerApp from './SchedulerApp'
 import EventBackupApp from './EventBackupApp'
@@ -279,6 +297,16 @@ export default function MiniAppTab({ pubkey, onLogout }) {
   const [showRelaySettings, setShowRelaySettings] = useState(false)
   const [relaySearch, setRelaySearch] = useState('')
   const [customRelayUrl, setCustomRelayUrl] = useState('')
+  // Geolocation relay auto-setup
+  const [detectingLocation, setDetectingLocation] = useState(false)
+  const [userGeohash, setUserGeohash] = useState(null)
+  const [userLocation, setUserLocation] = useState(null)
+  const [recommendedRelays, setRecommendedRelays] = useState([])
+  const [publishingNip65, setPublishingNip65] = useState(false)
+  // NIP-65 Outbox Model configuration
+  const [nip65Config, setNip65Config] = useState(null)
+  const [nearestRelays, setNearestRelays] = useState([])
+  const [showNip65Details, setShowNip65Details] = useState(false)
 
   // Upload server settings
   const [uploadServerState, setUploadServerState] = useState('nostr.build')
@@ -335,6 +363,12 @@ export default function MiniAppTab({ pubkey, onLogout }) {
 
     // Load relay setting
     setCurrentRelay(getDefaultRelay())
+
+    // Load saved geohash
+    const savedGeohash = loadUserGeohash()
+    if (savedGeohash) {
+      setUserGeohash(savedGeohash)
+    }
 
     // Load upload server setting
     setUploadServerState(getUploadServer())
@@ -885,11 +919,70 @@ export default function MiniAppTab({ pubkey, onLogout }) {
   const getFilteredRelays = () => {
     if (!relaySearch.trim()) return KNOWN_RELAYS
     const search = relaySearch.toLowerCase()
-    return KNOWN_RELAYS.filter(r => 
-      r.url.toLowerCase().includes(search) || 
+    return KNOWN_RELAYS.filter(r =>
+      r.url.toLowerCase().includes(search) ||
       r.name.toLowerCase().includes(search) ||
       r.region.toLowerCase().includes(search)
     )
+  }
+
+  // Auto-detect location and recommend relays with NIP-65 configuration
+  const handleAutoDetectLocation = async () => {
+    setDetectingLocation(true)
+    try {
+      const result = await autoDetectRelays()
+      if (result.geohash) {
+        setUserGeohash(result.geohash)
+        setUserLocation(result.location)
+        setRecommendedRelays(result.relays)
+        setNip65Config(result.nip65Config)
+        setNearestRelays(result.nearestRelays || [])
+
+        // Auto-select the first recommended relay (nearest outbox relay)
+        if (result.nip65Config?.outbox?.length > 0) {
+          handleChangeRelay(result.nip65Config.outbox[0].url)
+        } else if (result.relays.length > 0) {
+          handleChangeRelay(result.relays[0].url)
+        }
+      } else if (result.error) {
+        alert(`位置情報の取得に失敗しました: ${result.error}`)
+      }
+    } catch (e) {
+      console.error('Location detection failed:', e)
+      alert('位置情報の取得に失敗しました。ブラウザの位置情報設定を確認してください。')
+    } finally {
+      setDetectingLocation(false)
+    }
+  }
+
+  // Publish relay list to NIP-65 (kind:10002) using auto-detected config
+  const handlePublishRelayList = async () => {
+    if (!pubkey || !canSign()) {
+      alert('リレーリストを発行するにはログインが必要です')
+      return
+    }
+    setPublishingNip65(true)
+    try {
+      // Use NIP-65 config if available, otherwise use current relay
+      let relayList
+      if (nip65Config?.combined?.length > 0) {
+        relayList = nip65Config.combined
+      } else {
+        relayList = [{ url: currentRelay, read: true, write: true }]
+      }
+
+      const result = await publishRelayListMetadata(relayList)
+      if (result.success) {
+        const outboxCount = relayList.filter(r => r.write).length
+        const inboxCount = relayList.filter(r => r.read).length
+        alert(`リレーリストを発行しました (NIP-65)\nOutbox: ${outboxCount}リレー\nInbox: ${inboxCount}リレー`)
+      }
+    } catch (e) {
+      console.error('Failed to publish relay list:', e)
+      alert('リレーリストの発行に失敗しました: ' + e.message)
+    } finally {
+      setPublishingNip65(false)
+    }
   }
 
   const handleSelectUploadServer = (server) => {
@@ -1334,77 +1427,179 @@ export default function MiniAppTab({ pubkey, onLogout }) {
               <div className="p-3 bg-[var(--line-green)] bg-opacity-10 rounded-xl border border-[var(--line-green)]">
                 <p className="text-xs text-[var(--text-tertiary)] mb-1">使用中のリレー</p>
                 <p className="text-sm font-medium text-[var(--text-primary)]">{currentRelay}</p>
+                {userGeohash && (
+                  <p className="text-xs text-[var(--text-tertiary)] mt-1">位置: {userGeohash}</p>
+                )}
               </div>
 
-              {/* Search Relays */}
-              <div>
-                <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">リレーを検索・変更</p>
-                <input
-                  type="text"
-                  value={relaySearch}
-                  onChange={(e) => setRelaySearch(e.target.value)}
-                  placeholder="リレー名や地域で検索..."
-                  className="w-full input-line text-sm mb-3"
-                />
-                
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {getFilteredRelays().map(relay => (
-                    <div 
-                      key={relay.url} 
-                      className={`flex items-center justify-between p-2 rounded-xl transition-colors ${
-                        currentRelay === relay.url 
-                          ? 'bg-[var(--line-green)] bg-opacity-20' 
-                          : 'bg-[var(--bg-tertiary)]'
-                      }`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-[var(--text-primary)] truncate">{relay.name}</p>
-                        <p className="text-xs text-[var(--text-tertiary)] truncate">{relay.url}</p>
-                      </div>
-                      <span className="text-xs text-[var(--text-tertiary)] mx-2">{relay.region}</span>
-                      {currentRelay === relay.url ? (
-                        <span className="text-xs text-[var(--line-green)] font-medium px-2">使用中</span>
-                      ) : (
+              {/* Auto-detect location */}
+              <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
+                <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">位置情報で自動設定</p>
+                <p className="text-xs text-[var(--text-tertiary)] mb-3">
+                  現在地に最適なリレーを自動選択します
+                </p>
+                <button
+                  onClick={handleAutoDetectLocation}
+                  disabled={detectingLocation}
+                  className="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {detectingLocation ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+                        <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
+                      </svg>
+                      位置情報を取得中...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="10" r="3"/>
+                        <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/>
+                      </svg>
+                      位置情報でリレーを設定
+                    </>
+                  )}
+                </button>
+                {/* Show nearest relays with distance */}
+                {nearestRelays.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                    <p className="text-xs text-[var(--text-tertiary)] mb-2">最寄りのリレー:</p>
+                    <div className="space-y-1">
+                      {nearestRelays.slice(0, 5).map(relay => (
                         <button
+                          key={relay.url}
                           onClick={() => handleChangeRelay(relay.url)}
-                          className="btn-line text-xs px-3 py-1"
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${
+                            currentRelay === relay.url
+                              ? 'bg-[var(--line-green)] text-white'
+                              : 'bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--border-color)]'
+                          }`}
                         >
-                          変更
+                          <span>{relay.name} ({relay.region})</span>
+                          <span className="opacity-70">{formatDistance(relay.distance)}</span>
                         </button>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+
+                {/* NIP-65 Outbox Model Configuration */}
+                {nip65Config && (
+                  <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                    <button
+                      onClick={() => setShowNip65Details(!showNip65Details)}
+                      className="w-full flex items-center justify-between text-xs text-[var(--text-secondary)] mb-2"
+                    >
+                      <span className="font-medium">NIP-65 Outbox Model 設定</span>
+                      <svg className={`w-4 h-4 transition-transform ${showNip65Details ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="6,9 12,15 18,9"/>
+                      </svg>
+                    </button>
+
+                    {showNip65Details && (
+                      <div className="space-y-3">
+                        {/* Outbox (Write) Relays */}
+                        {nip65Config.outbox?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                              </svg>
+                              Outbox (投稿先) - {nip65Config.outbox.length}リレー
+                            </p>
+                            <div className="space-y-1">
+                              {nip65Config.outbox.map(relay => (
+                                <div key={relay.url} className="px-2 py-1 bg-green-500 bg-opacity-10 rounded text-xs text-[var(--text-primary)] flex justify-between">
+                                  <span className="truncate">{relay.name}</span>
+                                  <span className="text-green-500 opacity-70">{formatDistance(relay.distance)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Inbox (Read) Relays */}
+                        {nip65Config.inbox?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                              </svg>
+                              Inbox (受信先) - {nip65Config.inbox.length}リレー
+                            </p>
+                            <div className="space-y-1">
+                              {nip65Config.inbox.map(relay => (
+                                <div key={relay.url} className="px-2 py-1 bg-blue-500 bg-opacity-10 rounded text-xs text-[var(--text-primary)] flex justify-between">
+                                  <span className="truncate">{relay.name}</span>
+                                  <span className="text-blue-500 opacity-70">{formatDistance(relay.distance)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Discovery Relays */}
+                        {nip65Config.discover?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="M21 21l-4.35-4.35"/>
+                              </svg>
+                              Discover (NIP-65検索) - {nip65Config.discover.length}リレー
+                            </p>
+                            <div className="space-y-1">
+                              {nip65Config.discover.map(relay => (
+                                <div key={relay.url} className="px-2 py-1 bg-purple-500 bg-opacity-10 rounded text-xs text-[var(--text-primary)]">
+                                  <span className="truncate">{relay.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Custom Relay URL */}
-              <div>
-                <p className="text-xs text-[var(--text-tertiary)] mb-2">カスタムリレー</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={customRelayUrl}
-                    onChange={(e) => setCustomRelayUrl(e.target.value)}
-                    placeholder="wss://..."
-                    className="flex-1 input-line text-sm"
-                  />
+              {/* Publish to NIP-65 */}
+              {pubkey && canSign() && (
+                <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
+                  <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">リレーリストを発行 (NIP-65)</p>
+                  <p className="text-xs text-[var(--text-tertiary)] mb-3">
+                    現在のリレー設定を他のクライアントと共有できます
+                  </p>
                   <button
-                    onClick={handleSetCustomRelay}
-                    disabled={!customRelayUrl.trim().startsWith('wss://')}
-                    className="btn-line text-sm px-3 disabled:opacity-50"
+                    onClick={handlePublishRelayList}
+                    disabled={publishingNip65}
+                    className="w-full py-2.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    設定
+                    {publishingNip65 ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+                          <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
+                        </svg>
+                        発行中...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                          <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                          <path d="M2 2l7.586 7.586"/>
+                          <circle cx="11" cy="11" r="2"/>
+                        </svg>
+                        リレーリストを発行
+                      </>
+                    )}
                   </button>
                 </div>
-              </div>
+              )}
 
-              {/* Reset button */}
-              <button
-                onClick={() => handleChangeRelay('wss://yabu.me')}
-                className="w-full py-2 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-              >
-                デフォルト (yabu.me) に戻す
-              </button>
             </div>
           )}
         </section>

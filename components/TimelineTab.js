@@ -31,6 +31,23 @@ import {
 } from '@/lib/nostr'
 import { uploadImagesInParallel } from '@/lib/imageUtils'
 import { setCachedMuteList } from '@/lib/cache'
+import {
+  markNotInterested,
+  getNotInterestedPosts,
+  sortByRecommendation,
+  extract2ndDegreeNetwork,
+  getRecommendedPosts,
+  fetchEngagementData,
+  buildRecommendationContext,
+  fetchFollowListsBatch,
+  recordEngagement
+} from '@/lib/recommendation'
+import {
+  fetchEventsWithOutboxModel,
+  fetchRelayListsBatch,
+  getUserOutboxRelays,
+  RELAY_LIST_DISCOVERY_RELAYS
+} from '@/lib/outbox'
 import PostItem from './PostItem'
 import UserProfileView from './UserProfileView'
 import SearchModal from './SearchModal'
@@ -144,6 +161,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const [searchQuery, setSearchQuery] = useState('') // Initial query for search modal
   // Birdwatch (NIP-32) state
   const [birdwatchLabels, setBirdwatchLabels] = useState({}) // eventId -> array of label events
+  // Not interested state (for recommendation feed)
+  const [notInterestedPosts, setNotInterestedPosts] = useState(new Set())
   // Follow timeline state
   const [timelineMode, setTimelineMode] = useState('global') // 'global' or 'following'
   const [followList, setFollowList] = useState([])
@@ -394,6 +413,16 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     }
   }
 
+  // Handle "Not Interested" feedback for recommendation feed
+  const handleNotInterested = (eventId, authorPubkey) => {
+    // Mark in recommendation system
+    markNotInterested(eventId, authorPubkey)
+    // Update local state to hide immediately
+    setNotInterestedPosts(prev => new Set([...prev, eventId]))
+    // Remove from global posts
+    setGlobalPosts(prev => prev.filter(post => post.id !== eventId))
+  }
+
   // NIP-56: Report handler
   const handleReport = async (reportData) => {
     if (!pubkey) return
@@ -508,16 +537,17 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     }
   }
 
-  // Full timeline load (runs in background after quick load - global timeline only)
+  // Full timeline load with recommendation algorithm (おすすめ feed)
   const loadTimelineFull = async () => {
     setLoadingMore(true)
     const readRelays = getReadRelays()
-    const oneHourAgo = Math.floor(Date.now() / 1000) - 3600 // 1 hour
-    
+    const threeHoursAgo = Math.floor(Date.now() / 1000) - 10800 // 3 hours for more candidate posts
+
     try {
-      const noteFilter = { kinds: [1], since: oneHourAgo, limit: 100 }
-      const repostFilter = { kinds: [6], since: oneHourAgo, limit: 50 }
-      
+      // Step 1: Fetch base timeline posts
+      const noteFilter = { kinds: [1], since: threeHoursAgo, limit: 200 }
+      const repostFilter = { kinds: [6], since: threeHoursAgo, limit: 100 }
+
       const [notes, reposts] = await Promise.all([
         fetchEvents(noteFilter, readRelays),
         fetchEvents(repostFilter, readRelays)
@@ -545,13 +575,79 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         }
       }
 
-      const allPosts = [...notes, ...repostData].sort((a, b) => {
+      let allPosts = [...notes, ...repostData]
+
+      // Step 2: Build 2nd-degree network for discovery (if logged in with follows)
+      let secondDegreeFollows = new Set()
+      let secondDegreePosts = []
+
+      if (followList.length > 0) {
+        try {
+          // Fetch follow lists of our follows to build 2nd-degree network
+          const sampleFollows = followList.slice(0, 30) // Sample for performance
+          const followsOfFollows = await fetchFollowListsBatch(sampleFollows, readRelays)
+          secondDegreeFollows = extract2ndDegreeNetwork(followList, followsOfFollows)
+
+          // Fetch posts from 2nd-degree network using Outbox Model
+          if (secondDegreeFollows.size > 0) {
+            const secondDegreeArray = Array.from(secondDegreeFollows).slice(0, 50)
+            try {
+              secondDegreePosts = await fetchEventsWithOutboxModel(
+                { kinds: [1], since: threeHoursAgo, limit: 100 },
+                secondDegreeArray,
+                { timeout: 12000 }
+              )
+              // Add 2nd-degree posts to candidates
+              allPosts = [...allPosts, ...secondDegreePosts]
+            } catch (e) {
+              console.warn('Failed to fetch 2nd-degree posts:', e)
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to build 2nd-degree network:', e)
+        }
+      }
+
+      // Deduplicate posts by ID
+      const postMap = new Map()
+      for (const post of allPosts) {
+        if (!postMap.has(post.id)) {
+          postMap.set(post.id, post)
+        }
+      }
+      allPosts = Array.from(postMap.values())
+
+      // Step 3: Fetch engagement data for scoring
+      const eventIds = allPosts.slice(0, 150).map(p => p.id)
+      let engagements = {}
+
+      if (eventIds.length > 0) {
+        try {
+          engagements = await fetchEngagementData(eventIds, readRelays)
+        } catch (e) {
+          console.warn('Failed to fetch engagement data:', e)
+        }
+      }
+
+      // Step 4: Apply recommendation algorithm
+      const followSet = new Set(followList)
+      const recommendedPosts = getRecommendedPosts(allPosts, {
+        followList: followSet,
+        secondDegreeFollows,
+        mutedPubkeys,
+        engagements,
+        profiles,
+        userGeohash: typeof window !== 'undefined' ? localStorage.getItem('user_geohash') : null
+      }, 100)
+
+      // Fallback to time-sorted if no recommendations
+      const finalPosts = recommendedPosts.length > 0 ? recommendedPosts : allPosts.sort((a, b) => {
         const timeA = a._repostTime || a.created_at
         const timeB = b._repostTime || b.created_at
         return timeB - timeA
       })
 
-      setGlobalPosts(allPosts)
+      setGlobalPosts(finalPosts)
       
       // Get unique authors
       const authors = new Set()
@@ -688,35 +784,80 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     }
   }
 
-  // Manual refresh
+  // Manual refresh with recommendation algorithm for おすすめ (global) mode
   const loadTimeline = async () => {
     setLoading(true)
     setLoadError(false)
     const readRelays = getReadRelays()
+    const threeHoursAgo = Math.floor(Date.now() / 1000) - 10800 // 3 hours for recommendations
     const oneHourAgo = Math.floor(Date.now() / 1000) - 3600
     const currentMode = timelineMode
     const currentSetPosts = currentMode === 'global' ? setGlobalPosts : setFollowingPosts
-    
+
     try {
-      let noteFilter = { kinds: [1], since: oneHourAgo, limit: 100 }
-      let repostFilter = { kinds: [6], since: oneHourAgo, limit: 50 }
-      
-      if (currentMode === 'following' && followList.length > 0) {
-        noteFilter.authors = followList
-        repostFilter.authors = followList
-      } else if (currentMode === 'following' && followList.length === 0) {
-        currentSetPosts([])
+      // Following mode - simple chronological
+      if (currentMode === 'following') {
+        if (followList.length === 0) {
+          currentSetPosts([])
+          setLoading(false)
+          return
+        }
+
+        const [notes, reposts] = await Promise.all([
+          fetchEvents({ kinds: [1], authors: followList, since: oneHourAgo, limit: 100 }, readRelays),
+          fetchEvents({ kinds: [6], authors: followList, since: oneHourAgo, limit: 50 }, readRelays)
+        ])
+
+        const repostData = []
+        for (const repost of reposts) {
+          try {
+            if (repost.content) {
+              const originalEvent = JSON.parse(repost.content)
+              repostData.push({
+                ...originalEvent,
+                _repostedBy: repost.pubkey,
+                _repostTime: repost.created_at,
+                _isRepost: true,
+                _repostId: repost.id
+              })
+            }
+          } catch (e) {
+            // Skip invalid
+          }
+        }
+
+        const allPosts = [...notes, ...repostData].sort((a, b) => {
+          const timeA = a._repostTime || a.created_at
+          const timeB = b._repostTime || b.created_at
+          return timeB - timeA
+        })
+
+        currentSetPosts(allPosts)
+
+        // Fetch profiles and reactions
+        const authors = new Set(allPosts.map(p => p.pubkey))
+        allPosts.forEach(p => { if (p._repostedBy) authors.add(p._repostedBy) })
+
+        if (authors.size > 0) {
+          const profileMap = await fetchProfilesBatch(Array.from(authors))
+          setProfiles(prev => ({ ...prev, ...profileMap }))
+        }
+
         setLoading(false)
         return
       }
-      
+
+      // おすすめ (global) mode - with recommendation algorithm
+      let noteFilter = { kinds: [1], since: threeHoursAgo, limit: 200 }
+      let repostFilter = { kinds: [6], since: threeHoursAgo, limit: 100 }
+
       const [notes, reposts] = await Promise.all([
         fetchEvents(noteFilter, readRelays),
         fetchEvents(repostFilter, readRelays)
       ])
-      
+
       // Check if fetch returned empty (possible connection issue)
-      if (notes.length === 0 && reposts.length === 0 && currentMode === 'global') {
+      if (notes.length === 0 && reposts.length === 0) {
         console.warn('No events received - possible connection issue')
         setLoadError(true)
       }
@@ -742,13 +883,65 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         }
       }
 
-      const allPosts = [...notes, ...repostData].sort((a, b) => {
+      let allPosts = [...notes, ...repostData]
+
+      // Build 2nd-degree network and fetch their posts
+      let secondDegreeFollows = new Set()
+      if (followList.length > 0) {
+        try {
+          const sampleFollows = followList.slice(0, 30)
+          const followsOfFollows = await fetchFollowListsBatch(sampleFollows, readRelays)
+          secondDegreeFollows = extract2ndDegreeNetwork(followList, followsOfFollows)
+
+          if (secondDegreeFollows.size > 0) {
+            const secondDegreeArray = Array.from(secondDegreeFollows).slice(0, 50)
+            const secondDegreePosts = await fetchEventsWithOutboxModel(
+              { kinds: [1], since: threeHoursAgo, limit: 100 },
+              secondDegreeArray,
+              { timeout: 12000 }
+            )
+            allPosts = [...allPosts, ...secondDegreePosts]
+          }
+        } catch (e) {
+          console.warn('Failed to fetch 2nd-degree network:', e)
+        }
+      }
+
+      // Deduplicate
+      const postMap = new Map()
+      for (const post of allPosts) {
+        if (!postMap.has(post.id)) {
+          postMap.set(post.id, post)
+        }
+      }
+      allPosts = Array.from(postMap.values())
+
+      // Fetch engagement data
+      const eventIds = allPosts.slice(0, 150).map(p => p.id)
+      let engagements = {}
+      if (eventIds.length > 0) {
+        engagements = await fetchEngagementData(eventIds, readRelays)
+      }
+
+      // Apply recommendation algorithm
+      const followSet = new Set(followList)
+      const recommendedPosts = getRecommendedPosts(allPosts, {
+        followList: followSet,
+        secondDegreeFollows,
+        mutedPubkeys,
+        engagements,
+        profiles,
+        userGeohash: typeof window !== 'undefined' ? localStorage.getItem('user_geohash') : null
+      }, 100)
+
+      // Fallback to time-sorted if no recommendations
+      const finalPosts = recommendedPosts.length > 0 ? recommendedPosts : allPosts.sort((a, b) => {
         const timeA = a._repostTime || a.created_at
         const timeB = b._repostTime || b.created_at
         return timeB - timeA
       })
 
-      currentSetPosts(allPosts)
+      currentSetPosts(finalPosts)
       
       const authors = new Set()
       allPosts.forEach(p => {
@@ -837,6 +1030,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           ...prev,
           [event.id]: (prev[event.id] || 0) + 1
         }))
+        // Record engagement for recommendation personalization
+        recordEngagement('like', event.pubkey)
       }
     } catch (e) {
       console.error('Failed to like:', e)
@@ -887,6 +1082,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       if (success) {
         setUserReposts(prev => new Set([...prev, event.id]))
         setUserRepostIds(prev => ({ ...prev, [event.id]: signed.id }))
+        // Record engagement for recommendation personalization
+        recordEngagement('repost', event.pubkey)
       }
     } catch (e) {
       console.error('Failed to repost:', e)
@@ -1189,7 +1386,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                   : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]'
               }`}
             >
-              リレー
+              おすすめ
             </button>
             <button
               onClick={() => handleModeChange('following')}
@@ -1645,11 +1842,13 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                     onReport={handleReport}
                     onBirdwatch={handleBirdwatch}
                     onBirdwatchRate={handleBirdwatchRate}
+                    onNotInterested={handleNotInterested}
                     birdwatchNotes={birdwatchLabels[post.id] || []}
                     myPubkey={pubkey}
                     isOwnPost={post.pubkey === pubkey}
                     isRepost={post._isRepost}
                     repostedBy={post._repostedBy ? profiles[post._repostedBy] || { pubkey: post._repostedBy } : null}
+                    showNotInterested={timelineMode === 'global'}
                   />
                 </div>
               )
@@ -1670,17 +1869,17 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         )}
       </div>
       
-      {/* Desktop: Dual column (Relay | Following) with independent scroll */}
+      {/* Desktop: Dual column (Recommend | Following) with independent scroll */}
       <div className="hidden lg:flex lg:fixed lg:top-16 lg:bottom-0 lg:left-[240px] xl:left-[280px] lg:right-0">
-        {/* Left column: Relay timeline */}
+        {/* Left column: Recommended timeline */}
         <div className="flex-1 flex flex-col border-r border-[var(--border-color)] overflow-hidden">
           <div className="flex-shrink-0 bg-[var(--bg-primary)] border-b border-[var(--border-color)] px-4 py-3 flex items-center justify-between">
-            <h2 className="font-bold text-[var(--text-primary)]">リレー</h2>
+            <h2 className="font-bold text-[var(--text-primary)]">おすすめ</h2>
             <button
               onClick={() => loadTimeline()}
               disabled={loading}
               className="p-2 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-all disabled:opacity-50"
-              title="リレーを更新"
+              title="おすすめを更新"
             >
               <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -1751,11 +1950,13 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                         onReport={handleReport}
                         onBirdwatch={handleBirdwatch}
                         onBirdwatchRate={handleBirdwatchRate}
+                        onNotInterested={handleNotInterested}
                         birdwatchNotes={birdwatchLabels[post.id] || []}
                         myPubkey={pubkey}
                         isOwnPost={post.pubkey === pubkey}
                         isRepost={post._isRepost}
                         repostedBy={post._repostedBy ? profiles[post._repostedBy] || { pubkey: post._repostedBy } : null}
+                        showNotInterested={true}
                       />
                     </div>
                   )
