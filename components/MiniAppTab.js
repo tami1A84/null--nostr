@@ -18,8 +18,16 @@ import {
   requestVanishFromRelay,
   requestGlobalVanish,
   canSign,
-  FALLBACK_RELAYS
+  FALLBACK_RELAYS,
+  publishRelayListMetadata,
+  fetchRelayListMetadata
 } from '@/lib/nostr'
+import {
+  autoDetectRelays,
+  loadUserGeohash,
+  saveUserGeohash,
+  encodeGeohash
+} from '@/lib/geohash'
 import { clearBadgeCache } from './BadgeDisplay'
 import SchedulerApp from './SchedulerApp'
 import EventBackupApp from './EventBackupApp'
@@ -279,6 +287,11 @@ export default function MiniAppTab({ pubkey, onLogout }) {
   const [showRelaySettings, setShowRelaySettings] = useState(false)
   const [relaySearch, setRelaySearch] = useState('')
   const [customRelayUrl, setCustomRelayUrl] = useState('')
+  // Geolocation relay auto-setup
+  const [detectingLocation, setDetectingLocation] = useState(false)
+  const [userGeohash, setUserGeohash] = useState(null)
+  const [recommendedRelays, setRecommendedRelays] = useState([])
+  const [publishingNip65, setPublishingNip65] = useState(false)
 
   // Upload server settings
   const [uploadServerState, setUploadServerState] = useState('nostr.build')
@@ -335,6 +348,12 @@ export default function MiniAppTab({ pubkey, onLogout }) {
 
     // Load relay setting
     setCurrentRelay(getDefaultRelay())
+
+    // Load saved geohash
+    const savedGeohash = loadUserGeohash()
+    if (savedGeohash) {
+      setUserGeohash(savedGeohash)
+    }
 
     // Load upload server setting
     setUploadServerState(getUploadServer())
@@ -885,11 +904,55 @@ export default function MiniAppTab({ pubkey, onLogout }) {
   const getFilteredRelays = () => {
     if (!relaySearch.trim()) return KNOWN_RELAYS
     const search = relaySearch.toLowerCase()
-    return KNOWN_RELAYS.filter(r => 
-      r.url.toLowerCase().includes(search) || 
+    return KNOWN_RELAYS.filter(r =>
+      r.url.toLowerCase().includes(search) ||
       r.name.toLowerCase().includes(search) ||
       r.region.toLowerCase().includes(search)
     )
+  }
+
+  // Auto-detect location and recommend relays
+  const handleAutoDetectLocation = async () => {
+    setDetectingLocation(true)
+    try {
+      const result = await autoDetectRelays()
+      if (result.geohash) {
+        setUserGeohash(result.geohash)
+        setRecommendedRelays(result.relays)
+        // Auto-select the first recommended relay
+        if (result.relays.length > 0) {
+          handleChangeRelay(result.relays[0].url)
+        }
+      } else if (result.error) {
+        alert(`位置情報の取得に失敗しました: ${result.error}`)
+      }
+    } catch (e) {
+      console.error('Location detection failed:', e)
+      alert('位置情報の取得に失敗しました。ブラウザの位置情報設定を確認してください。')
+    } finally {
+      setDetectingLocation(false)
+    }
+  }
+
+  // Publish relay list to NIP-65 (kind:10002)
+  const handlePublishRelayList = async () => {
+    if (!pubkey || !canSign()) {
+      alert('リレーリストを発行するにはログインが必要です')
+      return
+    }
+    setPublishingNip65(true)
+    try {
+      const relayList = [{ url: currentRelay, read: true, write: true }]
+      const result = await publishRelayListMetadata(relayList)
+      if (result.success) {
+        alert('リレーリストを発行しました (NIP-65)')
+      }
+    } catch (e) {
+      console.error('Failed to publish relay list:', e)
+      alert('リレーリストの発行に失敗しました: ' + e.message)
+    } finally {
+      setPublishingNip65(false)
+    }
   }
 
   const handleSelectUploadServer = (server) => {
@@ -1334,7 +1397,96 @@ export default function MiniAppTab({ pubkey, onLogout }) {
               <div className="p-3 bg-[var(--line-green)] bg-opacity-10 rounded-xl border border-[var(--line-green)]">
                 <p className="text-xs text-[var(--text-tertiary)] mb-1">使用中のリレー</p>
                 <p className="text-sm font-medium text-[var(--text-primary)]">{currentRelay}</p>
+                {userGeohash && (
+                  <p className="text-xs text-[var(--text-tertiary)] mt-1">位置: {userGeohash}</p>
+                )}
               </div>
+
+              {/* Auto-detect location */}
+              <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
+                <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">位置情報で自動設定</p>
+                <p className="text-xs text-[var(--text-tertiary)] mb-3">
+                  現在地に最適なリレーを自動選択します
+                </p>
+                <button
+                  onClick={handleAutoDetectLocation}
+                  disabled={detectingLocation}
+                  className="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {detectingLocation ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+                        <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
+                      </svg>
+                      位置情報を取得中...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="10" r="3"/>
+                        <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/>
+                      </svg>
+                      位置情報でリレーを設定
+                    </>
+                  )}
+                </button>
+                {recommendedRelays.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                    <p className="text-xs text-[var(--text-tertiary)] mb-2">おすすめリレー:</p>
+                    <div className="space-y-1">
+                      {recommendedRelays.map(relay => (
+                        <button
+                          key={relay.url}
+                          onClick={() => handleChangeRelay(relay.url)}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
+                            currentRelay === relay.url
+                              ? 'bg-[var(--line-green)] text-white'
+                              : 'bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--border-color)]'
+                          }`}
+                        >
+                          {relay.name} ({relay.region})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Publish to NIP-65 */}
+              {pubkey && canSign() && (
+                <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
+                  <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">リレーリストを発行 (NIP-65)</p>
+                  <p className="text-xs text-[var(--text-tertiary)] mb-3">
+                    現在のリレー設定を他のクライアントと共有できます
+                  </p>
+                  <button
+                    onClick={handlePublishRelayList}
+                    disabled={publishingNip65}
+                    className="w-full py-2.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {publishingNip65 ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+                          <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
+                        </svg>
+                        発行中...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                          <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                          <path d="M2 2l7.586 7.586"/>
+                          <circle cx="11" cy="11" r="2"/>
+                        </svg>
+                        リレーリストを発行
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
 
               {/* Search Relays */}
               <div>

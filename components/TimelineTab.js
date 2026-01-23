@@ -31,6 +31,12 @@ import {
 } from '@/lib/nostr'
 import { uploadImagesInParallel } from '@/lib/imageUtils'
 import { setCachedMuteList } from '@/lib/cache'
+import {
+  markNotInterested,
+  getNotInterestedPosts,
+  sortByRecommendation,
+  extract2ndDegreeNetwork
+} from '@/lib/recommendation'
 import PostItem from './PostItem'
 import UserProfileView from './UserProfileView'
 import SearchModal from './SearchModal'
@@ -144,6 +150,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const [searchQuery, setSearchQuery] = useState('') // Initial query for search modal
   // Birdwatch (NIP-32) state
   const [birdwatchLabels, setBirdwatchLabels] = useState({}) // eventId -> array of label events
+  // Not interested state (for recommendation feed)
+  const [notInterestedPosts, setNotInterestedPosts] = useState(new Set())
   // Follow timeline state
   const [timelineMode, setTimelineMode] = useState('global') // 'global' or 'following'
   const [followList, setFollowList] = useState([])
@@ -392,6 +400,16 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     } catch (e) {
       console.error('Failed to mute:', e)
     }
+  }
+
+  // Handle "Not Interested" feedback for recommendation feed
+  const handleNotInterested = (eventId, authorPubkey) => {
+    // Mark in recommendation system
+    markNotInterested(eventId, authorPubkey)
+    // Update local state to hide immediately
+    setNotInterestedPosts(prev => new Set([...prev, eventId]))
+    // Remove from global posts
+    setGlobalPosts(prev => prev.filter(post => post.id !== eventId))
   }
 
   // NIP-56: Report handler
@@ -1189,7 +1207,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                   : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]'
               }`}
             >
-              リレー
+              おすすめ
             </button>
             <button
               onClick={() => handleModeChange('following')}
@@ -1645,11 +1663,13 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                     onReport={handleReport}
                     onBirdwatch={handleBirdwatch}
                     onBirdwatchRate={handleBirdwatchRate}
+                    onNotInterested={handleNotInterested}
                     birdwatchNotes={birdwatchLabels[post.id] || []}
                     myPubkey={pubkey}
                     isOwnPost={post.pubkey === pubkey}
                     isRepost={post._isRepost}
                     repostedBy={post._repostedBy ? profiles[post._repostedBy] || { pubkey: post._repostedBy } : null}
+                    showNotInterested={timelineMode === 'global'}
                   />
                 </div>
               )
@@ -1670,17 +1690,17 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         )}
       </div>
       
-      {/* Desktop: Dual column (Relay | Following) with independent scroll */}
+      {/* Desktop: Dual column (Recommend | Following) with independent scroll */}
       <div className="hidden lg:flex lg:fixed lg:top-16 lg:bottom-0 lg:left-[240px] xl:left-[280px] lg:right-0">
-        {/* Left column: Relay timeline */}
+        {/* Left column: Recommended timeline */}
         <div className="flex-1 flex flex-col border-r border-[var(--border-color)] overflow-hidden">
           <div className="flex-shrink-0 bg-[var(--bg-primary)] border-b border-[var(--border-color)] px-4 py-3 flex items-center justify-between">
-            <h2 className="font-bold text-[var(--text-primary)]">リレー</h2>
+            <h2 className="font-bold text-[var(--text-primary)]">おすすめ</h2>
             <button
               onClick={() => loadTimeline()}
               disabled={loading}
               className="p-2 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-all disabled:opacity-50"
-              title="リレーを更新"
+              title="おすすめを更新"
             >
               <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M23 4v6h-6M1 20v-6h6"/>
@@ -1751,11 +1771,13 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                         onReport={handleReport}
                         onBirdwatch={handleBirdwatch}
                         onBirdwatchRate={handleBirdwatchRate}
+                        onNotInterested={handleNotInterested}
                         birdwatchNotes={birdwatchLabels[post.id] || []}
                         myPubkey={pubkey}
                         isOwnPost={post.pubkey === pubkey}
                         isRepost={post._isRepost}
                         repostedBy={post._repostedBy ? profiles[post._repostedBy] || { pubkey: post._repostedBy } : null}
+                        showNotInterested={true}
                       />
                     </div>
                   )
