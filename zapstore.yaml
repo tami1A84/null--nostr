@@ -1,0 +1,43 @@
+# zapstore.yaml - ぬるぬる Nostr Client
+# https://zapstore.dev/docs/publish
+
+name: ぬるぬる
+identifier: app.nurunuru
+summary: LINE風のシンプルで可愛いNostrクライアント
+description: |
+  ぬるぬるは、LINE風のUIを持つNostrクライアントです。
+  
+  ## 主な機能
+  - タイムライン（リレー/フォロー切り替え）
+  - 暗号化DM（NIP-17対応）
+  - いいね・リポスト・Zap
+  - NIP-05認証・バッジ表示
+  - カスタム絵文字対応
+  - パスキーログイン
+  - PWA対応
+  
+  ## 対応NIP
+  NIP-01, NIP-02, NIP-05, NIP-07, NIP-09, NIP-17, NIP-19, 
+  NIP-25, NIP-27, NIP-30, NIP-44, NIP-46, NIP-50, NIP-51, 
+  NIP-57, NIP-58, NIP-59, NIP-98
+
+repository: https://github.com/kojira/nostr-line-client
+homepage: https://yabu.me
+license: MIT
+tags: nostr social messaging line japan
+
+icon: public/favicon-512.png
+changelog: CHANGELOG.md
+
+# Assets from GitHub releases (regex pattern)
+# After tagging v1.0.0, the workflow creates nurunuru-1.0.0-arm64-v8a.apk
+assets:
+  - nurunuru-.*-arm64-v8a.apk
+
+remote_metadata:
+  - github
+
+# Blossom servers for uploading
+blossom_servers:
+  - https://cdn.zapstore.dev
+  - https://blossom.band
