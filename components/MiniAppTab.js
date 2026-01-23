@@ -32,7 +32,12 @@ import {
   loadUserLocation,
   formatDistance,
   GPS_RELAY_DATABASE,
-  DIRECTORY_RELAYS
+  DIRECTORY_RELAYS,
+  REGION_COORDINATES,
+  selectRelaysByRegion,
+  loadSelectedRegion,
+  saveSelectedRegion,
+  getRegionById
 } from '@/lib/geohash'
 import {
   fetchUserRelayList,
@@ -307,6 +312,8 @@ export default function MiniAppTab({ pubkey, onLogout }) {
   const [nip65Config, setNip65Config] = useState(null)
   const [nearestRelays, setNearestRelays] = useState([])
   const [showNip65Details, setShowNip65Details] = useState(false)
+  // Region selection (for users who don't want GPS)
+  const [selectedRegion, setSelectedRegion] = useState(null)
 
   // Upload server settings
   const [uploadServerState, setUploadServerState] = useState('nostr.build')
@@ -364,10 +371,23 @@ export default function MiniAppTab({ pubkey, onLogout }) {
     // Load relay setting
     setCurrentRelay(getDefaultRelay())
 
-    // Load saved geohash
+    // Load saved geohash and region
     const savedGeohash = loadUserGeohash()
     if (savedGeohash) {
       setUserGeohash(savedGeohash)
+    }
+
+    // Load saved region selection and restore relay config
+    const savedRegionId = loadSelectedRegion()
+    if (savedRegionId) {
+      const result = selectRelaysByRegion(savedRegionId)
+      if (result.region) {
+        setSelectedRegion(result.region)
+        setUserGeohash(result.geohash)
+        setUserLocation(result.location)
+        setNip65Config(result.nip65Config)
+        setNearestRelays(result.nearestRelays || [])
+      }
     }
 
     // Load upload server setting
@@ -937,6 +957,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
         setRecommendedRelays(result.relays)
         setNip65Config(result.nip65Config)
         setNearestRelays(result.nearestRelays || [])
+        setSelectedRegion(null) // Clear manual region selection when using GPS
 
         // Auto-select the first recommended relay (nearest outbox relay)
         if (result.nip65Config?.outbox?.length > 0) {
@@ -952,6 +973,42 @@ export default function MiniAppTab({ pubkey, onLogout }) {
       alert('位置情報の取得に失敗しました。ブラウザの位置情報設定を確認してください。')
     } finally {
       setDetectingLocation(false)
+    }
+  }
+
+  // Select region manually (for users who don't want to share GPS)
+  const handleSelectRegion = (regionId) => {
+    const result = selectRelaysByRegion(regionId)
+    if (result.region) {
+      setSelectedRegion(result.region)
+      setUserGeohash(result.geohash)
+      setUserLocation(result.location)
+      setRecommendedRelays(result.relays)
+      setNip65Config(result.nip65Config)
+      setNearestRelays(result.nearestRelays || [])
+
+      // Auto-select the first recommended relay
+      if (result.nip65Config?.outbox?.length > 0) {
+        handleChangeRelay(result.nip65Config.outbox[0].url)
+      }
+    }
+  }
+
+  // Handle clicking on a relay in the nearest relays list
+  const handleSelectNearestRelay = (relay) => {
+    handleChangeRelay(relay.url)
+    // Also update NIP-65 config to use this relay as the primary outbox
+    if (nip65Config) {
+      const newOutbox = [relay, ...nip65Config.outbox.filter(r => r.url !== relay.url)].slice(0, 5)
+      const newCombined = [
+        { url: relay.url, read: true, write: true },
+        ...nip65Config.combined.filter(r => r.url !== relay.url)
+      ]
+      setNip65Config({
+        ...nip65Config,
+        outbox: newOutbox,
+        combined: newCombined
+      })
     }
   }
 
@@ -1423,44 +1480,83 @@ export default function MiniAppTab({ pubkey, onLogout }) {
 
           {showRelaySettings && (
             <div className="mt-4 space-y-4">
-              {/* Current Relay Display */}
+              {/* Region Display */}
               <div className="p-3 bg-[var(--line-green)] bg-opacity-10 rounded-xl border border-[var(--line-green)]">
-                <p className="text-xs text-[var(--text-tertiary)] mb-1">使用中のリレー</p>
-                <p className="text-sm font-medium text-[var(--text-primary)]">{currentRelay}</p>
-                {userGeohash && (
-                  <p className="text-xs text-[var(--text-tertiary)] mt-1">位置: {userGeohash}</p>
-                )}
+                <p className="text-xs text-[var(--text-tertiary)] mb-1">地域</p>
+                <p className="text-sm font-medium text-[var(--text-primary)]">
+                  {selectedRegion ? selectedRegion.name : (userGeohash ? 'GPS検出' : '未設定')}
+                </p>
+                <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                  メインリレー: {currentRelay.replace('wss://', '')}
+                </p>
               </div>
 
-              {/* Auto-detect location */}
+              {/* Region Selection */}
               <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
-                <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">位置情報で自動設定</p>
+                <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">地域を選択</p>
                 <p className="text-xs text-[var(--text-tertiary)] mb-3">
-                  現在地に最適なリレーを自動選択します
+                  地域を選択すると最適なリレーが自動設定されます
                 </p>
-                <button
-                  onClick={handleAutoDetectLocation}
-                  disabled={detectingLocation}
-                  className="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                <select
+                  value={selectedRegion?.id || ''}
+                  onChange={(e) => e.target.value && handleSelectRegion(e.target.value)}
+                  className="w-full py-2.5 px-3 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg text-sm border border-[var(--border-color)] focus:border-[var(--line-green)] focus:outline-none"
                 >
-                  {detectingLocation ? (
-                    <>
-                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
-                        <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
-                      </svg>
-                      位置情報を取得中...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="10" r="3"/>
-                        <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/>
-                      </svg>
-                      位置情報でリレーを設定
-                    </>
-                  )}
-                </button>
+                  <option value="">地域を選択...</option>
+                  <optgroup label="日本">
+                    {REGION_COORDINATES.filter(r => r.country === 'JP').map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="アジア">
+                    {REGION_COORDINATES.filter(r => ['SG', 'TW', 'KR', 'CN', 'IN'].includes(r.country)).map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="北米">
+                    {REGION_COORDINATES.filter(r => ['US', 'CA'].includes(r.country)).map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="ヨーロッパ">
+                    {REGION_COORDINATES.filter(r => ['EU', 'UK'].includes(r.country)).map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="その他">
+                    {REGION_COORDINATES.filter(r => ['AU', 'BR', 'Global'].includes(r.country)).map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </optgroup>
+                </select>
+
+                {/* GPS auto-detect button */}
+                <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                  <button
+                    onClick={handleAutoDetectLocation}
+                    disabled={detectingLocation}
+                    className="w-full py-2 bg-[var(--bg-secondary)] hover:bg-[var(--border-color)] text-[var(--text-secondary)] rounded-lg text-xs font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {detectingLocation ? (
+                      <>
+                        <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+                          <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
+                        </svg>
+                        位置情報を取得中...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="10" r="3"/>
+                          <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/>
+                        </svg>
+                        GPSで自動検出
+                      </>
+                    )}
+                  </button>
+                </div>
+
                 {/* Show nearest relays with distance */}
                 {nearestRelays.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
@@ -1469,7 +1565,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
                       {nearestRelays.slice(0, 5).map(relay => (
                         <button
                           key={relay.url}
-                          onClick={() => handleChangeRelay(relay.url)}
+                          onClick={() => handleSelectNearestRelay(relay)}
                           className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${
                             currentRelay === relay.url
                               ? 'bg-[var(--line-green)] text-white'
