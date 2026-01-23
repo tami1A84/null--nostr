@@ -28,6 +28,10 @@ import {
   saveUserGeohash,
   encodeGeohash
 } from '@/lib/geohash'
+import {
+  fetchUserRelayList,
+  RELAY_LIST_DISCOVERY_RELAYS
+} from '@/lib/outbox'
 import { clearBadgeCache } from './BadgeDisplay'
 import SchedulerApp from './SchedulerApp'
 import EventBackupApp from './EventBackupApp'
