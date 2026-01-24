@@ -40,6 +40,20 @@ export function useNostrSubscription(filter, options = {}) {
   const seenEventsRef = useRef(new Set())
   const isMountedRef = useRef(true)
 
+  // Use refs for callbacks to avoid re-subscribing when callbacks change
+  const onEventRef = useRef(onEvent)
+  const onEoseRef = useRef(onEose)
+  const onErrorRef = useRef(onError)
+  const onReconnectRef = useRef(onReconnect)
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onEventRef.current = onEvent
+    onEoseRef.current = onEose
+    onErrorRef.current = onError
+    onReconnectRef.current = onReconnect
+  })
+
   // Cleanup function
   const cleanup = useCallback(() => {
     if (subscriptionRef.current) {
@@ -49,7 +63,7 @@ export function useNostrSubscription(filter, options = {}) {
     seenEventsRef.current.clear()
   }, [])
 
-  // Subscribe function
+  // Subscribe function - callbacks are read from refs to avoid dependency issues
   const subscribe = useCallback(() => {
     if (!enabled || !filter) return
 
@@ -82,29 +96,30 @@ export function useNostrSubscription(filter, options = {}) {
           setLastEvent(event)
           setConnectionState(CONNECTION_STATE.CONNECTED)
 
-          if (onEvent) onEvent(event)
+          // Use ref to get latest callback without causing re-subscription
+          if (onEventRef.current) onEventRef.current(event)
         },
         onEose: () => {
           if (!isMountedRef.current) return
           setEoseReceived(true)
-          if (onEose) onEose()
+          if (onEoseRef.current) onEoseRef.current()
         },
         onError: (error) => {
           if (!isMountedRef.current) return
           setConnectionState(CONNECTION_STATE.ERROR)
-          if (onError) onError(error)
+          if (onErrorRef.current) onErrorRef.current(error)
         },
         onReconnect: (attempt) => {
           if (!isMountedRef.current) return
           setConnectionState(CONNECTION_STATE.RECONNECTING)
-          if (onReconnect) onReconnect(attempt)
+          if (onReconnectRef.current) onReconnectRef.current(attempt)
         },
       },
       { autoReconnect }
     )
 
     setConnectionState(CONNECTION_STATE.CONNECTED)
-  }, [enabled, filter, relays, autoReconnect, dedupe, onEvent, onEose, onError, onReconnect, cleanup])
+  }, [enabled, filter, relays, autoReconnect, dedupe, cleanup])
 
   // Setup subscription on mount/filter change
   useEffect(() => {
