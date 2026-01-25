@@ -2297,7 +2297,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
                 <line x1="10" y1="11" x2="10" y2="17"/>
                 <line x1="14" y1="11" x2="14" y2="17"/>
               </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">削除リクエスト (NIP-62)</h2>
+              <h2 className="font-semibold text-[var(--text-primary)]">削除リクエスト </h2>
             </div>
             <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showVanishRequest ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="6 9 12 15 18 9"/>
