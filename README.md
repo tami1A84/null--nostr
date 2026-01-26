@@ -369,7 +369,7 @@ lib/
 
 ## License
 
-MIT License
+The Unlicense
 
 ---
 
