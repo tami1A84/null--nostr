@@ -14,7 +14,7 @@
   "dependencies": {
     "@capacitor/android": "^8.0.0",
     "@capacitor/app": "^8.0.0",
-    "@capacitor/cli": "^8.0.0",
+    "@capacitor/cli": "^8.0.2",
     "@capacitor/core": "^8.0.0",
     "next": "14.2.35",
     "nosskey-sdk": "^0.0.4",
