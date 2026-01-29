@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Exclude sensitive key data -->
+    <exclude domain="sharedpref" path="nostr_keys.xml"/>
+    <exclude domain="database" path="nostr_keys.db"/>
+</full-backup-content>
