@@ -1741,62 +1741,85 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       {/* Mobile: Single column with tab switching */}
       <div className="lg:hidden">
         {loading ? (
-          <div className="divide-y divide-[var(--border-color)]">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-full skeleton" />
-                  <div className="flex-1">
-                    <div className="skeleton h-4 w-24 rounded mb-2" />
-                    <div className="skeleton h-4 w-full rounded mb-1" />
-                    <div className="skeleton h-4 w-2/3 rounded" />
-                  </div>
+          /* Nintendo-style: やさしいスケルトンローディング */
+          <div className="divide-y divide-[var(--border-color)] animate-fadeIn">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="skeleton-post" style={{ animationDelay: `${i * 50}ms` }}>
+                <div className="skeleton-avatar skeleton-friendly" />
+                <div className="skeleton-content">
+                  <div className="skeleton-line skeleton-line-short skeleton-friendly" />
+                  <div className="skeleton-line skeleton-line-full skeleton-friendly" />
+                  <div className="skeleton-line skeleton-line-medium skeleton-friendly" />
                 </div>
               </div>
             ))}
+            {/* 励ましのメッセージ */}
+            <div className="loading-friendly py-4">
+              <div className="loading-dots">
+                <div className="loading-dot" />
+                <div className="loading-dot" />
+                <div className="loading-dot" />
+              </div>
+              <p className="loading-text">読み込んでいます...</p>
+            </div>
           </div>
         ) : posts.length === 0 || loadError ? (
-          <div className="px-4 py-16 text-center">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[var(--bg-secondary)] flex items-center justify-center">
+          /* Nintendo-style: 失敗しても責められない、励ましのメッセージ */
+          <div className="error-friendly animate-fadeIn">
+            <div className="error-friendly-icon">
               {loadError ? (
-                <svg className="w-10 h-10 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                /* 接続エラー - 優しいアイコン（警告マークではなく顔文字風） */
+                <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                  <line x1="9" y1="9" x2="9.01" y2="9"/>
+                  <line x1="15" y1="9" x2="15.01" y2="9"/>
                 </svg>
               ) : timelineMode === 'following' ? (
-                <svg className="w-10 h-10 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                   <circle cx="9" cy="7" r="4"/>
                   <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
                   <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                 </svg>
               ) : (
-                <svg className="w-10 h-10 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                   <line x1="3" y1="9" x2="21" y2="9"/>
                   <line x1="9" y1="21" x2="9" y2="9"/>
                 </svg>
               )}
             </div>
-            <p className="text-[var(--text-secondary)]">
+            {/* Nintendo-style: 励ましのメッセージ */}
+            <h2 className="error-friendly-title">
               {loadError
-                ? '接続に問題が発生しました'
-                : timelineMode === 'following' 
-                  ? (followList.length === 0 ? 'まだ誰もフォローしていません' : 'フォロー中のユーザーの投稿がありません')
-                  : '投稿がありません'}
+                ? 'うまく接続できませんでした'
+                : timelineMode === 'following'
+                  ? (followList.length === 0 ? 'まだ誰もフォローしていません' : 'まだ投稿がないようです')
+                  : 'まだ投稿がありません'}
+            </h2>
+            <p className="error-friendly-message">
+              {loadError
+                ? '通信状態を確認して、もう一度お試しください'
+                : timelineMode === 'following'
+                  ? (followList.length === 0 ? '素敵な人を見つけてフォローしてみましょう' : 'しばらくお待ちいただくか、更新してみてください')
+                  : '新しい投稿がまもなく届くかもしれません'}
             </p>
             {loadError ? (
               <button
                 onClick={() => loadTimeline()}
-                className="mt-4 px-6 py-2 bg-[var(--line-green)] text-white rounded-full text-sm font-medium"
+                className="retry-button mt-4"
               >
-                再読み込み
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                </svg>
+                もう一度試す
               </button>
             ) : timelineMode === 'following' && followList.length === 0 && (
-              <p className="text-xs text-[var(--text-tertiary)] mt-2">
-                プロフィールページでユーザーをフォローしてみましょう
-              </p>
+              <div className="error-friendly-hint mt-4">
+                💡 プロフィールページでユーザーをフォローしてみましょう
+              </div>
             )}
           </div>
         ) : (
@@ -1855,14 +1878,14 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
             })}
 
             {loadingMore && (
-              <div className="flex justify-center py-4">
-                <div className="flex items-center gap-2 text-[var(--text-tertiary)] text-sm">
-                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
-                    <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
-                  </svg>
-                  読み込み中...
+              /* Nintendo-style: やさしい追加読み込み表示 */
+              <div className="loading-friendly py-4">
+                <div className="loading-dots">
+                  <div className="loading-dot" />
+                  <div className="loading-dot" />
+                  <div className="loading-dot" />
                 </div>
+                <p className="loading-text">もっと読み込んでいます...</p>
               </div>
             )}
           </div>
@@ -1889,23 +1912,23 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           </div>
           <div className="flex-1 overflow-y-auto">
             {loading ? (
-              <div className="divide-y divide-[var(--border-color)]">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-full skeleton" />
-                      <div className="flex-1">
-                        <div className="skeleton h-4 w-24 rounded mb-2" />
-                        <div className="skeleton h-4 w-full rounded mb-1" />
-                        <div className="skeleton h-4 w-2/3 rounded" />
-                      </div>
+              /* Nintendo-style: デスクトップ用やさしいスケルトン */
+              <div className="divide-y divide-[var(--border-color)] animate-fadeIn">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="skeleton-post" style={{ animationDelay: `${i * 50}ms` }}>
+                    <div className="skeleton-avatar skeleton-friendly" />
+                    <div className="skeleton-content">
+                      <div className="skeleton-line skeleton-line-short skeleton-friendly" />
+                      <div className="skeleton-line skeleton-line-full skeleton-friendly" />
+                      <div className="skeleton-line skeleton-line-medium skeleton-friendly" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : globalPosts.length === 0 ? (
-              <div className="px-4 py-16 text-center text-[var(--text-tertiary)]">
-                投稿がありません
+              <div className="empty-friendly">
+                <div className="empty-friendly-icon">📭</div>
+                <p className="empty-friendly-text">まだ投稿がありません<br/>新しい投稿がまもなく届くかもしれません</p>
               </div>
             ) : (
               <div className="divide-y divide-[var(--border-color)]">

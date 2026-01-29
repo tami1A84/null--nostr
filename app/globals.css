@@ -5,28 +5,44 @@
 :root {
   /* =========================== */
   /* Design System: Color Tokens */
+  /* Nintendo-style: やさしい色合い */
   /* =========================== */
   --line-green: #06C755;
   --line-green-dark: #05a347;
   --line-green-light: rgba(6, 199, 85, 0.1);
+  --line-green-soft: rgba(6, 199, 85, 0.15);
 
   --bg-primary: #FFFFFF;
   --bg-secondary: #F7F8FA;
   --bg-tertiary: #EBEDF0;
 
   /* Improved contrast ratios for WCAG AA compliance */
-  --text-primary: #111111;
+  --text-primary: #1a1a1a;    /* Slightly softer than pure black */
   --text-secondary: #555555;  /* Improved from #666666 for better contrast (7.46:1) */
   --text-tertiary: #767676;   /* Improved from #999999 for WCAG AA (4.54:1) */
 
-  --border-color: #E5E5E5;
+  --border-color: #E8E8E8;
   --border-color-strong: #D1D1D1;
 
-  /* Semantic colors */
-  --color-error: #DC2626;     /* Improved from #FF3B30 for better contrast */
-  --color-warning: #F59E0B;
+  /* =========================== */
+  /* Semantic colors (Nintendo-style: 優しいフィードバック) */
+  /* 強い赤を避け、暖かみのある色調 */
+  /* =========================== */
+  --color-error: #E57373;       /* 優しい赤 - 責められている感じを軽減 */
+  --color-error-soft: #FFEBEE;  /* エラー背景用 */
+  --color-warning: #FFB74D;     /* 暖かいオレンジ */
+  --color-warning-soft: #FFF3E0;
   --color-success: #06C755;
-  --color-zap: #F7931A;
+  --color-success-soft: rgba(6, 199, 85, 0.1);
+  --color-zap: #FFB74D;         /* ⚡ Zap色も暖かく */
+  --color-info: #64B5F6;        /* 情報表示用の優しい青 */
+  --color-info-soft: #E3F2FD;
+
+  /* =========================== */
+  /* 励ましのカラーパレット */
+  /* =========================== */
+  --color-encourage: #81C784;   /* 励ましの緑 */
+  --color-gentle: #90CAF9;      /* 穏やかな青 */
 
   /* =========================== */
   /* Design System: Spacing Scale (8px base) */
@@ -85,14 +101,22 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-primary: #000000;
+    --bg-primary: #0a0a0a;      /* 純粋な黒より少し柔らかく */
     --bg-secondary: #1C1C1E;
     --bg-tertiary: #2C2C2E;
-    --text-primary: #FFFFFF;
+    --text-primary: #F5F5F5;    /* 純粋な白より少し柔らかく - 目に優しい */
     --text-secondary: #B3B3B3;  /* Improved from #ABABAB for better contrast */
     --text-tertiary: #8A8A8A;   /* Improved from #666666 for WCAG AA (4.5:1) */
     --border-color: #38383A;
     --border-color-strong: #48484A;
+
+    /* ダークモードでも優しい色調 */
+    --color-error: #EF9A9A;       /* ダークモード用の優しい赤 */
+    --color-error-soft: rgba(239, 154, 154, 0.15);
+    --color-warning: #FFCC80;
+    --color-warning-soft: rgba(255, 204, 128, 0.15);
+    --color-info: #90CAF9;
+    --color-info-soft: rgba(144, 202, 249, 0.15);
 
     /* Shadows for dark mode */
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -1226,4 +1250,357 @@ body {
 .focus-visible-ring:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--line-green-light), 0 0 0 1px var(--line-green);
+}
+
+/* ======================================== */
+/* Nintendo-style やさしいUI コンポーネント  */
+/* 任天堂に学ぶ: 失敗しても責められない設計  */
+/* ======================================== */
+
+/* 優しいスケルトンローディング */
+.skeleton-friendly {
+  background: linear-gradient(
+    90deg,
+    var(--bg-tertiary) 0%,
+    var(--bg-secondary) 40%,
+    var(--bg-secondary) 60%,
+    var(--bg-tertiary) 100%
+  );
+  background-size: 300% 100%;
+  animation: skeleton-wave 2s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+@keyframes skeleton-wave {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* スケルトンアイテム - ポスト用 */
+.skeleton-post {
+  padding: var(--space-4);
+  display: flex;
+  gap: var(--space-3);
+}
+
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.skeleton-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-line-short {
+  width: 60%;
+}
+
+.skeleton-line-medium {
+  width: 80%;
+}
+
+.skeleton-line-full {
+  width: 100%;
+}
+
+/* 優しいトースト通知 - Nintendo-style */
+.toast-friendly {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-color);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  animation: toast-slide-up 0.3s ease;
+}
+
+.toast-friendly.success {
+  border-left: 4px solid var(--color-success);
+}
+
+.toast-friendly.info {
+  border-left: 4px solid var(--color-info);
+}
+
+.toast-friendly.warning {
+  border-left: 4px solid var(--color-warning);
+}
+
+.toast-friendly.error {
+  /* 優しいエラー表示 - 赤くなりすぎない */
+  border-left: 4px solid var(--color-error);
+  background: var(--color-error-soft);
+}
+
+@keyframes toast-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 励ましのエラー画面 */
+.error-friendly {
+  text-align: center;
+  padding: var(--space-6);
+}
+
+.error-friendly-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--color-info-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-info);
+}
+
+.error-friendly-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.error-friendly-message {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-relaxed);
+  margin-bottom: var(--space-4);
+}
+
+.error-friendly-hint {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  padding: var(--space-3);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+}
+
+/* 読み込み中の優しい表示 */
+.loading-friendly {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  color: var(--text-secondary);
+}
+
+.loading-dots {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.loading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--line-green);
+  animation: loading-bounce 1.4s ease-in-out infinite both;
+}
+
+.loading-dot:nth-child(1) { animation-delay: -0.32s; }
+.loading-dot:nth-child(2) { animation-delay: -0.16s; }
+.loading-dot:nth-child(3) { animation-delay: 0s; }
+
+@keyframes loading-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.loading-text {
+  font-size: var(--font-size-sm);
+}
+
+/* 空の状態 - 励ましメッセージ */
+.empty-friendly {
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+  color: var(--text-secondary);
+}
+
+.empty-friendly-icon {
+  font-size: 48px;
+  margin-bottom: var(--space-3);
+  opacity: 0.6;
+}
+
+.empty-friendly-text {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
+/* プログレスインジケーター */
+.progress-friendly {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progress-friendly-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--line-green), var(--color-encourage));
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+/* 低帯域対応: 画像のプレースホルダー */
+.image-placeholder {
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.image-loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.image-loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.2) 50%,
+    transparent 100%
+  );
+  animation: image-shimmer 1.5s infinite;
+}
+
+@keyframes image-shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* ======================================== */
+/* 低帯域最適化スタイル (1.5Mbps対応)       */
+/* ======================================== */
+
+/* 画像の遅延読み込み最適化 */
+img[loading="lazy"] {
+  background: var(--bg-tertiary);
+}
+
+/* プリロードインジケーター非表示 */
+.preload-hidden {
+  visibility: hidden;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* 軽量なホバーエフェクト */
+@media (hover: hover) {
+  .hover-light:hover {
+    background: var(--bg-secondary);
+    transition: background 0.15s ease;
+  }
+}
+
+/* タッチデバイス用のアクティブ状態 */
+@media (hover: none) {
+  .touch-active:active {
+    background: var(--bg-secondary);
+  }
+}
+
+/* スムーズな折りたたみアニメーション */
+.collapse-smooth {
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+}
+
+.collapse-smooth.collapsed {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* コンテンツ警告の優しいスタイル */
+.content-warning-friendly {
+  border: 1px solid var(--color-warning);
+  background: var(--color-warning-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+}
+
+.content-warning-friendly-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-warning);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+/* オフライン表示 */
+.offline-banner {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-xs);
+  text-align: center;
+  border-bottom: 1px solid var(--color-info);
+}
+
+/* 再試行ボタン */
+.retry-button {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.retry-button:hover {
+  background: var(--bg-tertiary);
+}
+
+.retry-button:active {
+  transform: scale(0.98);
 }
