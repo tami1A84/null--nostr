@@ -8,7 +8,7 @@
 
 ### Timeline
 
-- リレータイムライン / フォロータイムライン切り替え
+- おすすめタイムライン / フォロータイムライン切り替え
 - 固定ヘッダー（スクロール中もタブ切り替え・検索可能）
 - リアルタイム投稿表示
 - いいね・リポスト（取消対応）・Zap（ワンタップ/長押しカスタム）
@@ -151,8 +151,93 @@ npm run dev
 | NIP-58 | Badges（表示・プロフィールバッジ管理） |
 | NIP-59 | Gift Wrap |
 | NIP-62 | Request to Vanish（削除リクエスト） |
+| NIP-65 | Relay List Metadata（リレーリスト・Outbox Model） |
 | NIP-70 | Protected Events（保護イベントの検出・作成） |
 | NIP-98 | HTTP Auth（画像アップロード用） |
+
+---
+
+## Recommendation Algorithm
+
+おすすめタイムラインは、Xの推奨フィードにインスパイアされたアルゴリズムを使用しています。
+
+### Feed Composition
+
+| 構成 | 比率 | 説明 |
+|------|------|------|
+| 2次ネットワーク | 50% | 友人の友人の投稿（発見重視） |
+| 高エンゲージメント | 30% | ネットワーク外のバイラルコンテンツ |
+| 1次ネットワーク | 20% | 直接フォローの重要な投稿 |
+
+### Scoring System
+
+最終スコアは以下の要素を掛け合わせて計算されます：
+
+```
+Score = Engagement × Social × Author × Geohash × Modifier × TimeDecay
+```
+
+#### Engagement Score
+
+| アクション | 重み |
+|----------|------|
+| Zap | 100 |
+| Quote | 35 |
+| Reply | 30 |
+| Repost | 25 |
+| Bookmark | 15 |
+| Like | 5 |
+
+#### Social Boost
+
+| 関係性 | 倍率 |
+|--------|------|
+| 友人の友人（2次） | 3.0x |
+| 相互フォロー | 2.5x |
+| よくエンゲージするオーサー | 2.0x |
+| 直接フォロー（1次） | 0.5x |
+
+#### Time Decay
+
+- 0-1時間: 1.5倍ブースト
+- 1-6時間: 指数関数的減衰（半減期6時間）
+- 48時間以上: 最小スコア
+
+### Personalization
+
+- **エンゲージメント履歴**: いいね・リポスト・返信したオーサーの投稿を優先
+- **「興味がない」フィードバック**: マークした投稿・オーサーのスコアを減少
+- **地域ブースト**: 同じGeohash地域の投稿を優先（最大2.0倍）
+
+---
+
+## Geolocation Relay
+
+位置情報に基づいてリレー設定を自動化する機能を提供します。
+
+### Auto Detection
+
+GPS許可を与えることで、最適なリレーを自動検出・設定します。
+
+1. **位置情報取得**: ブラウザのGeolocation APIを使用
+2. **Geohashエンコード**: 緯度経度を文字列に圧縮
+3. **最適リレー選択**: 距離とpriorityに基づいて選択
+4. **NIP-65リスト生成**: inbox/outbox/discoverを自動設定
+
+### Relay List Generation
+
+| タイプ | 説明 | 個数 |
+|--------|------|------|
+| Outbox | 書き込み用（投稿ブロードキャスト） | 3-5個 |
+| Inbox | 読み込み用（メンション受信） | 3-4個 |
+| Discover | 発見用（グローバルリレー） | 2-3個 |
+
+### Manual Region Selection
+
+GPS共有を望まない場合、手動で地域を選択できます：
+
+- 日本: 東京、大阪、名古屋、福岡、札幌
+- グローバル: 北米西部/東部、中央ヨーロッパ、東南アジア、オセアニア
 
 ---
 
@@ -270,6 +355,8 @@ lib/
   security.js        Security utilities
   nip46.js           Nostr Connect
   imageUtils.js      Image processing
+  recommendation.js  Recommendation algorithm
+  geohash.js         Geolocation & relay detection
   constants.js       Application constants
 ```
 
