@@ -8,7 +8,7 @@
 
 ### Timeline
 
-- リレータイムライン / フォロータイムライン切り替え
+- おすすめタイムライン / フォロータイムライン切り替え
 - 固定ヘッダー（スクロール中もタブ切り替え・検索可能）
 - リアルタイム投稿表示
 - いいね・リポスト（取消対応）・Zap（ワンタップ/長押しカスタム）
@@ -151,100 +151,93 @@ npm run dev
 | NIP-58 | Badges（表示・プロフィールバッジ管理） |
 | NIP-59 | Gift Wrap |
 | NIP-62 | Request to Vanish（削除リクエスト） |
+| NIP-65 | Relay List Metadata（リレーリスト・Outbox Model） |
 | NIP-70 | Protected Events（保護イベントの検出・作成） |
 | NIP-98 | HTTP Auth（画像アップロード用） |
 
 ---
 
-## NIP-11: Relay Information Document
+## Recommendation Algorithm
 
-リレーの情報ドキュメントを取得・管理する機能を提供します。
+おすすめタイムラインは、Xの推奨フィードにインスパイアされたアルゴリズムを使用しています。
 
-### Functions
+### Feed Composition
 
-| Function | Description |
-|----------|-------------|
-| `fetchRelayInfo(relayUrl)` | リレー情報ドキュメントの取得 |
-| `getRelaySupportedNips(relayUrl)` | サポートNIP一覧取得 |
-| `relaySupportsNip(relayUrl, nip)` | 特定NIPサポート確認 |
-| `getRelayLimitations(relayUrl)` | リレー制限情報取得 |
-| `relayRequiresAuth(relayUrl)` | 認証要否確認 |
-| `relayRequiresPayment(relayUrl)` | 支払い要否確認 |
-| `getRelayInfoForDisplay(relayUrl)` | 表示用リレー情報取得 |
-| `clearRelayInfoCache(relayUrl?)` | キャッシュクリア |
+| 構成 | 比率 | 説明 |
+|------|------|------|
+| 2次ネットワーク | 50% | 友人の友人の投稿（発見重視） |
+| 高エンゲージメント | 30% | ネットワーク外のバイラルコンテンツ |
+| 1次ネットワーク | 20% | 直接フォローの重要な投稿 |
 
-### Features
+### Scoring System
 
-- **1時間キャッシュ**による効率化
-- Accept: `application/nostr+json` ヘッダー対応
-- 制限情報（`limitation`）の取得
-- 対応言語・国情報の取得
-- 支払い情報・投稿ポリシーの取得
+最終スコアは以下の要素を掛け合わせて計算されます：
 
----
-
-## NIP-42: Client Authentication
-
-リレーとの認証を管理する機能を提供します。
-
-### Functions
-
-| Function | Description |
-|----------|-------------|
-| `handleAuthChallenge(relayUrl, challenge)` | AUTHチャレンジ処理 |
-| `createAuthEvent(relayUrl, challenge)` | 認証イベント作成 (kind 22242) |
-| `authenticateWithRelay(relayUrl, challenge)` | リレー認証実行 |
-| `getPendingAuthChallenge(relayUrl)` | 保留中チャレンジ取得 |
-| `markRelayAuthenticated(relayUrl, pubkey)` | 認証状態管理 |
-| `isRelayAuthenticated(relayUrl)` | 認証状態確認 |
-| `getRelayAuthPubkey(relayUrl)` | 認証済み公開鍵取得 |
-| `clearRelayAuth(relayUrl?)` | 認証状態クリア |
-| `isAuthRequiredMessage(message)` | auth-requiredメッセージ解析 |
-
-### Features
-
-- **10分間有効なチャレンジ管理**
-- **24時間有効な認証状態管理**
-- kind 22242 認証イベントの自動作成・署名
-- `auth-required` CLOSEDメッセージの解析
-- リレーごとの認証状態追跡
-
----
-
-## NIP-62: Request to Vanish
-
-リレーからのデータ削除をリクエストする機能を提供します。
-
-### Functions
-
-| Function | Description |
-|----------|-------------|
-| `createVanishRequest(options)` | 削除リクエストイベント作成 (kind 62) |
-| `requestVanish(options)` | 削除リクエスト送信 |
-| `requestVanishFromRelay(relayUrl, reason?)` | 特定リレーへの削除リクエスト |
-| `requestGlobalVanish(reason?, additionalRelays?)` | 全リレーへの削除リクエスト |
-| `isVanishRequest(event)` | イベント種類判定 |
-| `getVanishTargetRelays(event)` | 対象リレー取得 |
-| `isGlobalVanishRequest(event)` | グローバルリクエスト判定 |
-
-### Features
-
-- `ALL_RELAYS` タグによるグローバル削除リクエスト
-- 特定リレーを指定した削除リクエスト
-- 削除理由（reason）の指定
-- 複数リレーへの同時ブロードキャスト
-
-### Usage Example
-
-```javascript
-import { requestVanishFromRelay, requestGlobalVanish } from './lib/nostr'
-
-// 特定リレーからの削除
-await requestVanishFromRelay('wss://relay.example.com', '個人情報の削除')
-
-// 全リレーからの削除（注意: 不可逆）
-await requestGlobalVanish('アカウント削除のため')
 ```
+Score = Engagement × Social × Author × Geohash × Modifier × TimeDecay
+```
+
+#### Engagement Score
+
+| アクション | 重み |
+|----------|------|
+| Zap | 100 |
+| Quote | 35 |
+| Reply | 30 |
+| Repost | 25 |
+| Bookmark | 15 |
+| Like | 5 |
+
+#### Social Boost
+
+| 関係性 | 倍率 |
+|--------|------|
+| 友人の友人（2次） | 3.0x |
+| 相互フォロー | 2.5x |
+| よくエンゲージするオーサー | 2.0x |
+| 直接フォロー（1次） | 0.5x |
+
+#### Time Decay
+
+- 0-1時間: 1.5倍ブースト
+- 1-6時間: 指数関数的減衰（半減期6時間）
+- 48時間以上: 最小スコア
+
+### Personalization
+
+- **エンゲージメント履歴**: いいね・リポスト・返信したオーサーの投稿を優先
+- **「興味がない」フィードバック**: マークした投稿・オーサーのスコアを減少
+- **地域ブースト**: 同じGeohash地域の投稿を優先（最大2.0倍）
+
+---
+
+## Geolocation Relay
+
+位置情報に基づいてリレー設定を自動化する機能を提供します。
+
+### Auto Detection
+
+GPS許可を与えることで、最適なリレーを自動検出・設定します。
+
+1. **位置情報取得**: ブラウザのGeolocation APIを使用
+2. **Geohashエンコード**: 緯度経度を文字列に圧縮
+3. **最適リレー選択**: 距離とpriorityに基づいて選択
+4. **NIP-65リスト生成**: inbox/outbox/discoverを自動設定
+
+### Relay List Generation
+
+| タイプ | 説明 | 個数 |
+|--------|------|------|
+| Outbox | 書き込み用（投稿ブロードキャスト） | 3-5個 |
+| Inbox | 読み込み用（メンション受信） | 3-4個 |
+| Discover | 発見用（グローバルリレー） | 2-3個 |
+
+### Manual Region Selection
+
+GPS共有を望まない場合、手動で地域を選択できます：
+
+- 日本: 東京、大阪、名古屋、福岡、札幌
+- グローバル: 北米西部/東部、中央ヨーロッパ、東南アジア、オセアニア
 
 ---
 
@@ -362,6 +355,8 @@ lib/
   security.js        Security utilities
   nip46.js           Nostr Connect
   imageUtils.js      Image processing
+  recommendation.js  Recommendation algorithm
+  geohash.js         Geolocation & relay detection
   constants.js       Application constants
 ```
 
