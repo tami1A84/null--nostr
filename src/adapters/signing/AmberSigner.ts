@@ -210,13 +210,14 @@ export function handleAmberSignCallback(): void {
     cleanup()
     sessionStorage.removeItem(`amber_sign_${requestId}`)
     sessionStorage.removeItem('amber_sign_pending')
-    window.amberSignResolve = null
-    window.amberSignReject = null
 
     console.error('Amber callback error:', message)
     if (window.amberSignReject) {
       window.amberSignReject(new Error(message))
     }
+
+    window.amberSignResolve = null
+    window.amberSignReject = null
   }
 
   try {
