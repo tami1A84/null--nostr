@@ -33,9 +33,17 @@ export {
   getStorage,
   getSigner,
   getSignerType,
+  getClipboard,
+  getNetwork,
   setSigner,
   resetContainer,
   ensureInitialized,
+  getAvailableSigners,
   type AdapterContainer,
   type ContainerOptions
 } from './container'
+
+// Platform-specific initializers
+export { initializeWeb, detectWebSigners, type WebAdapterContainer } from './web'
+export { initializeCapacitor, detectCapacitorSigners, isCapacitorEnvironment, type CapacitorAdapterContainer } from './capacitor'
+export { initializeElectron, detectElectronSigners, isElectronEnvironment, type ElectronAdapterContainer } from './electron'

@@ -9,6 +9,8 @@
 
 import type { StorageAdapter } from '@/src/adapters/storage'
 import type { SigningAdapter, SignerType } from '@/src/adapters/signing'
+import type { ClipboardAdapter } from '@/src/adapters/clipboard'
+import type { NetworkAdapter } from '@/src/adapters/network'
 import { detectPlatform, type Platform } from './detect'
 
 /**
@@ -18,6 +20,8 @@ export interface AdapterContainer {
   storage: StorageAdapter
   signer: SigningAdapter | null
   signerType: SignerType | null
+  clipboard: ClipboardAdapter
+  network: NetworkAdapter
 }
 
 /**
@@ -50,19 +54,27 @@ export async function initializePlatform(
   let newContainer: AdapterContainer
 
   switch (platform) {
-    case 'web':
+    case 'web': {
+      const { initializeWeb } = await import('./web')
       newContainer = await initializeWeb(options)
       break
+    }
     case 'capacitor-android':
-    case 'capacitor-ios':
+    case 'capacitor-ios': {
+      const { initializeCapacitor } = await import('./capacitor')
       newContainer = await initializeCapacitor(options)
       break
-    case 'electron':
+    }
+    case 'electron': {
+      const { initializeElectron } = await import('./electron')
       newContainer = await initializeElectron(options)
       break
-    default:
+    }
+    default: {
       // Fallback to web
+      const { initializeWeb } = await import('./web')
       newContainer = await initializeWeb(options)
+    }
   }
 
   container = newContainer
@@ -70,122 +82,12 @@ export async function initializePlatform(
 
   console.log('[Platform] Container initialized:', {
     storage: container.storage.constructor.name,
-    signerType: container.signerType
+    signerType: container.signerType,
+    clipboard: container.clipboard.constructor.name,
+    network: container.network.constructor.name
   })
 
   return container
-}
-
-/**
- * Initialize for Web platform
- */
-async function initializeWeb(options: ContainerOptions): Promise<AdapterContainer> {
-  const { WebStorage } = await import('@/src/adapters/storage')
-  const { hasNosskey, getNosskeySigner, hasNip07, getNip07Signer } =
-    await import('@/src/adapters/signing')
-
-  const storage = options.storage ?? new WebStorage()
-
-  // Detect available signer (Nosskey takes priority over NIP-07)
-  let signer: SigningAdapter | null = options.signer ?? null
-  let signerType: SignerType | null = null
-
-  if (!signer) {
-    if (hasNosskey()) {
-      try {
-        signer = getNosskeySigner()
-        signerType = 'nosskey'
-      } catch (e) {
-        console.warn('[Platform] Failed to initialize Nosskey signer:', e)
-      }
-    }
-
-    if (!signer && hasNip07()) {
-      try {
-        signer = getNip07Signer()
-        signerType = 'nip07'
-      } catch (e) {
-        console.warn('[Platform] Failed to initialize NIP-07 signer:', e)
-      }
-    }
-  } else if (options.signer) {
-    signerType = options.signer.type
-  }
-
-  return { storage, signer, signerType }
-}
-
-/**
- * Initialize for Capacitor (Android/iOS)
- */
-async function initializeCapacitor(
-  options: ContainerOptions
-): Promise<AdapterContainer> {
-  const { CapacitorStorage, WebStorage } = await import('@/src/adapters/storage')
-  const { createAmberSigner, hasNip07, getNip07Signer } =
-    await import('@/src/adapters/signing')
-  const { isAndroid } = await import('./detect')
-
-  // Try Capacitor Preferences, fall back to WebStorage
-  let storage: StorageAdapter
-  if (options.storage) {
-    storage = options.storage
-  } else {
-    try {
-      storage = new CapacitorStorage()
-      // Test if it works
-      await storage.keys()
-    } catch {
-      console.warn('[Platform] CapacitorStorage not available, using WebStorage')
-      storage = new WebStorage()
-    }
-  }
-
-  // Detect available signer
-  let signer: SigningAdapter | null = options.signer ?? null
-  let signerType: SignerType | null = null
-
-  if (!signer) {
-    // On Android, prefer Amber
-    if (isAndroid()) {
-      // Amber signer requires pubkey to be set later during login
-      signer = createAmberSigner()
-      signerType = 'amber'
-    }
-
-    // Check for injected window.nostr (Amber injects this in WebView)
-    if (!signer && hasNip07()) {
-      try {
-        signer = getNip07Signer()
-        signerType = 'nip07'
-      } catch (e) {
-        console.warn('[Platform] Failed to initialize NIP-07 signer:', e)
-      }
-    }
-  } else if (options.signer) {
-    signerType = options.signer.type
-  }
-
-  return { storage, signer, signerType }
-}
-
-/**
- * Initialize for Electron (Desktop)
- */
-async function initializeElectron(
-  options: ContainerOptions
-): Promise<AdapterContainer> {
-  // For now, use Web implementations
-  // Electron-specific implementations can be added later
-  const { WebStorage } = await import('@/src/adapters/storage')
-
-  const storage = options.storage ?? new WebStorage()
-
-  return {
-    storage,
-    signer: options.signer ?? null,
-    signerType: options.signer?.type ?? null
-  }
 }
 
 /**
@@ -231,6 +133,20 @@ export function getSignerType(): SignerType | null {
 }
 
 /**
+ * Get the clipboard adapter
+ */
+export function getClipboard(): ClipboardAdapter {
+  return getContainer().clipboard
+}
+
+/**
+ * Get the network adapter
+ */
+export function getNetwork(): NetworkAdapter {
+  return getContainer().network
+}
+
+/**
  * Set a new signer (e.g., after login)
  */
 export function setSigner(signer: SigningAdapter | null): void {
@@ -245,6 +161,15 @@ export function setSigner(signer: SigningAdapter | null): void {
  * Reset the container (useful for testing or logout)
  */
 export function resetContainer(): void {
+  // Clean up network adapter if it has a destroy method
+  if (container?.network && 'destroy' in container.network) {
+    try {
+      (container.network as NetworkAdapter & { destroy: () => void }).destroy()
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+
   container = null
   initialized = false
 }
@@ -271,4 +196,31 @@ export function ensureInitialized(
   })
 
   return initPromise
+}
+
+/**
+ * Get available signers for the current platform
+ */
+export async function getAvailableSigners(): Promise<SignerType[]> {
+  const platform = detectPlatform()
+
+  switch (platform) {
+    case 'web': {
+      const { detectWebSigners } = await import('./web')
+      return detectWebSigners()
+    }
+    case 'capacitor-android':
+    case 'capacitor-ios': {
+      const { detectCapacitorSigners } = await import('./capacitor')
+      return detectCapacitorSigners()
+    }
+    case 'electron': {
+      const { detectElectronSigners } = await import('./electron')
+      return detectElectronSigners()
+    }
+    default: {
+      const { detectWebSigners } = await import('./web')
+      return detectWebSigners()
+    }
+  }
 }
