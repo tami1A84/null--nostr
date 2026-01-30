@@ -17,3 +17,4 @@ export type {
 export { WebStorage, getWebStorage } from './WebStorage'
 export { CapacitorStorage, getCapacitorStorage } from './CapacitorStorage'
 export { MemoryStorage, createMemoryStorage } from './MemoryStorage'
+export { ElectronStorage } from './ElectronStorage'
