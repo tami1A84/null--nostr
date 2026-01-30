@@ -12,3 +12,9 @@ export * from './platform'
 // Adapters
 export * from './adapters/storage'
 export * from './adapters/signing'
+
+// State management
+export * from './core/store'
+
+// Compatibility layer
+export * from './lib/compat'
