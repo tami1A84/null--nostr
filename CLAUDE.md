@@ -826,6 +826,382 @@ const pubkey = useStore((state) => state.pubkey)
 
 ---
 
+## 実装完了状況
+
+> **更新日**: 2026-01-30
+
+### Phase 完了状況
+
+| Phase | 内容 | 状況 | 実装ファイル数 |
+|-------|------|------|---------------|
+| **Phase 1** | 抽象化レイヤーの構築 | ✅ **完了** | 25+ ファイル |
+| **Phase 2** | 状態管理の統一 | ✅ **完了** | 8 ファイル |
+| **Phase 3** | コンポーネントの分割 | ✅ **完了** | 15+ ファイル |
+| **Phase 4** | プラットフォーム固有実装 | ✅ **完了** | 3 ファイル |
+| **Phase 5** | テスト戦略 | ✅ **完了** | 6 ファイル |
+
+### 新規実装されたアーキテクチャ
+
+```
+src/
+├── adapters/                      # ✅ 完了
+│   ├── storage/                   # WebStorage, CapacitorStorage, ElectronStorage, MemoryStorage
+│   ├── signing/                   # Nip07Signer, NosskeySigner, AmberSigner, MemorySigner
+│   ├── clipboard/                 # WebClipboard, CapacitorClipboard, ElectronClipboard
+│   └── network/                   # WebNetwork, CapacitorNetwork, ElectronNetwork
+│
+├── core/                          # ✅ 完了
+│   └── store/                     # Zustand Store with slices (auth, settings, cache)
+│
+├── platform/                      # ✅ 完了
+│   ├── detect.ts                  # Platform detection utilities
+│   ├── container.ts               # DI Container
+│   ├── web.ts                     # Web platform initialization
+│   ├── capacitor.ts               # Capacitor platform initialization
+│   └── electron.ts                # Electron platform initialization
+│
+├── ui/                            # ✅ 完了
+│   ├── components/
+│   │   ├── common/                # LoadingState, ErrorState, ZapModal, ContentPreview
+│   │   ├── timeline/              # TimelineHeader, TimelineList, TimelineLoading, TimelineEmpty
+│   │   ├── settings/              # NosskeySettings, RelaySection, MuteSection, UploadSection, etc.
+│   │   └── post/                  # PostModal
+│   └── hooks/                     # useTimeline, useSettings
+│
+├── lib/
+│   └── compat/                    # ✅ 完了 - 互換レイヤー (storage.ts)
+│
+└── __tests__/                     # ✅ 完了
+    ├── adapters/                  # Storage, Signing adapter tests
+    ├── platform/                  # Platform detection tests
+    ├── store/                     # Store and hooks tests
+    └── integration/               # Store-adapter integration tests
+```
+
+---
+
+## Phase 6: React Native 移行プラン
+
+> **ステータス**: 計画段階
+> **優先度**: 将来の拡張
+
+### 概要
+
+現在のアーキテクチャ基盤（Phase 1-5）が完成したことで、React Native への移行が可能になりました。
+以下のプランに沿って、真のネイティブアプリ開発を進めます。
+
+### React Native 移行のメリット
+
+| 項目 | Capacitor (WebView) | React Native |
+|------|---------------------|--------------|
+| **パフォーマンス** | Web ベース | ネイティブ UI |
+| **アニメーション** | CSS/JS 制限あり | 60fps ネイティブ |
+| **メモリ使用量** | WebView オーバーヘッド | 最適化済み |
+| **OS 統合** | プラグイン経由 | 直接アクセス |
+| **アプリサイズ** | 中程度 | 小さい |
+
+### 再利用可能なコード（約80%）
+
+現在のアーキテクチャで以下のコードが React Native でそのまま使用可能：
+
+```
+✅ 再利用可能 (src/core/)
+├── store/                         # Zustand Store - 100% 再利用
+│   ├── slices/auth.ts
+│   ├── slices/settings.ts
+│   └── slices/cache.ts
+│
+├── adapters/                      # Interface 定義 - 100% 再利用
+│   ├── storage/StorageAdapter.ts
+│   ├── signing/SigningAdapter.ts
+│   └── ...
+│
+└── lib/                           # ビジネスロジック - 95% 再利用
+    ├── nostr.js                   # Nostr プロトコル
+    └── compat/storage.ts          # 互換レイヤー
+
+⚠️ 要修正 (src/ui/)
+├── components/                    # React Native 用に書き換え
+│   ├── Web: <div>, <button>
+│   └── RN:  <View>, <TouchableOpacity>
+│
+└── hooks/                         # ほぼそのまま使用可能
+    ├── useTimeline.ts             # ✅ ロジックは再利用
+    └── useSettings.ts             # ✅ ロジックは再利用
+
+❌ 新規実装 (react-native/)
+├── adapters/
+│   ├── RNStorage.ts               # AsyncStorage
+│   └── RNSigner.ts                # Amber Intent / NIP-55
+│
+├── platform/
+│   └── react-native.ts            # RN platform initialization
+│
+└── navigation/                    # React Navigation
+```
+
+### React Native プロジェクト構造
+
+```
+nurunuru-rn/
+├── src/
+│   ├── core/                      # ← 既存コードをコピー
+│   │   ├── store/
+│   │   └── adapters/interfaces/
+│   │
+│   ├── adapters/                  # React Native 固有実装
+│   │   ├── storage/
+│   │   │   └── RNAsyncStorage.ts
+│   │   ├── signing/
+│   │   │   ├── RNAmberSigner.ts   # Android
+│   │   │   └── RNNostrichSigner.ts # iOS (将来)
+│   │   ├── clipboard/
+│   │   │   └── RNClipboard.ts
+│   │   └── network/
+│   │       └── RNNetwork.ts
+│   │
+│   ├── platform/
+│   │   └── react-native.ts
+│   │
+│   ├── screens/                   # React Native スクリーン
+│   │   ├── Timeline/
+│   │   │   ├── TimelineScreen.tsx
+│   │   │   └── components/
+│   │   ├── Profile/
+│   │   ├── Settings/
+│   │   └── Login/
+│   │
+│   ├── components/                # 共通コンポーネント
+│   │   ├── PostItem.tsx
+│   │   ├── Avatar.tsx
+│   │   └── ...
+│   │
+│   ├── navigation/
+│   │   ├── AppNavigator.tsx
+│   │   └── TabNavigator.tsx
+│   │
+│   └── hooks/                     # ← 既存フックを移植
+│       ├── useTimeline.ts
+│       └── useSettings.ts
+│
+├── android/
+├── ios/
+├── package.json
+└── metro.config.js
+```
+
+### React Native Adapter 実装例
+
+```typescript
+// src/adapters/storage/RNAsyncStorage.ts
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import type { StorageAdapter } from '@/core/adapters/storage/StorageAdapter'
+
+export class RNAsyncStorage implements StorageAdapter {
+  async getItem(key: string): Promise<string | null> {
+    return AsyncStorage.getItem(key)
+  }
+
+  async setItem(key: string, value: string): Promise<void> {
+    await AsyncStorage.setItem(key, value)
+  }
+
+  async removeItem(key: string): Promise<void> {
+    await AsyncStorage.removeItem(key)
+  }
+
+  async clear(): Promise<void> {
+    await AsyncStorage.clear()
+  }
+
+  async keys(): Promise<string[]> {
+    return AsyncStorage.getAllKeys()
+  }
+}
+
+// src/adapters/signing/RNAmberSigner.ts
+import { Linking } from 'react-native'
+import type { SigningAdapter, SignerType, SignerFeature } from '@/core/adapters/signing/SigningAdapter'
+
+export class RNAmberSigner implements SigningAdapter {
+  readonly type: SignerType = 'amber'
+
+  async getPublicKey(): Promise<string> {
+    // Amber deep link を使用
+    const result = await Linking.openURL('nostrsigner:')
+    // ... intent response 処理
+  }
+
+  async signEvent(event: UnsignedEvent): Promise<Event> {
+    const eventJson = JSON.stringify(event)
+    const intentUrl = `nostrsigner:${eventJson}?type=sign_event`
+    // ... intent response 処理
+  }
+
+  supports(feature: SignerFeature): boolean {
+    return ['nip04', 'nip44'].includes(feature)
+  }
+}
+
+// src/platform/react-native.ts
+import { Platform } from 'react-native'
+import { RNAsyncStorage } from '@/adapters/storage/RNAsyncStorage'
+import { RNAmberSigner } from '@/adapters/signing/RNAmberSigner'
+import { RNClipboard } from '@/adapters/clipboard/RNClipboard'
+import { RNNetwork } from '@/adapters/network/RNNetwork'
+
+export function initializeReactNative(): AdapterContainer {
+  return {
+    storage: new RNAsyncStorage(),
+    signer: Platform.OS === 'android' ? new RNAmberSigner() : null,
+    clipboard: new RNClipboard(),
+    network: new RNNetwork(),
+  }
+}
+```
+
+### React Native UI コンポーネント例
+
+```tsx
+// screens/Timeline/TimelineScreen.tsx
+import React from 'react'
+import { View, FlatList, RefreshControl } from 'react-native'
+import { useTimeline } from '@/hooks/useTimeline'
+import { TimelineHeader } from './components/TimelineHeader'
+import { PostItem } from '@/components/PostItem'
+import { TimelineEmpty } from './components/TimelineEmpty'
+import { TimelineLoading } from './components/TimelineLoading'
+
+export function TimelineScreen() {
+  const {
+    posts,
+    isLoading,
+    isRefreshing,
+    fetchMore,
+    refresh,
+  } = useTimeline()
+
+  return (
+    <View style={{ flex: 1 }}>
+      <TimelineHeader />
+      <FlatList
+        data={posts}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => <PostItem post={item} />}
+        ListEmptyComponent={isLoading ? <TimelineLoading /> : <TimelineEmpty />}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} />
+        }
+        onEndReached={fetchMore}
+        onEndReachedThreshold={0.5}
+      />
+    </View>
+  )
+}
+
+// components/PostItem.tsx
+import React from 'react'
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
+import { Avatar } from './Avatar'
+import { PostContent } from './PostContent'
+import { PostActions } from './PostActions'
+
+export function PostItem({ post, profile }) {
+  return (
+    <View style={styles.container}>
+      <Avatar uri={profile?.picture} size={40} />
+      <View style={styles.content}>
+        <Text style={styles.name}>{profile?.name || 'Anonymous'}</Text>
+        <PostContent content={post.content} />
+        <PostActions post={post} />
+      </View>
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  content: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  name: {
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+})
+```
+
+### 移行タイムライン
+
+```
+Phase 6: React Native 移行 (4-6週間)
+│
+├── Week 1: プロジェクトセットアップ
+│   ├── React Native プロジェクト作成
+│   ├── 依存関係インストール (nostr-tools, etc.)
+│   └── core/ ディレクトリのコードをコピー
+│
+├── Week 2: Adapter 実装
+│   ├── RNAsyncStorage
+│   ├── RNAmberSigner (Android)
+│   ├── RNClipboard
+│   └── RNNetwork
+│
+├── Week 3-4: UI コンポーネント移植
+│   ├── Navigation 構築
+│   ├── Timeline スクリーン
+│   ├── Profile スクリーン
+│   ├── Settings スクリーン
+│   └── Login スクリーン
+│
+├── Week 5: 機能実装
+│   ├── 投稿作成
+│   ├── リアクション
+│   ├── DM
+│   └── Zap
+│
+└── Week 6: テスト & リリース
+    ├── Android ビルド & テスト
+    ├── iOS ビルド & テスト (将来)
+    └── ストアリリース準備
+```
+
+### 必要な依存関係
+
+```json
+{
+  "dependencies": {
+    "react-native": "^0.73.x",
+    "@react-navigation/native": "^6.x",
+    "@react-navigation/bottom-tabs": "^6.x",
+    "@react-native-async-storage/async-storage": "^1.x",
+    "@react-native-clipboard/clipboard": "^1.x",
+    "nostr-tools": "^2.x",
+    "zustand": "^4.x",
+    "immer": "^10.x",
+    "react-native-reanimated": "^3.x",
+    "react-native-gesture-handler": "^2.x"
+  }
+}
+```
+
+### リスクと対策
+
+| リスク | 影響度 | 対策 |
+|-------|-------|------|
+| WebSocket 互換性 | 中 | react-native-url-polyfill 使用 |
+| iOS 署名対応 | 高 | 初期は Android のみサポート |
+| UI 再実装工数 | 高 | 段階的に実装、優先度高い画面から |
+| テスト工数 | 中 | Detox または Maestro でE2Eテスト |
+
+---
+
 ## 結論
 
 このプランにより：
@@ -835,4 +1211,12 @@ const pubkey = useStore((state) => state.pubkey)
 3. **テスト容易性** - Mock Adapter によりビジネスロジックの独立テスト可能
 4. **将来の拡張性** - React Native 等への移行も Adapter 追加のみで対応可能
 
-段階的な移行により、既存の Web アプリを壊すことなく、マルチプラットフォーム対応の基盤を構築できます。
+**Phase 1-5 が完了**したことで、以下のプラットフォームへの展開が可能になりました：
+
+- ✅ **Web (PWA)** - 完全サポート
+- ✅ **Android (Capacitor)** - 完全サポート
+- ✅ **iOS (Capacitor)** - 完全サポート
+- ✅ **Desktop (Electron)** - 基盤完了
+- 🔄 **React Native** - 移行可能（Phase 6 として計画）
+
+段階的な移行により、既存の Web アプリを壊すことなく、マルチプラットフォーム対応の基盤を構築できました。
