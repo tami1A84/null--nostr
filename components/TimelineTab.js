@@ -1741,20 +1741,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       {/* Mobile: Single column with tab switching */}
       <div className="lg:hidden">
         {loading ? (
-          /* Nintendo-style: やさしいスケルトンローディング */
-          <div className="divide-y divide-[var(--border-color)] animate-fadeIn">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="skeleton-post" style={{ animationDelay: `${i * 50}ms` }}>
-                <div className="skeleton-avatar skeleton-friendly" />
-                <div className="skeleton-content">
-                  <div className="skeleton-line skeleton-line-short skeleton-friendly" />
-                  <div className="skeleton-line skeleton-line-full skeleton-friendly" />
-                  <div className="skeleton-line skeleton-line-medium skeleton-friendly" />
-                </div>
-              </div>
-            ))}
-            {/* 励ましのメッセージ */}
-            <div className="loading-friendly py-4">
+          /* Nintendo-style: やさしいローディング */
+          <div className="flex items-center justify-center min-h-[50vh] animate-fadeIn">
+            <div className="loading-friendly">
               <div className="loading-dots">
                 <div className="loading-dot" />
                 <div className="loading-dot" />
