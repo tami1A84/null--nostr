@@ -26,8 +26,10 @@ import {
 import { uploadImagesInParallel, getImageUrl } from '@/lib/imageUtils'
 import { setCachedProfile, getCachedProfile, setCachedFollowList } from '@/lib/cache'
 import PostItem from './PostItem'
+import LongFormPostItem from './LongFormPostItem'
 import UserProfileView from './UserProfileView'
 import EmojiPicker from './EmojiPicker'
+import { NOSTR_KINDS } from '@/lib/constants'
 import BadgeDisplay, { clearBadgeCache } from './BadgeDisplay'
 
 // Extract hashtags from content (NIP-01)
@@ -402,7 +404,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
     try {
       // Fetch notes, reposts, and user's reactions in parallel
       const [notes, reposts, myReactionEvents] = await Promise.all([
-        fetchEvents({ kinds: [1], authors: [pubkey], since: oneDayAgo, limit: 50 }, RELAYS),
+        fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM], authors: [pubkey], since: oneDayAgo, limit: 50 }, RELAYS),
         fetchEvents({ kinds: [6], authors: [pubkey], since: oneDayAgo, limit: 30 }, RELAYS),
         fetchEvents({ kinds: [7], authors: [pubkey], since: oneDayAgo, limit: 50 }, RELAYS)
       ])
@@ -1592,14 +1594,15 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                 const hasReposted = userReposts.has(post.id)
                 const isLiking = likeAnimating === post.id
                 const isZapping = zapAnimating === post.id
+                const ItemComponent = post.kind === NOSTR_KINDS.LONG_FORM ? LongFormPostItem : PostItem
 
                 return (
-                  <div 
-                    key={post._repostId || post.id} 
+                  <div
+                    key={post._repostId || post.id}
                     className="animate-fadeIn"
                     style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
                   >
-                    <PostItem
+                    <ItemComponent
                       post={post}
                       profile={postProfile}
                       profiles={profiles}
@@ -1651,14 +1654,15 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                 const hasReposted = userReposts.has(post.id)
                 const isLiking = likeAnimating === post.id
                 const isZapping = zapAnimating === post.id
+                const ItemComponent = post.kind === NOSTR_KINDS.LONG_FORM ? LongFormPostItem : PostItem
 
                 return (
-                  <div 
-                    key={post.id} 
+                  <div
+                    key={post.id}
                     className="animate-fadeIn"
                     style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
                   >
-                    <PostItem
+                    <ItemComponent
                       post={post}
                       profile={postProfile}
                       profiles={profiles}

@@ -49,9 +49,11 @@ import {
   RELAY_LIST_DISCOVERY_RELAYS
 } from '@/lib/outbox'
 import PostItem from './PostItem'
+import LongFormPostItem from './LongFormPostItem'
 import UserProfileView from './UserProfileView'
 import SearchModal from './SearchModal'
 import EmojiPicker from './EmojiPicker'
+import { NOSTR_KINDS } from '@/lib/constants'
 
 // Extract hashtags from content (NIP-01)
 function extractHashtags(content) {
@@ -343,7 +345,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     
     try {
       const [notes, reposts] = await Promise.all([
-        fetchEvents({ kinds: [1], authors: followList, since: oneHourAgo, limit: 50 }, readRelays),
+        fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM], authors: followList, since: oneHourAgo, limit: 50 }, readRelays),
         fetchEvents({ kinds: [6], authors: followList, since: oneHourAgo, limit: 20 }, readRelays)
       ])
 
@@ -489,17 +491,17 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 300 // 5 minutes for quick load
     
     try {
-      // Fetch just 20 notes for instant display
+      // Fetch just 20 notes for instant display (include kind 30023 for NIP-23 long-form)
       const notes = await fetchEvents(
-        { kinds: [1], since: fiveMinutesAgo, limit: 20 },
+        { kinds: [1, NOSTR_KINDS.LONG_FORM], since: fiveMinutesAgo, limit: 20 },
         readRelays
       )
-      
+
       // If no notes found and this is first load, expand time range
       if (notes.length === 0) {
         const oneHourAgo = Math.floor(Date.now() / 1000) - 3600
         const expandedNotes = await fetchEvents(
-          { kinds: [1], since: oneHourAgo, limit: 30 },
+          { kinds: [1, NOSTR_KINDS.LONG_FORM], since: oneHourAgo, limit: 30 },
           readRelays
         )
         if (expandedNotes.length === 0) {
@@ -544,8 +546,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     const threeHoursAgo = Math.floor(Date.now() / 1000) - 10800 // 3 hours for more candidate posts
 
     try {
-      // Step 1: Fetch base timeline posts
-      const noteFilter = { kinds: [1], since: threeHoursAgo, limit: 200 }
+      // Step 1: Fetch base timeline posts (include kind 30023 for NIP-23 long-form)
+      const noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 200 }
       const repostFilter = { kinds: [6], since: threeHoursAgo, limit: 100 }
 
       const [notes, reposts] = await Promise.all([
@@ -593,7 +595,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
             const secondDegreeArray = Array.from(secondDegreeFollows).slice(0, 50)
             try {
               secondDegreePosts = await fetchEventsWithOutboxModel(
-                { kinds: [1], since: threeHoursAgo, limit: 100 },
+                { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 100 },
                 secondDegreeArray,
                 { timeout: 12000 }
               )
@@ -724,7 +726,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     const oneHourAgo = Math.floor(Date.now() / 1000) - 3600
     
     try {
-      const noteFilter = { kinds: [1], authors: followList, since: oneHourAgo, limit: 100 }
+      const noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM], authors: followList, since: oneHourAgo, limit: 100 }
       const repostFilter = { kinds: [6], authors: followList, since: oneHourAgo, limit: 50 }
       
       const [notes, reposts] = await Promise.all([
@@ -804,7 +806,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         }
 
         const [notes, reposts] = await Promise.all([
-          fetchEvents({ kinds: [1], authors: followList, since: oneHourAgo, limit: 100 }, readRelays),
+          fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM], authors: followList, since: oneHourAgo, limit: 100 }, readRelays),
           fetchEvents({ kinds: [6], authors: followList, since: oneHourAgo, limit: 50 }, readRelays)
         ])
 
@@ -848,7 +850,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       }
 
       // おすすめ (global) mode - with recommendation algorithm
-      let noteFilter = { kinds: [1], since: threeHoursAgo, limit: 200 }
+      let noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 200 }
       let repostFilter = { kinds: [6], since: threeHoursAgo, limit: 100 }
 
       const [notes, reposts] = await Promise.all([
@@ -896,7 +898,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           if (secondDegreeFollows.size > 0) {
             const secondDegreeArray = Array.from(secondDegreeFollows).slice(0, 50)
             const secondDegreePosts = await fetchEventsWithOutboxModel(
-              { kinds: [1], since: threeHoursAgo, limit: 100 },
+              { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 100 },
               secondDegreeArray,
               { timeout: 12000 }
             )
@@ -1371,6 +1373,54 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     setShowEmojiPicker(false)
   }
 
+  // Render post item - choose between PostItem and LongFormPostItem based on kind
+  const renderTimelinePost = (post, { showNotInterested: showNI = false } = {}) => {
+    const postProfile = profiles[post.pubkey]
+    const postLikeCount = reactions[post.id] || 0
+    const postHasLiked = userReactions.has(post.id)
+    const postHasReposted = userReposts.has(post.id)
+    const postIsZapping = zapAnimating === post.id
+    const postIsLiking = likeAnimating === post.id
+    const commonProps = {
+      post,
+      profile: postProfile,
+      profiles,
+      likeCount: postLikeCount,
+      hasLiked: postHasLiked,
+      hasReposted: postHasReposted,
+      myReactionId: userReactionIds[post.id],
+      myRepostId: userRepostIds[post.id],
+      isLiking: postIsLiking,
+      isZapping: postIsZapping,
+      onLike: handleLike,
+      onUnlike: handleUnlike,
+      onRepost: handleRepost,
+      onUnrepost: handleUnrepost,
+      onZap: handleZap,
+      onZapLongPress: handleZapLongPressStart,
+      onZapLongPressEnd: handleZapLongPressEnd,
+      onAvatarClick: handleAvatarClick,
+      onHashtagClick: handleHashtagClick,
+      onMute: handleMute,
+      onDelete: handleDelete,
+      onReport: handleReport,
+      onBirdwatch: handleBirdwatch,
+      onBirdwatchRate: handleBirdwatchRate,
+      onNotInterested: handleNotInterested,
+      birdwatchNotes: birdwatchLabels[post.id] || [],
+      myPubkey: pubkey,
+      isOwnPost: post.pubkey === pubkey,
+      isRepost: post._isRepost,
+      repostedBy: post._repostedBy ? profiles[post._repostedBy] || { pubkey: post._repostedBy } : null,
+      showNotInterested: showNI
+    }
+
+    if (post.kind === NOSTR_KINDS.LONG_FORM) {
+      return <LongFormPostItem {...commonProps} />
+    }
+    return <PostItem {...commonProps} />
+  }
+
   return (
     <div className="min-h-full overflow-x-hidden">
       {/* Header with tabs - fixed position (mobile only) */}
@@ -1815,56 +1865,15 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           <div className="divide-y divide-[var(--border-color)]">
             {posts
               .filter(post => !mutedPubkeys.has(post.pubkey))
-              .map((post, index) => {
-              const profile = profiles[post.pubkey]
-              const likeCount = reactions[post.id] || 0
-              const hasLiked = userReactions.has(post.id)
-              const hasReposted = userReposts.has(post.id)
-              const isZapping = zapAnimating === post.id
-              const isLiking = likeAnimating === post.id
-
-              return (
-                <div 
-                  key={post._repostId || post.id} 
+              .map((post, index) => (
+                <div
+                  key={post._repostId || post.id}
                   className="animate-fadeIn"
                   style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
                 >
-                  <PostItem
-                    post={post}
-                    profile={profile}
-                    profiles={profiles}
-                    likeCount={likeCount}
-                    hasLiked={hasLiked}
-                    hasReposted={hasReposted}
-                    myReactionId={userReactionIds[post.id]}
-                    myRepostId={userRepostIds[post.id]}
-                    isLiking={isLiking}
-                    isZapping={isZapping}
-                    onLike={handleLike}
-                    onUnlike={handleUnlike}
-                    onRepost={handleRepost}
-                    onUnrepost={handleUnrepost}
-                    onZap={handleZap}
-                    onZapLongPress={handleZapLongPressStart}
-                    onZapLongPressEnd={handleZapLongPressEnd}
-                    onAvatarClick={handleAvatarClick}
-                    onHashtagClick={handleHashtagClick}
-                    onMute={handleMute}
-                    onDelete={handleDelete}
-                    onReport={handleReport}
-                    onBirdwatch={handleBirdwatch}
-                    onBirdwatchRate={handleBirdwatchRate}
-                    onNotInterested={handleNotInterested}
-                    birdwatchNotes={birdwatchLabels[post.id] || []}
-                    myPubkey={pubkey}
-                    isOwnPost={post.pubkey === pubkey}
-                    isRepost={post._isRepost}
-                    repostedBy={post._repostedBy ? profiles[post._repostedBy] || { pubkey: post._repostedBy } : null}
-                    showNotInterested={timelineMode === 'global'}
-                  />
+                  {renderTimelinePost(post, { showNotInterested: timelineMode === 'global' })}
                 </div>
-              )
-            })}
+              ))}
 
             {loadingMore && (
               /* Nintendo-style: やさしい追加読み込み表示 */
@@ -1923,56 +1932,15 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
               <div className="divide-y divide-[var(--border-color)]">
                 {globalPosts
                   .filter(post => !mutedPubkeys.has(post.pubkey))
-                  .map((post, index) => {
-                  const profile = profiles[post.pubkey]
-                  const likeCount = reactions[post.id] || 0
-                  const hasLiked = userReactions.has(post.id)
-                  const hasReposted = userReposts.has(post.id)
-                  const isZapping = zapAnimating === post.id
-                  const isLiking = likeAnimating === post.id
-
-                  return (
-                    <div 
-                      key={post._repostId || post.id} 
+                  .map((post, index) => (
+                    <div
+                      key={post._repostId || post.id}
                       className="animate-fadeIn"
                       style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
                     >
-                      <PostItem
-                        post={post}
-                        profile={profile}
-                        profiles={profiles}
-                        likeCount={likeCount}
-                        hasLiked={hasLiked}
-                        hasReposted={hasReposted}
-                        myReactionId={userReactionIds[post.id]}
-                        myRepostId={userRepostIds[post.id]}
-                        isLiking={isLiking}
-                        isZapping={isZapping}
-                        onLike={handleLike}
-                        onUnlike={handleUnlike}
-                        onRepost={handleRepost}
-                        onUnrepost={handleUnrepost}
-                        onZap={handleZap}
-                        onZapLongPress={handleZapLongPressStart}
-                        onZapLongPressEnd={handleZapLongPressEnd}
-                        onAvatarClick={handleAvatarClick}
-                        onHashtagClick={handleHashtagClick}
-                        onMute={handleMute}
-                        onDelete={handleDelete}
-                        onReport={handleReport}
-                        onBirdwatch={handleBirdwatch}
-                        onBirdwatchRate={handleBirdwatchRate}
-                        onNotInterested={handleNotInterested}
-                        birdwatchNotes={birdwatchLabels[post.id] || []}
-                        myPubkey={pubkey}
-                        isOwnPost={post.pubkey === pubkey}
-                        isRepost={post._isRepost}
-                        repostedBy={post._repostedBy ? profiles[post._repostedBy] || { pubkey: post._repostedBy } : null}
-                        showNotInterested={true}
-                      />
+                      {renderTimelinePost(post, { showNotInterested: true })}
                     </div>
-                  )
-                })}
+                  ))}
               </div>
             )}
           </div>
@@ -2025,54 +1993,15 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
               <div className="divide-y divide-[var(--border-color)]">
                 {followingPosts
                   .filter(post => !mutedPubkeys.has(post.pubkey))
-                  .map((post, index) => {
-                  const profile = profiles[post.pubkey]
-                  const likeCount = reactions[post.id] || 0
-                  const hasLiked = userReactions.has(post.id)
-                  const hasReposted = userReposts.has(post.id)
-                  const isZapping = zapAnimating === post.id
-                  const isLiking = likeAnimating === post.id
-
-                  return (
-                    <div 
-                      key={post._repostId || post.id} 
+                  .map((post, index) => (
+                    <div
+                      key={post._repostId || post.id}
                       className="animate-fadeIn"
                       style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
                     >
-                      <PostItem
-                        post={post}
-                        profile={profile}
-                        profiles={profiles}
-                        likeCount={likeCount}
-                        hasLiked={hasLiked}
-                        hasReposted={hasReposted}
-                        myReactionId={userReactionIds[post.id]}
-                        myRepostId={userRepostIds[post.id]}
-                        isLiking={isLiking}
-                        isZapping={isZapping}
-                        onLike={handleLike}
-                        onUnlike={handleUnlike}
-                        onRepost={handleRepost}
-                        onUnrepost={handleUnrepost}
-                        onZap={handleZap}
-                        onZapLongPress={handleZapLongPressStart}
-                        onZapLongPressEnd={handleZapLongPressEnd}
-                        onAvatarClick={handleAvatarClick}
-                        onHashtagClick={handleHashtagClick}
-                        onMute={handleMute}
-                        onDelete={handleDelete}
-                        onReport={handleReport}
-                        onBirdwatch={handleBirdwatch}
-                        onBirdwatchRate={handleBirdwatchRate}
-                        birdwatchNotes={birdwatchLabels[post.id] || []}
-                        myPubkey={pubkey}
-                        isOwnPost={post.pubkey === pubkey}
-                        isRepost={post._isRepost}
-                        repostedBy={post._repostedBy ? profiles[post._repostedBy] || { pubkey: post._repostedBy } : null}
-                      />
+                      {renderTimelinePost(post)}
                     </div>
-                  )
-                })}
+                  ))}
               </div>
             )}
           </div>
