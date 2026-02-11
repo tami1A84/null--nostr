@@ -46,9 +46,13 @@ src/
 
 ## Nostr 署名方法
 
-- Web: `window.nostr` (NIP-07), `window.nosskeyManager` (Passkey)
-- Android: Amber Intent (NIP-55)
-- React Native: Android Keystore + セキュアストレージ
+**Web**:
+- `window.nostr` (NIP-07 ブラウザ拡張機能)
+- `window.nosskeyManager` (Passkey)
+
+**React Native Android** (ネイティブアプリ):
+- **必須**: Android Keystore (TEE/Secure Enclave) - アプリ内署名
+- **オプション**: Amber Intent (NIP-55) - 外部アプリ署名
 
 ---
 
@@ -155,5 +159,5 @@ cd android && ./gradlew assembleRelease
 ## 参照
 
 - Phase 1-5 実装: `src/adapters/`, `src/core/store/`, `src/platform/`
-- Nostr NIP: NIP-07 (Web), NIP-46 (Bunker), NIP-55 (Amber)
+- React Native: Android Keystore (必須), NIP-55 Amber (オプション)
 - 詳細プロンプト: `REACT_NATIVE_MIGRATION_PROMPT.md` (Opus 4.6 用)
