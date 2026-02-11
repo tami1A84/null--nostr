@@ -13,5 +13,4 @@ export type {
 export { ClipboardError } from './ClipboardAdapter'
 
 export { WebClipboard } from './WebClipboard'
-export { CapacitorClipboard } from './CapacitorClipboard'
 export { ElectronClipboard } from './ElectronClipboard'

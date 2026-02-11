@@ -59,12 +59,6 @@ export async function initializePlatform(
       newContainer = await initializeWeb(options)
       break
     }
-    case 'capacitor-android':
-    case 'capacitor-ios': {
-      const { initializeCapacitor } = await import('./capacitor')
-      newContainer = await initializeCapacitor(options)
-      break
-    }
     case 'electron': {
       const { initializeElectron } = await import('./electron')
       newContainer = await initializeElectron(options)
@@ -208,11 +202,6 @@ export async function getAvailableSigners(): Promise<SignerType[]> {
     case 'web': {
       const { detectWebSigners } = await import('./web')
       return detectWebSigners()
-    }
-    case 'capacitor-android':
-    case 'capacitor-ios': {
-      const { detectCapacitorSigners } = await import('./capacitor')
-      return detectCapacitorSigners()
     }
     case 'electron': {
       const { detectElectronSigners } = await import('./electron')
