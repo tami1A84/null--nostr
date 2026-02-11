@@ -120,7 +120,6 @@ npm run dev
 | Protocol | nostr-tools 2.17 |
 | Auth | [nosskey-sdk](https://github.com/ocknamo/nosskey-sdk) 0.0.4 |
 | Search | [searchnos](https://github.com/darashi/searchnos) (NIP-50) |
-| Mobile | Capacitor 8.0 |
 
 ---
 
@@ -145,7 +144,6 @@ npm run dev
 | NIP-46 | Nostr Connect（nsec.app等リモート署名） |
 | NIP-50 | Search Capability（[searchnos](https://github.com/darashi/searchnos)使用） |
 | NIP-51 | Mute List |
-| NIP-55 | Amber Android Signer |
 | NIP-56 | Reporting（通報機能） |
 | NIP-57 | Lightning Zaps |
 | NIP-58 | Badges（表示・プロフィールバッジ管理） |

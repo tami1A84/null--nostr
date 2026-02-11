@@ -45,5 +45,4 @@ export {
 
 // Platform-specific initializers
 export { initializeWeb, detectWebSigners, type WebAdapterContainer } from './web'
-export { initializeCapacitor, detectCapacitorSigners, isCapacitorEnvironment, type CapacitorAdapterContainer } from './capacitor'
 export { initializeElectron, detectElectronSigners, isElectronEnvironment, type ElectronAdapterContainer } from './electron'
