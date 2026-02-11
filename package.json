@@ -9,17 +9,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage",
-    "android:sync": "npx cap sync android",
-    "android:open": "npx cap open android",
-    "android:build": "npm run build && npm run android:sync && cd android && ./gradlew assembleRelease",
-    "android:build:debug": "npm run build && npm run android:sync && cd android && ./gradlew assembleDebug"
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@capacitor/android": "^8.0.0",
-    "@capacitor/app": "^8.0.0",
-    "@capacitor/cli": "^8.0.0",
-    "@capacitor/core": "^8.0.0",
     "immer": "^11.1.3",
     "next": "14.2.35",
     "nosskey-sdk": "^0.0.4",
