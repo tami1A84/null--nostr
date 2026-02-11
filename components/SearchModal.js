@@ -23,6 +23,8 @@ import {
   RELAYS
 } from '@/lib/nostr'
 import PostItem from './PostItem'
+import LongFormPostItem from './LongFormPostItem'
+import { NOSTR_KINDS } from '@/lib/constants'
 
 export default function SearchModal({ pubkey, onClose, onViewProfile, initialQuery = '' }) {
   const [query, setQuery] = useState(initialQuery)
@@ -679,32 +681,35 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
             <span className="font-semibold text-[var(--text-primary)]">{results.length}</span> 件の結果
           </p>
         </div>
-        {results.map(post => (
-          <PostItem
-            key={post.id}
-            post={post}
-            profile={profiles[post.pubkey]}
-            profiles={profiles}
-            showActions={true}
-            likeCount={reactions[post.id] || 0}
-            hasLiked={userReactions.has(post.id)}
-            hasReposted={userReposts.has(post.id)}
-            isLiking={likeAnimating === post.id}
-            isZapping={zapAnimating === post.id}
-            onLike={handleLike}
-            onRepost={handleRepost}
-            onZap={handleZap}
-            onAvatarClick={(pk) => onViewProfile?.(pk)}
-            onMute={handleMute}
-            onDelete={handleDelete}
-            onReport={handleReport}
-            onBirdwatch={handleBirdwatch}
-            onBirdwatchRate={handleBirdwatchRate}
-            birdwatchNotes={birdwatchLabels[post.id] || []}
-            myPubkey={pubkey}
-            isOwnPost={post.pubkey === pubkey}
-          />
-        ))}
+        {results.map(post => {
+          const ItemComponent = post.kind === NOSTR_KINDS.LONG_FORM ? LongFormPostItem : PostItem
+          return (
+            <ItemComponent
+              key={post.id}
+              post={post}
+              profile={profiles[post.pubkey]}
+              profiles={profiles}
+              showActions={true}
+              likeCount={reactions[post.id] || 0}
+              hasLiked={userReactions.has(post.id)}
+              hasReposted={userReposts.has(post.id)}
+              isLiking={likeAnimating === post.id}
+              isZapping={zapAnimating === post.id}
+              onLike={handleLike}
+              onRepost={handleRepost}
+              onZap={handleZap}
+              onAvatarClick={(pk) => onViewProfile?.(pk)}
+              onMute={handleMute}
+              onDelete={handleDelete}
+              onReport={handleReport}
+              onBirdwatch={handleBirdwatch}
+              onBirdwatchRate={handleBirdwatchRate}
+              birdwatchNotes={birdwatchLabels[post.id] || []}
+              myPubkey={pubkey}
+              isOwnPost={post.pubkey === pubkey}
+            />
+          )
+        })}
       </div>
     )
   }

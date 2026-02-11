@@ -29,7 +29,9 @@ import {
 } from '@/lib/nostr'
 import { getImageUrl } from '@/lib/imageUtils'
 import PostItem from './PostItem'
+import LongFormPostItem from './LongFormPostItem'
 import BadgeDisplay from './BadgeDisplay'
+import { NOSTR_KINDS } from '@/lib/constants'
 
 // Format birthday to string (handles both string and object formats)
 function formatBirthday(birthday) {
@@ -272,9 +274,9 @@ export default function UserProfileView({
         }
       }
 
-      // Fetch posts
+      // Fetch posts (include NIP-23 long-form content)
       const noteEvents = await fetchEvents(
-        { kinds: [1], authors: [targetPubkey], limit: 30 },
+        { kinds: [1, NOSTR_KINDS.LONG_FORM], authors: [targetPubkey], limit: 30 },
         RELAYS
       )
       setPosts(noteEvents)
@@ -846,36 +848,39 @@ export default function UserProfileView({
             </div>
           ) : (
             <div className="divide-y divide-[var(--border-color)]">
-              {(searchResults.length > 0 ? searchResults : posts).map(post => (
-                <PostItem
-                  key={post.id}
-                  post={post}
-                  profile={profile}
-                  profiles={profiles}
-                  likeCount={reactions[post.id] || 0}
-                  hasLiked={userReactions.has(post.id)}
-                  hasReposted={userReposts.has(post.id)}
-                  isLiking={likeAnimating === post.id}
-                  isZapping={zapAnimating === post.id}
-                  onLike={handleLike}
-                  onRepost={handleRepost}
-                  onZap={handleZap}
-                  onAvatarClick={(pk, prof) => {
-                    if (pk !== targetPubkey && onViewProfile) {
-                      onViewProfile(pk)
-                    }
-                  }}
-                  onMute={handleMuteFromPost}
-                  onDelete={handleDelete}
-                  onReport={handleReport}
-                  onBirdwatch={handleBirdwatch}
-                  onBirdwatchRate={handleBirdwatchRate}
-                  birdwatchNotes={birdwatchLabels[post.id] || []}
-                  myPubkey={myPubkey}
-                  isOwnPost={post.pubkey === myPubkey}
-                  showActions={true}
-                />
-              ))}
+              {(searchResults.length > 0 ? searchResults : posts).map(post => {
+                const ItemComponent = post.kind === NOSTR_KINDS.LONG_FORM ? LongFormPostItem : PostItem
+                return (
+                  <ItemComponent
+                    key={post.id}
+                    post={post}
+                    profile={profile}
+                    profiles={profiles}
+                    likeCount={reactions[post.id] || 0}
+                    hasLiked={userReactions.has(post.id)}
+                    hasReposted={userReposts.has(post.id)}
+                    isLiking={likeAnimating === post.id}
+                    isZapping={zapAnimating === post.id}
+                    onLike={handleLike}
+                    onRepost={handleRepost}
+                    onZap={handleZap}
+                    onAvatarClick={(pk, prof) => {
+                      if (pk !== targetPubkey && onViewProfile) {
+                        onViewProfile(pk)
+                      }
+                    }}
+                    onMute={handleMuteFromPost}
+                    onDelete={handleDelete}
+                    onReport={handleReport}
+                    onBirdwatch={handleBirdwatch}
+                    onBirdwatchRate={handleBirdwatchRate}
+                    birdwatchNotes={birdwatchLabels[post.id] || []}
+                    myPubkey={myPubkey}
+                    isOwnPost={post.pubkey === myPubkey}
+                    showActions={true}
+                  />
+                )
+              })}
             </div>
           )}
         </div>
