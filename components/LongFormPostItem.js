@@ -359,6 +359,46 @@ export default function LongFormPostItem({
                     <circle cx="12" cy="19" r="2"/>
                   </svg>
                 </button>
+
+                {showMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                    <div className="absolute right-0 top-6 z-50 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[160px]">
+                      {showNotInterested && onNotInterested && !isOwnPost && (
+                        <button
+                          onClick={() => { onNotInterested(post.id, post.pubkey); setShowMenu(false) }}
+                          className="w-full px-4 py-2 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M8 15h8"/>
+                            <path d="M9 9h.01"/>
+                            <path d="M15 9h.01"/>
+                          </svg>
+                          この投稿に興味がない
+                        </button>
+                      )}
+                      {onMute && !isOwnPost && (
+                        <button onClick={handleMute} className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                          </svg>
+                          ミュート
+                        </button>
+                      )}
+                      {isOwnPost && onDelete && (
+                        <button onClick={handleDelete} className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                          </svg>
+                          削除
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -515,70 +555,6 @@ export default function LongFormPostItem({
           onClose={() => setShowArticle(false)}
           onHashtagClick={onHashtagClick}
         />
-      )}
-
-      {/* Menu Bottom Sheet */}
-      {showMenu && (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center" onClick={() => setShowMenu(false)}>
-          <div className="absolute inset-0 bg-black/40" />
-          <div
-            className="relative w-full max-w-lg bg-[var(--bg-primary)] rounded-t-2xl shadow-2xl overflow-hidden animate-bottomSheetUp"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-[var(--text-tertiary)] opacity-40" />
-            </div>
-            <div className="py-1 pb-2">
-              {showNotInterested && onNotInterested && !isOwnPost && (
-                <button
-                  onClick={() => { onNotInterested(post.id, post.pubkey); setShowMenu(false) }}
-                  className="w-full px-5 py-3 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] flex items-center gap-3"
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M8 15h8"/>
-                    <path d="M9 9h.01"/>
-                    <path d="M15 9h.01"/>
-                  </svg>
-                  この投稿に興味がない
-                </button>
-              )}
-              {onMute && !isOwnPost && (
-                <button
-                  onClick={handleMute}
-                  className="w-full px-5 py-3 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] flex items-center gap-3"
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-                  </svg>
-                  ミュート
-                </button>
-              )}
-              {isOwnPost && onDelete && (
-                <button
-                  onClick={handleDelete}
-                  className="w-full px-5 py-3 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] flex items-center gap-3"
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="3 6 5 6 21 6"/>
-                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                  </svg>
-                  削除
-                </button>
-              )}
-            </div>
-            <div className="px-4 pb-3">
-              <button
-                onClick={() => setShowMenu(false)}
-                className="w-full py-3 text-center text-sm font-medium text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-xl active:bg-[var(--bg-tertiary)]"
-              >
-                キャンセル
-              </button>
-            </div>
-            <div className="h-[env(safe-area-inset-bottom,0px)]" />
-          </div>
-        </div>
       )}
 
       {/* Reaction Emoji Picker */}
