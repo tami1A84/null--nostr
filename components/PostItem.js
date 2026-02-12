@@ -308,11 +308,13 @@ export default function PostItem({
   showNotInterested = false
 }) {
   const [showMenu, setShowMenu] = useState(false)
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
   const [isExpanded, setIsExpanded] = useState(false)
   const [isCWExpanded, setIsCWExpanded] = useState(false) // Content warning expand state
   const [showReportModal, setShowReportModal] = useState(false)
   const [showBirdwatchModal, setShowBirdwatchModal] = useState(false)
   const [showReactionPicker, setShowReactionPicker] = useState(false)
+  const menuButtonRef = useRef(null)
   const longPressTimerRef = useRef(null)
   const longPressTriggeredRef = useRef(false)
   const displayProfile = isRepost ? profiles?.[post.pubkey] : profile
@@ -708,7 +710,7 @@ export default function PostItem({
   }
 
   return (
-    <article className={`px-4 py-3 lg:px-5 lg:py-4 relative transition-colors hover:bg-[var(--bg-secondary)]/30 ${showMenu ? 'z-50' : ''}`}>
+    <article className="px-4 py-3 lg:px-5 lg:py-4 relative transition-colors hover:bg-[var(--bg-secondary)]/30">
       {/* Repost indicator */}
       {isRepost && repostedBy && (
         <div className="flex items-center gap-2 mb-2 text-[var(--text-tertiary)] text-xs">
@@ -802,7 +804,14 @@ export default function PostItem({
             {/* Menu button */}
             <div className="relative flex-shrink-0">
               <button
-                onClick={() => setShowMenu(!showMenu)}
+                ref={menuButtonRef}
+                onClick={() => {
+                  if (!showMenu && menuButtonRef.current) {
+                    const rect = menuButtonRef.current.getBoundingClientRect()
+                    setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+                  }
+                  setShowMenu(!showMenu)
+                }}
                 className="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] action-btn"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -816,10 +825,13 @@ export default function PostItem({
               {showMenu && (
                 <>
                   <div
-                    className="fixed inset-0 z-40"
+                    className="fixed inset-0 z-[60]"
                     onClick={() => setShowMenu(false)}
                   />
-                  <div className="absolute right-0 top-6 z-50 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[160px]">
+                  <div
+                    className="fixed z-[61] bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[160px]"
+                    style={{ top: menuPos.top, right: menuPos.right }}
+                  >
                     {showNotInterested && onNotInterested && !isOwnPost && (
                       <button
                         onClick={() => {
