@@ -137,8 +137,10 @@ export default function VideoEditor({ file, onDone, onCancel }) {
   const handleDone = async () => {
     if (!videoRef.current) return
 
-    // Stop preview playback
+    // Stop preview playback and release the preview video's hold on the URL
     videoRef.current.pause()
+    videoRef.current.removeAttribute('src')
+    videoRef.current.load()
     setPlaying(false)
 
     // No trim needed for short videos
@@ -154,9 +156,11 @@ export default function VideoEditor({ file, onDone, onCancel }) {
     setTrimming(true)
     setTrimProgress(0)
 
+    // Create a dedicated Object URL for trimming (separate from preview)
+    const trimUrl = URL.createObjectURL(file)
     try {
       const trimmedBlob = await trimVideoWithCaptureStream(
-        videoUrl,
+        trimUrl,
         trimStart,
         trimEnd,
         (progress) => setTrimProgress(Math.round(progress * 100))
@@ -181,6 +185,7 @@ export default function VideoEditor({ file, onDone, onCancel }) {
         height: videoSize.height
       })
     } finally {
+      URL.revokeObjectURL(trimUrl)
       setTrimming(false)
     }
   }
@@ -337,16 +342,28 @@ export default function VideoEditor({ file, onDone, onCancel }) {
 
 /**
  * Trim video using HTMLVideoElement.captureStream() + MediaRecorder
- * Faster than canvas-based approach since it captures the decoded stream directly
+ * Uses a dedicated Object URL (caller must create/revoke it) to avoid
+ * conflicts with any other video element using the same source.
  */
 function trimVideoWithCaptureStream(srcUrl, startTime, endTime, onProgress) {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
-    video.src = srcUrl
     video.playsInline = true
     video.preload = 'auto'
+    // crossOrigin not needed for blob URLs
 
-    video.onloadedmetadata = () => {
+    let settled = false
+    const settle = (fn) => (...args) => {
+      if (settled) return
+      settled = true
+      fn(...args)
+    }
+    const resolveOnce = settle(resolve)
+    const rejectOnce = settle(reject)
+
+    video.onerror = () => rejectOnce(new Error('Failed to load video for trimming'))
+
+    video.onloadeddata = () => {
       video.currentTime = startTime
     }
 
@@ -363,7 +380,7 @@ function trimVideoWithCaptureStream(srcUrl, startTime, endTime, onProgress) {
         try {
           stream = video.mozCaptureStream()
         } catch {
-          reject(new Error('captureStream not supported'))
+          rejectOnce(new Error('captureStream not supported'))
           return
         }
       }
@@ -388,20 +405,23 @@ function trimVideoWithCaptureStream(srcUrl, startTime, endTime, onProgress) {
 
       recorder.onstop = () => {
         video.pause()
-        video.src = ''
+        video.removeAttribute('src')
         video.load()
+        stream.getTracks().forEach(t => t.stop())
         const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' })
         onProgress?.(1)
-        resolve(blob)
+        resolveOnce(blob)
       }
 
       recorder.onerror = (e) => {
         video.pause()
-        reject(e.error || new Error('MediaRecorder error'))
+        stream.getTracks().forEach(t => t.stop())
+        rejectOnce(e.error || new Error('MediaRecorder error'))
       }
 
       // Track progress via timeupdate
       video.ontimeupdate = () => {
+        if (settled) return
         const elapsed = video.currentTime - startTime
         onProgress?.(Math.min(elapsed / clipLen, 0.99))
 
@@ -414,9 +434,16 @@ function trimVideoWithCaptureStream(srcUrl, startTime, endTime, onProgress) {
         }
       }
 
+      // Also watch for video ending before endTime
+      video.onended = () => {
+        if (recorder.state === 'recording') {
+          recorder.stop()
+        }
+      }
+
       // Start recording then play
       recorder.start(100)
-      video.play().catch(reject)
+      video.play().catch(rejectOnce)
 
       // Safety timeout
       setTimeout(() => {
@@ -424,10 +451,11 @@ function trimVideoWithCaptureStream(srcUrl, startTime, endTime, onProgress) {
           recorder.stop()
           video.pause()
         }
-      }, (clipLen + 3) * 1000)
+      }, (clipLen + 5) * 1000)
     }
 
-    video.onerror = () => reject(new Error('Failed to load video'))
+    // Set src last to start loading
+    video.src = srcUrl
   })
 }
 
