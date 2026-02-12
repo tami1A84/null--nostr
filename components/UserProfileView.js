@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { nip19 } from 'nostr-tools'
 import {
   fetchEvents,
@@ -165,6 +165,8 @@ export default function UserProfileView({
   const [userReposts, setUserReposts] = useState(new Set())
   const [copied, setCopied] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
+  const menuButtonRef = useRef(null)
   const [muting, setMuting] = useState(false)
   const [likeAnimating, setLikeAnimating] = useState(null)
   const [zapAnimating, setZapAnimating] = useState(null)
@@ -614,7 +616,14 @@ export default function UserProfileView({
             {myPubkey && myPubkey !== targetPubkey && (
               <div className="relative">
                 <button
-                  onClick={() => setShowMenu(!showMenu)}
+                  ref={menuButtonRef}
+                  onClick={() => {
+                    if (!showMenu && menuButtonRef.current) {
+                      const rect = menuButtonRef.current.getBoundingClientRect()
+                      setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
+                    }
+                    setShowMenu(!showMenu)
+                  }}
                   className="w-10 h-10 flex items-center justify-center action-btn"
                 >
                   <svg className="w-6 h-6 text-[var(--text-primary)]" viewBox="0 0 24 24" fill="currentColor">
@@ -623,30 +632,33 @@ export default function UserProfileView({
                     <circle cx="12" cy="19" r="2"/>
                   </svg>
                 </button>
-                
+
                 {/* Dropdown menu */}
                 {showMenu && (
                   <>
-                    <div 
-                      className="fixed inset-0 z-40" 
+                    <div
+                      className="fixed inset-0 z-[60]"
                       onClick={() => setShowMenu(false)}
-                  />
-                  <div className="absolute right-0 top-10 z-50 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[140px]">
-                    <button
-                      onClick={handleMute}
-                      disabled={muting}
-                      className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2 disabled:opacity-50"
+                    />
+                    <div
+                      className="fixed z-[61] bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[140px]"
+                      style={{ top: menuPos.top, right: menuPos.right }}
                     >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-                      </svg>
-                      {muting ? 'ミュート中...' : 'ミュート'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+                      <button
+                        onClick={handleMute}
+                        disabled={muting}
+                        className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/>
+                          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                        </svg>
+                        {muting ? 'ミュート中...' : 'ミュート'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
           )}
           {(!myPubkey || myPubkey === targetPubkey) && <div className="w-10" />}
           </div>
