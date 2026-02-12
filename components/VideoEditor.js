@@ -16,6 +16,7 @@ export default function VideoEditor({ file, onDone, onCancel }) {
   const videoRef = useRef(null)
   const trackRef = useRef(null)
   const animFrameRef = useRef(null)
+  const trimmingRef = useRef(false)
 
   const [duration, setDuration] = useState(0)
   const [trimStart, setTrimStart] = useState(0)
@@ -84,12 +85,13 @@ export default function VideoEditor({ file, onDone, onCancel }) {
     }
   }
 
-  // Handle time update - loop within trim range
+  // Handle time update - loop within trim range (only during preview, not trimming)
   const handleTimeUpdate = () => {
     const video = videoRef.current
     if (!video) return
     setCurrentTime(video.currentTime)
-    if (video.currentTime >= trimEnd) {
+    // Only loop during preview playback, not during trim recording
+    if (!trimmingRef.current && video.currentTime >= trimEnd) {
       video.currentTime = trimStart
     }
   }
@@ -133,14 +135,13 @@ export default function VideoEditor({ file, onDone, onCancel }) {
     document.addEventListener('touchend', handleEnd)
   }
 
-  // Trim and finish
+  // Trim using the existing preview video element (already loaded, in DOM)
   const handleDone = async () => {
-    if (!videoRef.current) return
+    const video = videoRef.current
+    if (!video) return
 
-    // Stop preview playback and release the preview video's hold on the URL
-    videoRef.current.pause()
-    videoRef.current.removeAttribute('src')
-    videoRef.current.load()
+    // Stop preview playback
+    video.pause()
     setPlaying(false)
 
     // No trim needed for short videos
@@ -154,13 +155,12 @@ export default function VideoEditor({ file, onDone, onCancel }) {
     }
 
     setTrimming(true)
+    trimmingRef.current = true
     setTrimProgress(0)
 
-    // Create a dedicated Object URL for trimming (separate from preview)
-    const trimUrl = URL.createObjectURL(file)
     try {
-      const trimmedBlob = await trimVideoWithCaptureStream(
-        trimUrl,
+      const trimmedBlob = await recordFromVideoElement(
+        video,
         trimStart,
         trimEnd,
         (progress) => setTrimProgress(Math.round(progress * 100))
@@ -185,7 +185,7 @@ export default function VideoEditor({ file, onDone, onCancel }) {
         height: videoSize.height
       })
     } finally {
-      URL.revokeObjectURL(trimUrl)
+      trimmingRef.current = false
       setTrimming(false)
     }
   }
@@ -233,7 +233,6 @@ export default function VideoEditor({ file, onDone, onCancel }) {
             src={videoUrl}
             className="max-w-full max-h-full object-contain"
             playsInline
-            muted={false}
             onLoadedMetadata={handleLoadedMetadata}
             onTimeUpdate={handleTimeUpdate}
             onClick={!trimming ? togglePlay : undefined}
@@ -341,121 +340,124 @@ export default function VideoEditor({ file, onDone, onCancel }) {
 }
 
 /**
- * Trim video using HTMLVideoElement.captureStream() + MediaRecorder
- * Uses a dedicated Object URL (caller must create/revoke it) to avoid
- * conflicts with any other video element using the same source.
+ * Record a segment from an already-loaded video element using captureStream + MediaRecorder.
+ * The video element must already be in the DOM and have its source loaded.
  */
-function trimVideoWithCaptureStream(srcUrl, startTime, endTime, onProgress) {
+function recordFromVideoElement(videoEl, startTime, endTime, onProgress) {
   return new Promise((resolve, reject) => {
-    const video = document.createElement('video')
-    video.playsInline = true
-    video.preload = 'auto'
-    // crossOrigin not needed for blob URLs
-
     let settled = false
-    const settle = (fn) => (...args) => {
+    const done = (fn) => (...args) => {
       if (settled) return
       settled = true
       fn(...args)
     }
-    const resolveOnce = settle(resolve)
-    const rejectOnce = settle(reject)
+    const resolveOnce = done(resolve)
+    const rejectOnce = done(reject)
 
-    video.onerror = () => rejectOnce(new Error('Failed to load video for trimming'))
+    const clipLen = endTime - startTime
 
-    video.onloadeddata = () => {
-      video.currentTime = startTime
+    // Capture stream directly from the existing video element
+    let stream
+    try {
+      stream = videoEl.captureStream()
+    } catch {
+      try {
+        stream = videoEl.mozCaptureStream()
+      } catch {
+        rejectOnce(new Error('captureStream not supported'))
+        return
+      }
     }
 
-    let seeked = false
-    video.onseeked = () => {
-      if (seeked) return
-      seeked = true
+    // Pick the best supported mime type
+    const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+      .find(m => MediaRecorder.isTypeSupported(m)) || ''
 
-      // Capture stream directly from video element
-      let stream
+    let recorder
+    try {
+      recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    } catch {
       try {
-        stream = video.captureStream()
-      } catch {
-        try {
-          stream = video.mozCaptureStream()
-        } catch {
-          rejectOnce(new Error('captureStream not supported'))
-          return
-        }
-      }
-
-      // Pick the best supported mime type
-      const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
-        .find(m => MediaRecorder.isTypeSupported(m)) || ''
-
-      let recorder
-      try {
-        recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-      } catch {
         recorder = new MediaRecorder(stream)
+      } catch (e) {
+        rejectOnce(e)
+        return
       }
-
-      const chunks = []
-      const clipLen = endTime - startTime
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data)
-      }
-
-      recorder.onstop = () => {
-        video.pause()
-        video.removeAttribute('src')
-        video.load()
-        stream.getTracks().forEach(t => t.stop())
-        const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' })
-        onProgress?.(1)
-        resolveOnce(blob)
-      }
-
-      recorder.onerror = (e) => {
-        video.pause()
-        stream.getTracks().forEach(t => t.stop())
-        rejectOnce(e.error || new Error('MediaRecorder error'))
-      }
-
-      // Track progress via timeupdate
-      video.ontimeupdate = () => {
-        if (settled) return
-        const elapsed = video.currentTime - startTime
-        onProgress?.(Math.min(elapsed / clipLen, 0.99))
-
-        if (video.currentTime >= endTime) {
-          video.ontimeupdate = null
-          if (recorder.state === 'recording') {
-            recorder.stop()
-          }
-          video.pause()
-        }
-      }
-
-      // Also watch for video ending before endTime
-      video.onended = () => {
-        if (recorder.state === 'recording') {
-          recorder.stop()
-        }
-      }
-
-      // Start recording then play
-      recorder.start(100)
-      video.play().catch(rejectOnce)
-
-      // Safety timeout
-      setTimeout(() => {
-        if (recorder.state === 'recording') {
-          recorder.stop()
-          video.pause()
-        }
-      }, (clipLen + 5) * 1000)
     }
 
-    // Set src last to start loading
-    video.src = srcUrl
+    const chunks = []
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data)
+    }
+
+    recorder.onstop = () => {
+      videoEl.pause()
+      stream.getTracks().forEach(t => t.stop())
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' })
+      onProgress?.(1)
+      resolveOnce(blob)
+    }
+
+    recorder.onerror = (e) => {
+      videoEl.pause()
+      stream.getTracks().forEach(t => t.stop())
+      rejectOnce(e.error || new Error('MediaRecorder error'))
+    }
+
+    // Monitor playback position for progress and stop
+    const onTimeUpdate = () => {
+      if (settled) return
+      const elapsed = videoEl.currentTime - startTime
+      onProgress?.(Math.min(elapsed / clipLen, 0.99))
+
+      if (videoEl.currentTime >= endTime) {
+        videoEl.removeEventListener('timeupdate', onTimeUpdate)
+        if (recorder.state === 'recording') {
+          recorder.stop()
+        }
+        videoEl.pause()
+      }
+    }
+    videoEl.addEventListener('timeupdate', onTimeUpdate)
+
+    // Handle video ending early
+    const onEnded = () => {
+      videoEl.removeEventListener('timeupdate', onTimeUpdate)
+      videoEl.removeEventListener('ended', onEnded)
+      if (recorder.state === 'recording') {
+        recorder.stop()
+      }
+    }
+    videoEl.addEventListener('ended', onEnded)
+
+    // Safety timeout
+    const safetyTimer = setTimeout(() => {
+      videoEl.removeEventListener('timeupdate', onTimeUpdate)
+      videoEl.removeEventListener('ended', onEnded)
+      if (recorder.state === 'recording') {
+        recorder.stop()
+        videoEl.pause()
+      }
+    }, (clipLen + 5) * 1000)
+
+    // Clean up timer when done
+    const origResolve = resolveOnce
+    const origReject = rejectOnce
+
+    // Seek to start, then begin recording
+    const onSeeked = () => {
+      videoEl.removeEventListener('seeked', onSeeked)
+      recorder.start(100)
+      videoEl.play().catch((err) => {
+        clearTimeout(safetyTimer)
+        videoEl.removeEventListener('timeupdate', onTimeUpdate)
+        videoEl.removeEventListener('ended', onEnded)
+        rejectOnce(err)
+      })
+    }
+    videoEl.addEventListener('seeked', onSeeked)
+    videoEl.currentTime = startTime
   })
 }
 
