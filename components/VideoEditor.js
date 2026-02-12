@@ -9,7 +9,7 @@ const MAX_CLIP_DURATION = 6 // seconds
  *
  * Props:
  *   file: File - the original video file
- *   onDone: (trimmedFile: File, meta: { duration, width, height }) => void
+ *   onDone: (file: File, meta: { duration, width, height, trimStart, trimEnd }) => void
  *   onCancel: () => void
  */
 export default function VideoEditor({ file, onDone, onCancel }) {
@@ -22,8 +22,6 @@ export default function VideoEditor({ file, onDone, onCancel }) {
   const [playing, setPlaying] = useState(false)
   const [videoUrl, setVideoUrl] = useState(null)
   const [videoSize, setVideoSize] = useState({ width: 0, height: 0 })
-  const [trimming, setTrimming] = useState(false)
-  const [trimProgress, setTrimProgress] = useState('')
   const [currentTime, setCurrentTime] = useState(0)
 
   // Clip end time
@@ -84,7 +82,7 @@ export default function VideoEditor({ file, onDone, onCancel }) {
     }
   }
 
-  // Handle video ended
+  // Handle time update - loop within trim range
   const handleTimeUpdate = () => {
     const video = videoRef.current
     if (!video) return
@@ -134,47 +132,19 @@ export default function VideoEditor({ file, onDone, onCancel }) {
     document.addEventListener('touchend', handleEnd)
   }
 
-  // Trim using MediaRecorder if needed, otherwise pass through
-  const handleDone = async () => {
+  // Done - pass original file with trim metadata (no slow re-encoding)
+  const handleDone = () => {
     if (!videoRef.current) return
 
-    // If video is <= 6 seconds, no trim needed
-    if (duration <= MAX_CLIP_DURATION) {
-      onDone(file, {
-        duration: Math.round(duration),
-        width: videoSize.width,
-        height: videoSize.height
-      })
-      return
-    }
+    const needsTrim = duration > MAX_CLIP_DURATION
 
-    setTrimming(true)
-    setTrimProgress('動画をトリミング中...')
-
-    try {
-      const trimmedBlob = await trimVideo(videoRef.current, trimStart, trimEnd)
-      const trimmedFile = new File([trimmedBlob], file.name, { type: trimmedBlob.type || file.type })
-
-      // Get metadata of trimmed video
-      const trimmedMeta = await getVideoMetaFromBlob(trimmedBlob)
-
-      onDone(trimmedFile, {
-        duration: Math.round(trimmedMeta.duration || clipDuration),
-        width: trimmedMeta.width || videoSize.width,
-        height: trimmedMeta.height || videoSize.height
-      })
-    } catch (err) {
-      console.error('Video trim failed:', err)
-      // Fallback: use original file with metadata adjusted
-      onDone(file, {
-        duration: Math.round(clipDuration),
-        width: videoSize.width,
-        height: videoSize.height
-      })
-    } finally {
-      setTrimming(false)
-      setTrimProgress('')
-    }
+    onDone(file, {
+      duration: Math.round(needsTrim ? clipDuration : duration),
+      width: videoSize.width,
+      height: videoSize.height,
+      trimStart: needsTrim ? trimStart : 0,
+      trimEnd: needsTrim ? trimEnd : duration
+    })
   }
 
   // Format seconds as m:ss
@@ -189,14 +159,13 @@ export default function VideoEditor({ file, onDone, onCancel }) {
   const playheadPos = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black flex flex-col">
+    <div className="fixed inset-0 bottom-16 lg:bottom-0 lg:left-[240px] xl:left-[280px] z-[60] bg-black flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-black/80 flex-shrink-0">
         <button
           onClick={onCancel}
           className="text-white p-2"
           aria-label="戻る"
-          disabled={trimming}
         >
           <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="15 18 9 12 15 6" />
@@ -205,15 +174,14 @@ export default function VideoEditor({ file, onDone, onCancel }) {
         <span className="text-white font-semibold text-lg">動画を編集</span>
         <button
           onClick={handleDone}
-          disabled={trimming}
-          className="text-[var(--line-green)] font-semibold text-base px-3 py-1 disabled:opacity-50"
+          className="text-[var(--line-green)] font-semibold text-base px-3 py-1"
         >
-          {trimming ? trimProgress : '完了'}
+          完了
         </button>
       </div>
 
       {/* Video Preview */}
-      <div className="flex-1 flex items-center justify-center bg-black relative overflow-hidden">
+      <div className="flex-1 flex items-center justify-center bg-black relative overflow-hidden min-h-0">
         {videoUrl && (
           <video
             ref={videoRef}
@@ -243,7 +211,7 @@ export default function VideoEditor({ file, onDone, onCancel }) {
       </div>
 
       {/* Trim Controls */}
-      <div className="bg-[#1a1a1a] px-4 py-4 flex-shrink-0">
+      <div className="bg-[#1a1a1a] px-4 py-4 flex-shrink-0 pb-safe">
         {/* Duration info */}
         <div className="flex items-center justify-between mb-3">
           <span className="text-gray-400 text-sm">
@@ -270,10 +238,11 @@ export default function VideoEditor({ file, onDone, onCancel }) {
 
           {/* Selected region */}
           <div
-            className="absolute top-0 bottom-0 bg-[var(--line-green)]/30 border-2 border-[var(--line-green)] rounded-lg"
+            className="absolute top-0 bottom-0 border-2 border-[var(--line-green)] rounded-lg"
             style={{
               left: `${selectionLeft}%`,
               width: `${selectionWidth}%`,
+              backgroundColor: 'rgba(76, 175, 80, 0.3)',
             }}
           >
             {/* Left handle */}
@@ -312,127 +281,4 @@ export default function VideoEditor({ file, onDone, onCancel }) {
       </div>
     </div>
   )
-}
-
-/**
- * Trim video using MediaRecorder + captureStream
- */
-function trimVideo(videoElement, startTime, endTime) {
-  return new Promise((resolve, reject) => {
-    // Create a clone video element for recording
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-
-    const cloneVideo = document.createElement('video')
-    cloneVideo.src = videoElement.src
-    cloneVideo.muted = false
-    cloneVideo.playsInline = true
-    cloneVideo.currentTime = startTime
-
-    cloneVideo.onloadedmetadata = () => {
-      canvas.width = cloneVideo.videoWidth
-      canvas.height = cloneVideo.videoHeight
-    }
-
-    cloneVideo.onseeked = () => {
-      // Set canvas size
-      if (canvas.width === 0) {
-        canvas.width = cloneVideo.videoWidth || 640
-        canvas.height = cloneVideo.videoHeight || 480
-      }
-
-      const stream = canvas.captureStream(30) // 30fps
-
-      // Try to add audio track
-      try {
-        const audioCtx = new AudioContext()
-        const source = audioCtx.createMediaElementSource(cloneVideo)
-        const dest = audioCtx.createMediaStreamDestination()
-        source.connect(dest)
-        source.connect(audioCtx.destination)
-        dest.stream.getAudioTracks().forEach(track => stream.addTrack(track))
-      } catch {
-        // No audio or audio context not supported
-      }
-
-      // Try different mime types
-      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-        ? 'video/webm;codecs=vp9'
-        : MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
-          ? 'video/webm;codecs=vp8'
-          : MediaRecorder.isTypeSupported('video/webm')
-            ? 'video/webm'
-            : 'video/mp4'
-
-      let recorder
-      try {
-        recorder = new MediaRecorder(stream, { mimeType })
-      } catch {
-        recorder = new MediaRecorder(stream)
-      }
-
-      const chunks = []
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data)
-      }
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: recorder.mimeType })
-        resolve(blob)
-      }
-
-      recorder.onerror = (e) => {
-        reject(e.error || new Error('MediaRecorder error'))
-      }
-
-      // Draw frames to canvas
-      const drawFrame = () => {
-        if (cloneVideo.currentTime >= endTime || cloneVideo.paused || cloneVideo.ended) {
-          recorder.stop()
-          cloneVideo.pause()
-          return
-        }
-        ctx.drawImage(cloneVideo, 0, 0, canvas.width, canvas.height)
-        requestAnimationFrame(drawFrame)
-      }
-
-      recorder.start()
-      cloneVideo.play().then(() => {
-        drawFrame()
-      }).catch(reject)
-
-      // Safety timeout
-      const clipDuration = (endTime - startTime) * 1000 + 2000
-      setTimeout(() => {
-        if (recorder.state === 'recording') {
-          recorder.stop()
-          cloneVideo.pause()
-        }
-      }, clipDuration)
-    }
-  })
-}
-
-/**
- * Get video metadata from a blob
- */
-function getVideoMetaFromBlob(blob) {
-  return new Promise((resolve) => {
-    const video = document.createElement('video')
-    video.preload = 'metadata'
-    const url = URL.createObjectURL(blob)
-    video.src = url
-    video.onloadedmetadata = () => {
-      resolve({
-        duration: video.duration,
-        width: video.videoWidth,
-        height: video.videoHeight
-      })
-      URL.revokeObjectURL(url)
-    }
-    video.onerror = () => {
-      resolve({ duration: 0, width: 0, height: 0 })
-      URL.revokeObjectURL(url)
-    }
-  })
 }
