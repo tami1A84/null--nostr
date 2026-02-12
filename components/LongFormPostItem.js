@@ -396,7 +396,7 @@ export default function LongFormPostItem({
                   </svg>
                 </button>
 
-                {showMenu && (
+                {showMenu && createPortal(
                   <>
                     <div
                       className="fixed inset-0 z-[60]"
@@ -462,7 +462,8 @@ export default function LongFormPostItem({
                         </button>
                       )}
                     </div>
-                  </>
+                  </>,
+                  document.body
                 )}
               </div>
             </div>
