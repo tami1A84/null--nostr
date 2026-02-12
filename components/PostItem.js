@@ -313,7 +313,6 @@ export default function PostItem({
   const [showReportModal, setShowReportModal] = useState(false)
   const [showBirdwatchModal, setShowBirdwatchModal] = useState(false)
   const [showReactionPicker, setShowReactionPicker] = useState(false)
-  const likeButtonRef = useRef(null)
   const longPressTimerRef = useRef(null)
   const longPressTriggeredRef = useRef(false)
   const displayProfile = isRepost ? profiles?.[post.pubkey] : profile
@@ -812,89 +811,6 @@ export default function PostItem({
                   <circle cx="12" cy="19" r="2"/>
                 </svg>
               </button>
-
-              {/* Dropdown menu */}
-              {showMenu && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowMenu(false)}
-                  />
-                  <div className="absolute right-0 top-6 z-50 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg shadow-lg py-1 min-w-[160px]">
-                    {/* Not interested button (for recommendation feed) */}
-                    {showNotInterested && onNotInterested && !isOwnPost && (
-                      <button
-                        onClick={() => {
-                          onNotInterested(post.id, post.pubkey)
-                          setShowMenu(false)
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10"/>
-                          <path d="M8 15h8"/>
-                          <path d="M9 9h.01"/>
-                          <path d="M15 9h.01"/>
-                        </svg>
-                        この投稿に興味がない
-                      </button>
-                    )}
-                    {/* Birdwatch button */}
-                    {onBirdwatch && !isOwnPost && (
-                      <button
-                        onClick={handleBirdwatch}
-                        className="w-full px-4 py-2 text-left text-sm text-blue-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                        </svg>
-                        Birdwatch
-                      </button>
-                    )}
-                    {/* Report button */}
-                    {onReport && !isOwnPost && (
-                      <button
-                        onClick={handleReport}
-                        className="w-full px-4 py-2 text-left text-sm text-orange-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
-                          <line x1="4" y1="22" x2="4" y2="15"/>
-                        </svg>
-                        通報
-                      </button>
-                    )}
-                    {/* Mute button */}
-                    {onMute && !isOwnPost && (
-                      <button
-                        onClick={handleMute}
-                        className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10"/>
-                          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-                        </svg>
-                        ミュート
-                      </button>
-                    )}
-                    {/* Delete button */}
-                    {isOwnPost && onDelete && (
-                      <button
-                        onClick={handleDelete}
-                        className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] flex items-center gap-2"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6"/>
-                          <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                          <line x1="10" y1="11" x2="10" y2="17"/>
-                          <line x1="14" y1="11" x2="14" y2="17"/>
-                        </svg>
-                        削除
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
             </div>
           </div>
           
@@ -969,34 +885,24 @@ export default function PostItem({
             <div className="flex items-center justify-between mt-3">
               <div className="flex items-center gap-8">
                 {/* Like - Thumbs Up (long-press for custom emoji reaction) */}
-                <div className="relative" ref={likeButtonRef}>
-                  <button
-                    onClick={handleLikeClick}
-                    onTouchStart={handleLikeLongPressStart}
-                    onTouchEnd={handleLikeLongPressEnd}
-                    onTouchCancel={handleLikeLongPressEnd}
-                    onMouseDown={handleLikeLongPressStart}
-                    onMouseUp={handleLikeLongPressEnd}
-                    onMouseLeave={handleLikeLongPressEnd}
-                    onContextMenu={(e) => e.preventDefault()}
-                    className={`action-btn flex items-center gap-1.5 text-sm ${
-                      hasLiked ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'
-                    } ${isLiking ? 'like-animation' : ''}`}
-                  >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill={hasLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8">
-                      <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
-                    </svg>
-                    {likeCount > 0 && <span>{likeCount}</span>}
-                  </button>
-                  {showReactionPicker && (
-                    <ReactionEmojiPicker
-                      pubkey={myPubkey}
-                      onSelect={handleReactionSelect}
-                      onClose={() => setShowReactionPicker(false)}
-                      anchorRef={likeButtonRef}
-                    />
-                  )}
-                </div>
+                <button
+                  onClick={handleLikeClick}
+                  onTouchStart={handleLikeLongPressStart}
+                  onTouchEnd={handleLikeLongPressEnd}
+                  onTouchCancel={handleLikeLongPressEnd}
+                  onMouseDown={handleLikeLongPressStart}
+                  onMouseUp={handleLikeLongPressEnd}
+                  onMouseLeave={handleLikeLongPressEnd}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className={`action-btn flex items-center gap-1.5 text-sm ${
+                    hasLiked ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'
+                  } ${isLiking ? 'like-animation' : ''}`}
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill={hasLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8">
+                    <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
+                  </svg>
+                  {likeCount > 0 && <span>{likeCount}</span>}
+                </button>
 
                 {/* Repost */}
                 <button
@@ -1072,6 +978,104 @@ export default function PostItem({
         profiles={profiles}
         myPubkey={myPubkey}
       />
+
+      {/* Menu Bottom Sheet */}
+      {showMenu && (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center" onClick={() => setShowMenu(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative w-full max-w-lg bg-[var(--bg-primary)] rounded-t-2xl shadow-2xl overflow-hidden animate-bottomSheetUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-[var(--text-tertiary)] opacity-40" />
+            </div>
+            <div className="py-1 pb-2">
+              {showNotInterested && onNotInterested && !isOwnPost && (
+                <button
+                  onClick={() => { onNotInterested(post.id, post.pubkey); setShowMenu(false) }}
+                  className="w-full px-5 py-3 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] flex items-center gap-3"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M8 15h8"/>
+                    <path d="M9 9h.01"/>
+                    <path d="M15 9h.01"/>
+                  </svg>
+                  この投稿に興味がない
+                </button>
+              )}
+              {onBirdwatch && !isOwnPost && (
+                <button
+                  onClick={handleBirdwatch}
+                  className="w-full px-5 py-3 text-left text-sm text-blue-500 hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] flex items-center gap-3"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                  </svg>
+                  Birdwatch
+                </button>
+              )}
+              {onReport && !isOwnPost && (
+                <button
+                  onClick={handleReport}
+                  className="w-full px-5 py-3 text-left text-sm text-orange-500 hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] flex items-center gap-3"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+                    <line x1="4" y1="22" x2="4" y2="15"/>
+                  </svg>
+                  通報
+                </button>
+              )}
+              {onMute && !isOwnPost && (
+                <button
+                  onClick={handleMute}
+                  className="w-full px-5 py-3 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] flex items-center gap-3"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                  </svg>
+                  ミュート
+                </button>
+              )}
+              {isOwnPost && onDelete && (
+                <button
+                  onClick={handleDelete}
+                  className="w-full px-5 py-3 text-left text-sm text-red-500 hover:bg-[var(--bg-secondary)] active:bg-[var(--bg-secondary)] flex items-center gap-3"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/>
+                    <line x1="14" y1="11" x2="14" y2="17"/>
+                  </svg>
+                  削除
+                </button>
+              )}
+            </div>
+            <div className="px-4 pb-3">
+              <button
+                onClick={() => setShowMenu(false)}
+                className="w-full py-3 text-center text-sm font-medium text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-xl active:bg-[var(--bg-tertiary)]"
+              >
+                キャンセル
+              </button>
+            </div>
+            <div className="h-[env(safe-area-inset-bottom,0px)]" />
+          </div>
+        </div>
+      )}
+
+      {/* Reaction Emoji Picker */}
+      {showReactionPicker && (
+        <ReactionEmojiPicker
+          pubkey={myPubkey}
+          onSelect={handleReactionSelect}
+          onClose={() => setShowReactionPicker(false)}
+        />
+      )}
     </article>
   )
 }
