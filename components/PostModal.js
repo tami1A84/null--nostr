@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { publishEvent, nip19 } from '@/lib/nostr'
-import { uploadImagesInParallel } from '@/lib/imageUtils'
+import { publishEvent, signEventNip07, createEventTemplate, nip19 } from '@/lib/nostr'
+import { uploadImagesInParallel, uploadVideoWithRetry, getVideoMeta, computeFileHash } from '@/lib/imageUtils'
+import { NOSTR_KINDS } from '@/lib/constants'
 import EmojiPicker from './EmojiPicker'
 
 // Extract hashtags from content (NIP-01)
@@ -78,10 +79,14 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
   const [selectedEmojis, setSelectedEmojis] = useState([])
   const [contentWarning, setContentWarning] = useState('')
   const [showCWInput, setShowCWInput] = useState(false)
+  const [videoFile, setVideoFile] = useState(null)
+  const [videoPreview, setVideoPreview] = useState(null)
+  const [videoMeta, setVideoMeta] = useState(null)
 
   const textareaRef = useRef(null)
   const fileInputRef = useRef(null)
   const addFileInputRef = useRef(null)
+  const videoInputRef = useRef(null)
 
   useEffect(() => {
     textareaRef.current?.focus()
@@ -91,6 +96,9 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
+
+    // Clear video when selecting images (mutually exclusive)
+    handleRemoveVideo()
 
     const remainingSlots = MAX_IMAGES - imageFiles.length
     const filesToAdd = files.slice(0, remainingSlots)
@@ -122,6 +130,36 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
     setImagePreviews(prev => prev.filter((_, i) => i !== index))
   }
 
+  // Handle video selection
+  const handleVideoSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Clear images when selecting video (mutually exclusive)
+    setImageFiles([])
+    setImagePreviews([])
+
+    try {
+      const meta = await getVideoMeta(file)
+      setVideoFile(file)
+      setVideoMeta(meta)
+      setVideoPreview(URL.createObjectURL(file))
+    } catch (err) {
+      console.error('Failed to read video metadata:', err)
+      alert('動画の読み込みに失敗しました')
+    }
+
+    if (videoInputRef.current) videoInputRef.current.value = ''
+  }
+
+  // Remove video
+  const handleRemoveVideo = () => {
+    if (videoPreview) URL.revokeObjectURL(videoPreview)
+    setVideoFile(null)
+    setVideoPreview(null)
+    setVideoMeta(null)
+  }
+
   const handleEmojiSelect = (emoji) => {
     if (emoji.shortcode && emoji.url) {
       setPostContent(prev => prev + `:${emoji.shortcode}:`)
@@ -139,95 +177,159 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
   const handlePost = async () => {
     const content = postContent.trim()
-    if (!content && imageFiles.length === 0) return
+    if (!content && imageFiles.length === 0 && !videoFile) return
     if (posting) return
 
     try {
       setPosting(true)
-      let finalContent = content
 
-      // Upload images if selected
-      if (imageFiles.length > 0) {
+      // Video post → kind 34236
+      if (videoFile) {
         try {
           setUploadingImage(true)
-          setUploadProgress(`画像をアップロード中... (0/${imageFiles.length})`)
+          setUploadProgress('動画をアップロード中...')
 
-          const { urls: uploadedUrls, errors } = await uploadImagesInParallel(imageFiles, {
-            onProgress: (current, total, result) => {
-              setUploadProgress(`画像をアップロード中... (${current}/${total})`)
+          const [videoUrl, fileHash] = await Promise.all([
+            uploadVideoWithRetry(videoFile),
+            computeFileHash(videoFile)
+          ])
+
+          const now = Math.floor(Date.now() / 1000)
+          const title = content || ''
+
+          // Build imeta tag entries
+          const imetaEntries = [
+            `url ${videoUrl}`,
+            `m ${videoFile.type || 'video/mp4'}`,
+            `size ${videoFile.size}`,
+            `x ${fileHash}`
+          ]
+          if (videoMeta) {
+            if (videoMeta.width && videoMeta.height) {
+              imetaEntries.push(`dim ${videoMeta.width}x${videoMeta.height}`)
             }
+          }
+
+          const tags = [
+            ['d', fileHash],
+            ['imeta', ...imetaEntries],
+            ['title', title],
+            ['summary', ''],
+            ['client', 'nullnull'],
+            ['published_at', String(now)],
+            ['alt', title]
+          ]
+
+          if (videoMeta?.duration) {
+            tags.push(['duration', String(videoMeta.duration)])
+          }
+
+          if (contentWarning.trim()) {
+            tags.push(['content-warning', contentWarning.trim()])
+          }
+
+          const hashtags = extractHashtags(content)
+          hashtags.forEach(hashtag => {
+            tags.push(['t', hashtag])
           })
 
-          if (errors.length > 0) {
-            const errorMessages = errors.map(e => `${e.fileName}: ${e.error.message}`).join('\n')
-            console.error('Some uploads failed:', errors)
-            if (uploadedUrls.length === 0) {
-              alert(`すべての画像のアップロードに失敗しました:\n${errorMessages}`)
-              return
-            } else {
-              // Some uploads succeeded, ask user if they want to continue
-              const continueWithPartial = confirm(
-                `${errors.length}枚の画像のアップロードに失敗しました。\n` +
-                `成功した${uploadedUrls.length}枚で投稿を続けますか?`
-              )
-              if (!continueWithPartial) {
-                return
-              }
-            }
-          }
-
-          if (uploadedUrls.length > 0) {
-            const imageUrlsStr = uploadedUrls.join('\n')
-            finalContent = finalContent ? `${finalContent}\n${imageUrlsStr}` : imageUrlsStr
-          }
+          const event = createEventTemplate(NOSTR_KINDS.VIDEO_POST, '', tags)
+          const signedEvent = await signEventNip07(event)
+          await publishEvent(signedEvent)
         } catch (e) {
-          console.error('Image upload failed:', e)
-          alert(`画像のアップロードに失敗しました: ${e.message}`)
+          console.error('Video upload failed:', e)
+          alert(`動画のアップロードに失敗しました: ${e.message}`)
           return
         } finally {
           setUploadingImage(false)
           setUploadProgress('')
         }
+      } else {
+        // Normal text/image post → kind 1
+        let finalContent = content
+
+        // Upload images if selected
+        if (imageFiles.length > 0) {
+          try {
+            setUploadingImage(true)
+            setUploadProgress(`画像をアップロード中... (0/${imageFiles.length})`)
+
+            const { urls: uploadedUrls, errors } = await uploadImagesInParallel(imageFiles, {
+              onProgress: (current, total, result) => {
+                setUploadProgress(`画像をアップロード中... (${current}/${total})`)
+              }
+            })
+
+            if (errors.length > 0) {
+              const errorMessages = errors.map(e => `${e.fileName}: ${e.error.message}`).join('\n')
+              console.error('Some uploads failed:', errors)
+              if (uploadedUrls.length === 0) {
+                alert(`すべての画像のアップロードに失敗しました:\n${errorMessages}`)
+                return
+              } else {
+                const continueWithPartial = confirm(
+                  `${errors.length}枚の画像のアップロードに失敗しました。\n` +
+                  `成功した${uploadedUrls.length}枚で投稿を続けますか?`
+                )
+                if (!continueWithPartial) {
+                  return
+                }
+              }
+            }
+
+            if (uploadedUrls.length > 0) {
+              const imageUrlsStr = uploadedUrls.join('\n')
+              finalContent = finalContent ? `${finalContent}\n${imageUrlsStr}` : imageUrlsStr
+            }
+          } catch (e) {
+            console.error('Image upload failed:', e)
+            alert(`画像のアップロードに失敗しました: ${e.message}`)
+            return
+          } finally {
+            setUploadingImage(false)
+            setUploadProgress('')
+          }
+        }
+
+        // Add quote reference if quoting
+        if (quotedEvent) {
+          const nevent = nip19.neventEncode({ id: quotedEvent.id })
+          finalContent = `${finalContent}\n\nnostr:${nevent}`
+        }
+
+        // Build tags
+        const tags = []
+
+        if (replyTo) {
+          tags.push(['e', replyTo.id, '', 'reply'])
+          tags.push(['p', replyTo.pubkey])
+        }
+
+        if (quotedEvent) {
+          tags.push(['q', quotedEvent.id])
+          tags.push(['p', quotedEvent.pubkey])
+        }
+
+        selectedEmojis.forEach(emoji => {
+          tags.push(['emoji', emoji.shortcode, emoji.url])
+        })
+
+        if (contentWarning.trim()) {
+          tags.push(['content-warning', contentWarning.trim()])
+        }
+
+        const hashtags = extractHashtags(finalContent)
+        hashtags.forEach(hashtag => {
+          tags.push(['t', hashtag])
+        })
+
+        await publishEvent({
+          kind: 1,
+          content: finalContent,
+          tags,
+          created_at: Math.floor(Date.now() / 1000),
+        })
       }
-
-      // Add quote reference if quoting
-      if (quotedEvent) {
-        const nevent = nip19.neventEncode({ id: quotedEvent.id })
-        finalContent = `${finalContent}\n\nnostr:${nevent}`
-      }
-
-      // Build tags
-      const tags = []
-
-      if (replyTo) {
-        tags.push(['e', replyTo.id, '', 'reply'])
-        tags.push(['p', replyTo.pubkey])
-      }
-
-      if (quotedEvent) {
-        tags.push(['q', quotedEvent.id])
-        tags.push(['p', quotedEvent.pubkey])
-      }
-
-      selectedEmojis.forEach(emoji => {
-        tags.push(['emoji', emoji.shortcode, emoji.url])
-      })
-
-      if (contentWarning.trim()) {
-        tags.push(['content-warning', contentWarning.trim()])
-      }
-
-      const hashtags = extractHashtags(finalContent)
-      hashtags.forEach(hashtag => {
-        tags.push(['t', hashtag])
-      })
-
-      await publishEvent({
-        kind: 1,
-        content: finalContent,
-        tags,
-        created_at: Math.floor(Date.now() / 1000),
-      })
 
       setPostContent('')
       setImageFiles([])
@@ -235,6 +337,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
       setSelectedEmojis([])
       setContentWarning('')
       setShowCWInput(false)
+      handleRemoveVideo()
       onClose()
       onSuccess?.()
     } catch (e) {
@@ -261,9 +364,9 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
     }
   }
 
-  const isValid = postContent.trim() || imageFiles.length > 0
+  const isValid = postContent.trim() || imageFiles.length > 0 || videoFile
   const isLoading = posting || uploadingImage
-  const canAddMoreImages = imageFiles.length < MAX_IMAGES
+  const canAddMoreImages = imageFiles.length < MAX_IMAGES && !videoFile
 
   return (
     <div
@@ -396,6 +499,36 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
               />
             </div>
           )}
+
+          {/* Video Preview */}
+          {videoPreview && (
+            <div className="mt-3">
+              <div className="relative inline-block">
+                <video
+                  src={videoPreview}
+                  className="h-32 rounded-lg object-cover"
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+                <button
+                  onClick={handleRemoveVideo}
+                  className="absolute -top-1 -right-1 p-1 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+                  aria-label="動画を削除"
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+                {videoMeta && (
+                  <span className="absolute bottom-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
+                    {videoMeta.duration}s
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Toolbar */}
@@ -423,6 +556,31 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
             {imageFiles.length > 0 && (
               <span className="absolute -top-1 -right-1 bg-[var(--line-green)] text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
                 {imageFiles.length}
+              </span>
+            )}
+          </label>
+
+          {/* Video upload button */}
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            onChange={handleVideoSelect}
+            className="hidden"
+            id="post-video-input"
+          />
+          <label
+            htmlFor="post-video-input"
+            className={`action-btn p-2 cursor-pointer relative ${videoFile ? 'text-[var(--line-green)]' : ''} ${imageFiles.length > 0 ? 'opacity-50 pointer-events-none' : ''}`}
+            aria-label="動画を追加"
+          >
+            <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="23 7 16 12 23 17 23 7" />
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+            </svg>
+            {videoFile && (
+              <span className="absolute -top-1 -right-1 bg-[var(--line-green)] text-white text-xs w-4 h-4 rounded-full flex items-center justify-center">
+                1
               </span>
             )}
           </label>

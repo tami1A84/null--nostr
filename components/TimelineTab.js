@@ -29,7 +29,8 @@ import {
   rateBirdwatchLabel,
   RELAYS
 } from '@/lib/nostr'
-import { uploadImagesInParallel } from '@/lib/imageUtils'
+import { uploadImagesInParallel, uploadVideoWithRetry, getVideoMeta, computeFileHash } from '@/lib/imageUtils'
+import { NOSTR_KINDS } from '@/lib/constants'
 import { setCachedMuteList } from '@/lib/cache'
 import {
   markNotInterested,
@@ -53,7 +54,6 @@ import LongFormPostItem from './LongFormPostItem'
 import UserProfileView from './UserProfileView'
 import SearchModal from './SearchModal'
 import EmojiPicker from './EmojiPicker'
-import { NOSTR_KINDS } from '@/lib/constants'
 
 // Extract hashtags from content (NIP-01)
 function extractHashtags(content) {
@@ -153,6 +153,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const [emojiTags, setEmojiTags] = useState([]) // Array of emoji tags for post
   const [contentWarning, setContentWarning] = useState('') // Content warning text (NIP-36)
   const [showCWInput, setShowCWInput] = useState(false) // Toggle CW input visibility
+  const [videoFile, setVideoFile] = useState(null)
+  const [videoPreview, setVideoPreview] = useState(null)
+  const [videoMeta, setVideoMeta] = useState(null)
   const [viewingProfile, setViewingProfile] = useState(null)
   const [mutedPubkeys, setMutedPubkeys] = useState(new Set())
   const [showZapModal, setShowZapModal] = useState(null)
@@ -174,6 +177,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const longPressTimerRef = useRef(null)
   const postImageInputRef = useRef(null)
   const postImageAddRef = useRef(null)
+  const postVideoInputRef = useRef(null)
   const initialLoadDone = useRef(false)
 
   // Maximum number of images allowed
@@ -1247,6 +1251,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     const files = Array.from(e.target.files || [])
     if (files.length === 0) return
 
+    // Clear video when selecting images
+    handleRemovePostVideo()
+
     const remainingSlots = MAX_IMAGES - imageFiles.length
     const filesToAdd = files.slice(0, remainingSlots)
 
@@ -1276,12 +1283,121 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     setImagePreviews(prev => prev.filter((_, i) => i !== index))
   }
 
+  const handlePostVideoSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Clear images when selecting video
+    setImageFiles([])
+    setImagePreviews([])
+
+    try {
+      const meta = await getVideoMeta(file)
+      setVideoFile(file)
+      setVideoMeta(meta)
+      setVideoPreview(URL.createObjectURL(file))
+    } catch (err) {
+      console.error('Failed to read video metadata:', err)
+      alert('動画の読み込みに失敗しました')
+    }
+
+    if (postVideoInputRef.current) postVideoInputRef.current.value = ''
+  }
+
+  const handleRemovePostVideo = () => {
+    if (videoPreview) URL.revokeObjectURL(videoPreview)
+    setVideoFile(null)
+    setVideoPreview(null)
+    setVideoMeta(null)
+  }
+
   const handlePost = async () => {
-    if ((!newPost.trim() && imageFiles.length === 0) || !pubkey) return
+    if ((!newPost.trim() && imageFiles.length === 0 && !videoFile) || !pubkey) return
     setPosting(true)
 
     try {
       let content = newPost.trim()
+
+      // Video post → kind 34236
+      if (videoFile) {
+        try {
+          setUploadingPostImage(true)
+          setUploadProgress('動画をアップロード中...')
+
+          const [videoUrl, fileHash] = await Promise.all([
+            uploadVideoWithRetry(videoFile),
+            computeFileHash(videoFile)
+          ])
+
+          const now = Math.floor(Date.now() / 1000)
+          const title = content || ''
+
+          const imetaEntries = [
+            `url ${videoUrl}`,
+            `m ${videoFile.type || 'video/mp4'}`,
+            `size ${videoFile.size}`,
+            `x ${fileHash}`
+          ]
+          if (videoMeta) {
+            if (videoMeta.width && videoMeta.height) {
+              imetaEntries.push(`dim ${videoMeta.width}x${videoMeta.height}`)
+            }
+          }
+
+          const tags = [
+            ['d', fileHash],
+            ['imeta', ...imetaEntries],
+            ['title', title],
+            ['summary', ''],
+            ['client', 'nullnull'],
+            ['published_at', String(now)],
+            ['alt', title]
+          ]
+
+          if (videoMeta?.duration) {
+            tags.push(['duration', String(videoMeta.duration)])
+          }
+
+          if (contentWarning.trim()) {
+            tags.push(['content-warning', contentWarning.trim()])
+          }
+
+          const hashtags = extractHashtags(content)
+          if (hashtags.length > 0) {
+            const hashtagTags = hashtags.map(tag => ['t', tag])
+            tags.push(...hashtagTags)
+          }
+
+          const event = createEventTemplate(NOSTR_KINDS.VIDEO_POST, '', tags)
+          event.pubkey = pubkey
+          const signed = await signEventNip07(event)
+          const success = await publishEvent(signed)
+
+          if (success) {
+            setPosts([signed, ...posts])
+            setNewPost('')
+            setImageFiles([])
+            setImagePreviews([])
+            setEmojiTags([])
+            setContentWarning('')
+            setShowCWInput(false)
+            handleRemovePostVideo()
+            setShowPostModal(false)
+
+            if (onPostPublished) {
+              onPostPublished()
+            }
+          }
+        } catch (e) {
+          console.error('Video upload failed:', e)
+          alert(`動画のアップロードに失敗しました: ${e.message}`)
+        } finally {
+          setUploadingPostImage(false)
+          setUploadProgress('')
+          setPosting(false)
+        }
+        return
+      }
 
       // Upload images if selected
       if (imageFiles.length > 0) {
@@ -1514,19 +1630,19 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
 
       {/* Post Modal */}
       {showPostModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay" onClick={() => { setShowPostModal(false); setImageFiles([]); setImagePreviews([]) }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay" onClick={() => { setShowPostModal(false); setImageFiles([]); setImagePreviews([]); handleRemovePostVideo() }}>
           <div
             className="w-full h-full sm:h-auto sm:max-w-lg bg-[var(--bg-primary)] sm:rounded-2xl flex flex-col overflow-hidden animate-scaleIn"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)] flex-shrink-0">
-              <button onClick={() => { setShowPostModal(false); setImageFiles([]); setImagePreviews([]) }} className="text-[var(--text-secondary)] action-btn">
+              <button onClick={() => { setShowPostModal(false); setImageFiles([]); setImagePreviews([]); handleRemovePostVideo() }} className="text-[var(--text-secondary)] action-btn">
                 キャンセル
               </button>
               <span className="font-semibold text-[var(--text-primary)]">新規投稿</span>
               <button
                 onClick={handlePost}
-                disabled={posting || uploadingPostImage || (!newPost.trim() && imageFiles.length === 0)}
+                disabled={posting || uploadingPostImage || (!newPost.trim() && imageFiles.length === 0 && !videoFile)}
                 className="btn-line text-sm py-1.5 px-4 disabled:opacity-50"
               >
                 {uploadingPostImage ? uploadProgress : posting ? '投稿中...' : '投稿'}
@@ -1566,7 +1682,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                       ? 'text-transparent caret-[var(--text-primary)] absolute inset-0 z-10'
                       : 'text-[var(--text-primary)] relative'
                   }`}
-                  placeholder="いまどうしてる？"
+                  placeholder={videoFile ? '動画のタイトルを入力...' : 'いまどうしてる？'}
                   autoFocus
                 />
                 {/* Visible preview layer - only show when there are hashtags or emojis */}
@@ -1601,7 +1717,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                       </div>
                     ))}
                     {/* Add more button */}
-                    {imageFiles.length < MAX_IMAGES && (
+                    {imageFiles.length < MAX_IMAGES && !videoFile && (
                       <label
                         htmlFor="timeline-post-image-add"
                         className="h-20 w-20 rounded-lg border-2 border-dashed border-[var(--border-color)] flex items-center justify-center cursor-pointer hover:border-[var(--line-green)] transition-colors"
@@ -1624,8 +1740,38 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                   />
                 </div>
               )}
-              
-              {/* Image upload, CW, and emoji picker buttons */}
+
+              {/* Video preview */}
+              {videoPreview && (
+                <div className="mt-3">
+                  <div className="relative inline-block">
+                    <video
+                      src={videoPreview}
+                      className="h-32 rounded-lg object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                    <button
+                      onClick={handleRemovePostVideo}
+                      className="absolute -top-1 -right-1 p-1 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+                      aria-label="動画を削除"
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                    {videoMeta && (
+                      <span className="absolute bottom-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
+                        {videoMeta.duration}s
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Image upload, Video upload, CW, and emoji picker buttons */}
               <div className="mt-3 pt-3 border-t border-[var(--border-color)] flex-shrink-0">
                 <input
                   ref={postImageInputRef}
@@ -1635,10 +1781,18 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                   className="hidden"
                   onChange={handlePostImageSelect}
                 />
+                <input
+                  ref={postVideoInputRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={handlePostVideoSelect}
+                  id="timeline-post-video-input"
+                />
                 <div className="flex items-center gap-4">
                   <label
                     htmlFor="timeline-post-image-input"
-                    className={`flex items-center gap-2 text-[var(--line-green)] text-sm cursor-pointer ${imageFiles.length >= MAX_IMAGES ? 'opacity-50 pointer-events-none' : ''}`}
+                    className={`flex items-center gap-2 text-[var(--line-green)] text-sm cursor-pointer ${imageFiles.length >= MAX_IMAGES || videoFile ? 'opacity-50 pointer-events-none' : ''}`}
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -1655,6 +1809,18 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                     className="hidden"
                     id="timeline-post-image-input"
                   />
+
+                  {/* Video upload button */}
+                  <label
+                    htmlFor="timeline-post-video-input"
+                    className={`flex items-center gap-2 text-sm cursor-pointer ${videoFile ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'} ${imageFiles.length > 0 ? 'opacity-50 pointer-events-none' : ''}`}
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polygon points="23 7 16 12 23 17 23 7" />
+                      <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                    </svg>
+                    動画 {videoFile ? '(1)' : ''}
+                  </label>
 
                   {/* Content Warning toggle (NIP-36) */}
                   <button
@@ -1684,7 +1850,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                     絵文字
                   </button>
                 </div>
-                
+
                 {/* Emoji Picker - displayed below buttons */}
                 {showEmojiPicker && (
                   <div className="mt-3">
