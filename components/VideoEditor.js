@@ -38,13 +38,15 @@ export default function VideoEditor({ file, onDone, onCancel }) {
     return () => URL.revokeObjectURL(url)
   }, [file])
 
-  // When metadata loaded
+  // When metadata loaded - force first frame render
   const handleLoadedMetadata = () => {
     const video = videoRef.current
     if (!video) return
     setDuration(video.duration)
     setVideoSize({ width: video.videoWidth, height: video.videoHeight })
-    video.currentTime = 0
+    // Seek to near-zero to force the browser to decode and display the first frame
+    // (currentTime=0 may be a no-op if already at 0, so use a tiny offset)
+    video.currentTime = 0.001
   }
 
   // Playback loop within trim range
@@ -159,6 +161,19 @@ export default function VideoEditor({ file, onDone, onCancel }) {
     setTrimProgress(0)
 
     try {
+      // Pre-authorize video playback within user gesture context.
+      // Firefox requires a user-gesture-initiated play() before allowing
+      // programmatic play() from async callbacks (like 'seeked').
+      // We wait for play() to resolve (playback actually started) then pause,
+      // so the browser marks this element as "allowed to play".
+      try {
+        const p = video.play()
+        if (p) await p
+      } catch {
+        // Ignore - may fail if video is at end, etc.
+      }
+      video.pause()
+
       const trimmedBlob = await recordFromVideoElement(
         video,
         trimStart,
@@ -169,12 +184,12 @@ export default function VideoEditor({ file, onDone, onCancel }) {
       const baseName = file.name.replace(/\.[^.]+$/, '')
       const trimmedFile = new File([trimmedBlob], `${baseName}_6s${ext}`, { type: trimmedBlob.type })
 
-      // Get trimmed metadata
-      const meta = await getVideoMetaFromBlob(trimmedBlob)
+      // Use known values instead of reading metadata from the trimmed blob.
+      // WebM blobs from MediaRecorder often report Infinity for duration.
       onDone(trimmedFile, {
-        duration: Math.round(meta.duration || clipDuration),
-        width: meta.width || videoSize.width,
-        height: meta.height || videoSize.height
+        duration: Math.round(trimEnd - trimStart),
+        width: videoSize.width,
+        height: videoSize.height
       })
     } catch (err) {
       console.error('Video trim failed:', err)
@@ -192,6 +207,7 @@ export default function VideoEditor({ file, onDone, onCancel }) {
 
   // Format seconds as m:ss
   const formatTime = (s) => {
+    if (!isFinite(s)) return '0:00'
     const mins = Math.floor(s / 60)
     const secs = Math.floor(s % 60)
     return `${mins}:${secs.toString().padStart(2, '0')}`
@@ -233,6 +249,7 @@ export default function VideoEditor({ file, onDone, onCancel }) {
             src={videoUrl}
             className="max-w-full max-h-full object-contain"
             playsInline
+            preload="auto"
             onLoadedMetadata={handleLoadedMetadata}
             onTimeUpdate={handleTimeUpdate}
             onClick={!trimming ? togglePlay : undefined}
@@ -346,13 +363,14 @@ export default function VideoEditor({ file, onDone, onCancel }) {
 function recordFromVideoElement(videoEl, startTime, endTime, onProgress) {
   return new Promise((resolve, reject) => {
     let settled = false
-    const done = (fn) => (...args) => {
+    const once = (fn) => (...args) => {
       if (settled) return
       settled = true
+      clearTimeout(safetyTimer)
       fn(...args)
     }
-    const resolveOnce = done(resolve)
-    const rejectOnce = done(reject)
+    const resolveOnce = once(resolve)
+    const rejectOnce = once(reject)
 
     const clipLen = endTime - startTime
 
@@ -441,46 +459,26 @@ function recordFromVideoElement(videoEl, startTime, endTime, onProgress) {
       }
     }, (clipLen + 5) * 1000)
 
-    // Clean up timer when done
-    const origResolve = resolveOnce
-    const origReject = rejectOnce
-
     // Seek to start, then begin recording
-    const onSeeked = () => {
-      videoEl.removeEventListener('seeked', onSeeked)
+    const startRecording = () => {
       recorder.start(100)
       videoEl.play().catch((err) => {
-        clearTimeout(safetyTimer)
         videoEl.removeEventListener('timeupdate', onTimeUpdate)
         videoEl.removeEventListener('ended', onEnded)
         rejectOnce(err)
       })
     }
-    videoEl.addEventListener('seeked', onSeeked)
-    videoEl.currentTime = startTime
-  })
-}
 
-/**
- * Get video metadata from a blob
- */
-function getVideoMetaFromBlob(blob) {
-  return new Promise((resolve) => {
-    const video = document.createElement('video')
-    video.preload = 'metadata'
-    const url = URL.createObjectURL(blob)
-    video.src = url
-    video.onloadedmetadata = () => {
-      resolve({
-        duration: video.duration,
-        width: video.videoWidth,
-        height: video.videoHeight
-      })
-      URL.revokeObjectURL(url)
-    }
-    video.onerror = () => {
-      resolve({ duration: 0, width: 0, height: 0 })
-      URL.revokeObjectURL(url)
+    // If already near startTime, start immediately; otherwise seek first
+    if (Math.abs(videoEl.currentTime - startTime) < 0.05) {
+      startRecording()
+    } else {
+      const onSeeked = () => {
+        videoEl.removeEventListener('seeked', onSeeked)
+        startRecording()
+      }
+      videoEl.addEventListener('seeked', onSeeked)
+      videoEl.currentTime = startTime
     }
   })
 }
