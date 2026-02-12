@@ -408,7 +408,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
     try {
       // Fetch notes, reposts, and user's reactions in parallel
       const [notes, reposts, myReactionEvents] = await Promise.all([
-        fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM], authors: [pubkey], since: oneDayAgo, limit: 50 }, RELAYS),
+        fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.VIDEO_POST], authors: [pubkey], since: oneDayAgo, limit: 50 }, RELAYS),
         fetchEvents({ kinds: [6], authors: [pubkey], since: oneDayAgo, limit: 30 }, RELAYS),
         fetchEvents({ kinds: [7], authors: [pubkey], since: oneDayAgo, limit: 50 }, RELAYS)
       ])

@@ -349,7 +349,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     
     try {
       const [notes, reposts] = await Promise.all([
-        fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM], authors: followList, since: oneHourAgo, limit: 50 }, readRelays),
+        fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.VIDEO_POST], authors: followList, since: oneHourAgo, limit: 50 }, readRelays),
         fetchEvents({ kinds: [6], authors: followList, since: oneHourAgo, limit: 20 }, readRelays)
       ])
 
@@ -497,7 +497,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     try {
       // Fetch just 20 notes for instant display (include kind 30023 for NIP-23 long-form)
       const notes = await fetchEvents(
-        { kinds: [1, NOSTR_KINDS.LONG_FORM], since: fiveMinutesAgo, limit: 20 },
+        { kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.VIDEO_POST], since: fiveMinutesAgo, limit: 20 },
         readRelays
       )
 
@@ -505,7 +505,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       if (notes.length === 0) {
         const oneHourAgo = Math.floor(Date.now() / 1000) - 3600
         const expandedNotes = await fetchEvents(
-          { kinds: [1, NOSTR_KINDS.LONG_FORM], since: oneHourAgo, limit: 30 },
+          { kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.VIDEO_POST], since: oneHourAgo, limit: 30 },
           readRelays
         )
         if (expandedNotes.length === 0) {
@@ -551,7 +551,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
 
     try {
       // Step 1: Fetch base timeline posts (include kind 30023 for NIP-23 long-form)
-      const noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 200 }
+      const noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.VIDEO_POST], since: threeHoursAgo, limit: 200 }
       const repostFilter = { kinds: [6], since: threeHoursAgo, limit: 100 }
 
       const [notes, reposts] = await Promise.all([
@@ -599,7 +599,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
             const secondDegreeArray = Array.from(secondDegreeFollows).slice(0, 50)
             try {
               secondDegreePosts = await fetchEventsWithOutboxModel(
-                { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 100 },
+                { kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.VIDEO_POST], since: threeHoursAgo, limit: 100 },
                 secondDegreeArray,
                 { timeout: 12000 }
               )
@@ -730,7 +730,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     const oneHourAgo = Math.floor(Date.now() / 1000) - 3600
     
     try {
-      const noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM], authors: followList, since: oneHourAgo, limit: 100 }
+      const noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.VIDEO_POST], authors: followList, since: oneHourAgo, limit: 100 }
       const repostFilter = { kinds: [6], authors: followList, since: oneHourAgo, limit: 50 }
       
       const [notes, reposts] = await Promise.all([
@@ -810,7 +810,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         }
 
         const [notes, reposts] = await Promise.all([
-          fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM], authors: followList, since: oneHourAgo, limit: 100 }, readRelays),
+          fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.VIDEO_POST], authors: followList, since: oneHourAgo, limit: 100 }, readRelays),
           fetchEvents({ kinds: [6], authors: followList, since: oneHourAgo, limit: 50 }, readRelays)
         ])
 
@@ -854,7 +854,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       }
 
       // おすすめ (global) mode - with recommendation algorithm
-      let noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 200 }
+      let noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.VIDEO_POST], since: threeHoursAgo, limit: 200 }
       let repostFilter = { kinds: [6], since: threeHoursAgo, limit: 100 }
 
       const [notes, reposts] = await Promise.all([
@@ -902,7 +902,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           if (secondDegreeFollows.size > 0) {
             const secondDegreeArray = Array.from(secondDegreeFollows).slice(0, 50)
             const secondDegreePosts = await fetchEventsWithOutboxModel(
-              { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 100 },
+              { kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.VIDEO_POST], since: threeHoursAgo, limit: 100 },
               secondDegreeArray,
               { timeout: 12000 }
             )

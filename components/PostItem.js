@@ -13,6 +13,7 @@ import {
   RELAYS
 } from '@/lib/nostr'
 import { getImageUrl } from '@/lib/imageUtils'
+import { NOSTR_KINDS } from '@/lib/constants'
 import BadgeDisplay from './BadgeDisplay'
 import URLPreview from './URLPreview'
 import ReportModal from './ReportModal'
@@ -324,6 +325,24 @@ export default function PostItem({
   const cwTag = post.tags?.find(t => t[0] === 'content-warning')
   const contentWarning = cwTag ? (cwTag[1] || '') : null
   const hasCW = contentWarning !== null
+
+  // Extract video post data (kind 34236)
+  const isVideoPost = post.kind === NOSTR_KINDS.VIDEO_POST
+  const videoPostData = isVideoPost ? (() => {
+    const imetaTag = post.tags?.find(t => t[0] === 'imeta')
+    const titleTag = post.tags?.find(t => t[0] === 'title')
+    const durationTag = post.tags?.find(t => t[0] === 'duration')
+    let videoUrl = null
+    if (imetaTag) {
+      const urlEntry = imetaTag.slice(1).find(e => e.startsWith('url '))
+      if (urlEntry) videoUrl = urlEntry.slice(4)
+    }
+    return {
+      videoUrl,
+      title: titleTag?.[1] || '',
+      duration: durationTag?.[1] || null
+    }
+  })() : null
   
   // Content length threshold for collapsing (excluding URLs)
   const COLLAPSE_THRESHOLD = 140
@@ -945,7 +964,22 @@ export default function PostItem({
                   </button>
                 </div>
               )}
-              {shouldCollapse && !isExpanded ? (
+              {isVideoPost && videoPostData ? (
+                <>
+                  {videoPostData.title && (
+                    <span className="font-medium">{videoPostData.title}</span>
+                  )}
+                  {videoPostData.videoUrl && (
+                    <video
+                      src={videoPostData.videoUrl}
+                      controls
+                      playsInline
+                      className="mt-2 rounded-lg max-h-96 w-full"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  )}
+                </>
+              ) : shouldCollapse && !isExpanded ? (
                 <>
                   {/* Show more content when there are URLs (since they don't count toward limit) */}
                   {renderContent(post.content.slice(0, 280) + '...')}
