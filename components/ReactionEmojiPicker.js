@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { fetchEvents, getDefaultRelay } from '@/lib/nostr'
 import { getCachedEmoji, setCachedEmoji } from '@/lib/cache'
 import { getImageUrl } from '@/lib/imageUtils'
@@ -20,43 +21,19 @@ const QUICK_EMOJIS = [
   { char: '\uD83C\uDF89', label: 'tada' },
 ]
 
-export default function ReactionEmojiPicker({ pubkey, onSelect, onClose, anchorRef }) {
+export default function ReactionEmojiPicker({ pubkey, onSelect, onClose }) {
   const [emojis, setEmojis] = useState([])
   const [emojiSets, setEmojiSets] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState('all')
-  const pickerRef = useRef(null)
-  const [position, setPosition] = useState({ bottom: true })
+  const [mounted, setMounted] = useState(false)
 
-  // Calculate position relative to anchor
   useEffect(() => {
-    if (anchorRef?.current && pickerRef.current) {
-      const anchorRect = anchorRef.current.getBoundingClientRect()
-      const pickerHeight = 320
-      const spaceBelow = window.innerHeight - anchorRect.bottom
-      const spaceAbove = anchorRect.top
-
-      setPosition({
-        bottom: spaceBelow < pickerHeight && spaceAbove > spaceBelow
-      })
-    }
-  }, [anchorRef])
-
-  // Close on outside click
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
-        onClose()
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('touchstart', handleClickOutside)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('touchstart', handleClickOutside)
-    }
-  }, [onClose])
+    setMounted(true)
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
 
   // Load custom emojis
   useEffect(() => {
@@ -184,99 +161,130 @@ export default function ReactionEmojiPicker({ pubkey, onSelect, onClose, anchorR
 
   const hasCustomEmojis = allCustomEmojis.length > 0
 
-  return (
-    <div
-      ref={pickerRef}
-      className={`absolute z-50 ${position.bottom ? 'bottom-full mb-2' : 'top-full mt-2'} left-0 w-72 bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl shadow-lg overflow-hidden`}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Quick Unicode Emojis */}
-      <div className="p-2 border-b border-[var(--border-color)]">
-        <div className="grid grid-cols-8 gap-1">
-          {QUICK_EMOJIS.map((emoji) => (
-            <button
-              key={emoji.label}
-              onClick={() => handleUnicodeSelect(emoji)}
-              className="aspect-square flex items-center justify-center rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors text-lg"
-              title={emoji.label}
-            >
-              {emoji.char}
-            </button>
-          ))}
-        </div>
-      </div>
+  if (!mounted) return null
 
-      {/* Custom Emoji Section */}
-      {pubkey && (
-        <>
-          {/* Search & tabs header */}
-          <div className="p-2 border-b border-[var(--border-color)]">
-            <div className="flex items-center gap-2">
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-end justify-center" onClick={onClose}>
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40" />
+
+      {/* Bottom sheet */}
+      <div
+        className="relative w-full max-w-lg bg-[var(--bg-primary)] rounded-t-2xl shadow-2xl overflow-hidden animate-bottomSheetUp"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Handle bar */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 rounded-full bg-[var(--text-tertiary)] opacity-40" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 pb-2">
+          <span className="text-sm font-semibold text-[var(--text-primary)]">リアクション</span>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Quick Unicode Emojis */}
+        <div className="px-4 pb-3">
+          <div className="grid grid-cols-8 gap-1">
+            {QUICK_EMOJIS.map((emoji) => (
+              <button
+                key={emoji.label}
+                onClick={() => handleUnicodeSelect(emoji)}
+                className="aspect-square flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] active:scale-90 transition-all text-2xl"
+                title={emoji.label}
+              >
+                {emoji.char}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Custom Emoji Section */}
+        {pubkey && (
+          <>
+            <div className="border-t border-[var(--border-color)]" />
+
+            {/* Search */}
+            <div className="px-4 py-2">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={'\u30AB\u30B9\u30BF\u30E0\u7D75\u6587\u5B57\u3092\u691C\u7D22...'}
-                className="flex-1 px-2.5 py-1 bg-[var(--bg-secondary)] rounded-lg text-xs text-[var(--text-primary)] outline-none"
+                placeholder="カスタム絵文字を検索..."
+                className="w-full px-3 py-2 bg-[var(--bg-secondary)] rounded-lg text-sm text-[var(--text-primary)] outline-none"
               />
             </div>
-          </div>
 
-          {/* Tabs */}
-          {!searchQuery && tabs.length > 1 && (
-            <div className="flex gap-1 px-2 py-1.5 border-b border-[var(--border-color)] overflow-x-auto">
-              {tabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-2 py-0.5 text-xs rounded-full whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? 'bg-[var(--line-green)] text-white'
-                      : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
-                  }`}
-                >
-                  {tab.name}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Custom Emoji Grid */}
-          <div className="p-2 overflow-y-auto" style={{ maxHeight: '140px' }}>
-            {loading ? (
-              <div className="text-center py-2 text-[var(--text-tertiary)] text-xs">
-                {'\u8AAD\u307F\u8FBC\u307F\u4E2D...'}
-              </div>
-            ) : !hasCustomEmojis ? (
-              <div className="text-center py-2 text-[var(--text-tertiary)] text-xs">
-                {'\u30AB\u30B9\u30BF\u30E0\u7D75\u6587\u5B57\u304C\u3042\u308A\u307E\u305B\u3093'}
-              </div>
-            ) : filteredEmojis.length === 0 ? (
-              <div className="text-center py-2 text-[var(--text-tertiary)] text-xs">
-                {'\u8A72\u5F53\u3059\u308B\u7D75\u6587\u5B57\u304C\u3042\u308A\u307E\u305B\u3093'}
-              </div>
-            ) : (
-              <div className="grid grid-cols-8 gap-1">
-                {filteredEmojis.map((emoji, i) => (
+            {/* Tabs */}
+            {!searchQuery && tabs.length > 1 && (
+              <div className="flex gap-1.5 px-4 pb-2 overflow-x-auto">
+                {tabs.map(tab => (
                   <button
-                    key={`${emoji.shortcode}-${i}`}
-                    onClick={() => handleCustomSelect(emoji)}
-                    className="aspect-square p-0.5 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
-                    title={`:${emoji.shortcode}: (${emoji.source})`}
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-3 py-1 text-xs rounded-full whitespace-nowrap ${
+                      activeTab === tab.id
+                        ? 'bg-[var(--line-green)] text-white'
+                        : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
+                    }`}
                   >
-                    <img
-                      src={getImageUrl(emoji.url)}
-                      alt={emoji.shortcode}
-                      className="w-full h-full object-contain"
-                      loading="lazy"
-                    />
+                    {tab.name}
                   </button>
                 ))}
               </div>
             )}
-          </div>
-        </>
-      )}
-    </div>
+
+            {/* Custom Emoji Grid */}
+            <div className="px-4 pb-4 overflow-y-auto" style={{ maxHeight: '200px' }}>
+              {loading ? (
+                <div className="text-center py-4 text-[var(--text-tertiary)] text-sm">
+                  読み込み中...
+                </div>
+              ) : !hasCustomEmojis ? (
+                <div className="text-center py-4 text-[var(--text-tertiary)] text-sm">
+                  <p>カスタム絵文字がありません</p>
+                  <p className="mt-1 text-xs">ミニアプリから絵文字セットを追加できます</p>
+                </div>
+              ) : filteredEmojis.length === 0 ? (
+                <div className="text-center py-4 text-[var(--text-tertiary)] text-sm">
+                  該当する絵文字がありません
+                </div>
+              ) : (
+                <div className="grid grid-cols-8 gap-1.5">
+                  {filteredEmojis.map((emoji, i) => (
+                    <button
+                      key={`${emoji.shortcode}-${i}`}
+                      onClick={() => handleCustomSelect(emoji)}
+                      className="aspect-square p-1 rounded-xl hover:bg-[var(--bg-tertiary)] active:scale-90 transition-all"
+                      title={`:${emoji.shortcode}: (${emoji.source})`}
+                    >
+                      <img
+                        src={getImageUrl(emoji.url)}
+                        alt={emoji.shortcode}
+                        className="w-full h-full object-contain"
+                        loading="lazy"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Safe area bottom padding */}
+        <div className="h-[env(safe-area-inset-bottom,0px)]" />
+      </div>
+    </div>,
+    document.body
   )
 }

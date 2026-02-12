@@ -595,6 +595,20 @@ body {
   animation: fall linear forwards;
 }
 
+/* Bottom sheet slide up animation */
+@keyframes bottomSheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-bottomSheetUp {
+  animation: bottomSheetUp 0.25s ease-out forwards;
+}
+
 /* ==================== */
 /* Desktop / PC Styles  */
 /* ==================== */
