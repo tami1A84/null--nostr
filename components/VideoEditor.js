@@ -44,11 +44,10 @@ export default function VideoEditor({ file, onDone, onCancel }) {
     setVideoUrl(newUrl)
 
     return () => {
+      // Delay revocation so the browser has time to finish fetching
+      // before the URL is invalidated (prevents AbortError in Strict Mode)
       setTimeout(() => {
-        // Only revoke if this URL is no longer the active one
-        if (newUrl !== videoUrlRef.current) {
-          URL.revokeObjectURL(newUrl)
-        }
+        URL.revokeObjectURL(newUrl)
       }, 1000)
     }
   }, [file])
@@ -263,6 +262,7 @@ export default function VideoEditor({ file, onDone, onCancel }) {
             key={videoUrl}
             ref={videoRef}
             src={videoUrl}
+            crossOrigin="anonymous"
             className="max-w-full max-h-full object-contain"
             playsInline
             preload="auto"
