@@ -5,6 +5,7 @@ import { publishEvent, signEventNip07, createEventTemplate, nip19 } from '@/lib/
 import { uploadImagesInParallel, uploadVideoWithRetry, getVideoMeta, computeFileHash } from '@/lib/imageUtils'
 import { NOSTR_KINDS } from '@/lib/constants'
 import EmojiPicker from './EmojiPicker'
+import VideoEditor from './VideoEditor'
 
 // Extract hashtags from content (NIP-01)
 function extractHashtags(content) {
@@ -82,6 +83,8 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
   const [videoFile, setVideoFile] = useState(null)
   const [videoPreview, setVideoPreview] = useState(null)
   const [videoMeta, setVideoMeta] = useState(null)
+  const [showVideoEditor, setShowVideoEditor] = useState(false)
+  const [pendingVideoFile, setPendingVideoFile] = useState(null)
 
   const textareaRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -130,7 +133,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
     setImagePreviews(prev => prev.filter((_, i) => i !== index))
   }
 
-  // Handle video selection
+  // Handle video selection - opens the video editor
   const handleVideoSelect = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -139,17 +142,25 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
     setImageFiles([])
     setImagePreviews([])
 
-    try {
-      const meta = await getVideoMeta(file)
-      setVideoFile(file)
-      setVideoMeta(meta)
-      setVideoPreview(URL.createObjectURL(file))
-    } catch (err) {
-      console.error('Failed to read video metadata:', err)
-      alert('動画の読み込みに失敗しました')
-    }
+    setPendingVideoFile(file)
+    setShowVideoEditor(true)
 
     if (videoInputRef.current) videoInputRef.current.value = ''
+  }
+
+  // Handle video editor done
+  const handleVideoEditorDone = (trimmedFile, meta) => {
+    setShowVideoEditor(false)
+    setPendingVideoFile(null)
+    setVideoFile(trimmedFile)
+    setVideoMeta(meta)
+    setVideoPreview(URL.createObjectURL(trimmedFile))
+  }
+
+  // Handle video editor cancel
+  const handleVideoEditorCancel = () => {
+    setShowVideoEditor(false)
+    setPendingVideoFile(null)
   }
 
   // Remove video
@@ -628,6 +639,15 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
           </span>
         </div>
       </div>
+
+      {/* Video Editor */}
+      {showVideoEditor && pendingVideoFile && (
+        <VideoEditor
+          file={pendingVideoFile}
+          onDone={handleVideoEditorDone}
+          onCancel={handleVideoEditorCancel}
+        />
+      )}
     </div>
   )
 }

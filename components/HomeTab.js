@@ -30,6 +30,7 @@ import PostItem from './PostItem'
 import LongFormPostItem from './LongFormPostItem'
 import UserProfileView from './UserProfileView'
 import EmojiPicker from './EmojiPicker'
+import VideoEditor from './VideoEditor'
 import BadgeDisplay, { clearBadgeCache } from './BadgeDisplay'
 
 // Extract hashtags from content (NIP-01)
@@ -209,6 +210,8 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
   const [videoFile, setVideoFile] = useState(null)
   const [videoPreview, setVideoPreview] = useState(null)
   const [videoMeta, setVideoMeta] = useState(null)
+  const [showVideoEditor, setShowVideoEditor] = useState(false)
+  const [pendingVideoFile, setPendingVideoFile] = useState(null)
   // Follow list state
   const [followList, setFollowList] = useState([])
   const [followListLoading, setFollowListLoading] = useState(false)
@@ -692,17 +695,23 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
     setImageFiles([])
     setImagePreviews([])
 
-    try {
-      const meta = await getVideoMeta(file)
-      setVideoFile(file)
-      setVideoMeta(meta)
-      setVideoPreview(URL.createObjectURL(file))
-    } catch (err) {
-      console.error('Failed to read video metadata:', err)
-      alert('動画の読み込みに失敗しました')
-    }
+    setPendingVideoFile(file)
+    setShowVideoEditor(true)
 
     if (postVideoInputRef.current) postVideoInputRef.current.value = ''
+  }
+
+  const handleVideoEditorDone = (trimmedFile, meta) => {
+    setShowVideoEditor(false)
+    setPendingVideoFile(null)
+    setVideoFile(trimmedFile)
+    setVideoMeta(meta)
+    setVideoPreview(URL.createObjectURL(trimmedFile))
+  }
+
+  const handleVideoEditorCancel = () => {
+    setShowVideoEditor(false)
+    setPendingVideoFile(null)
   }
 
   const handleRemovePostVideo = () => {
@@ -1698,6 +1707,15 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
             </div>
           </div>
         </div>
+      )}
+
+      {/* Video Editor */}
+      {showVideoEditor && pendingVideoFile && (
+        <VideoEditor
+          file={pendingVideoFile}
+          onDone={handleVideoEditorDone}
+          onCancel={handleVideoEditorCancel}
+        />
       )}
 
       {/* FAB - Post Button */}

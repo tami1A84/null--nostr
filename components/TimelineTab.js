@@ -54,6 +54,7 @@ import LongFormPostItem from './LongFormPostItem'
 import UserProfileView from './UserProfileView'
 import SearchModal from './SearchModal'
 import EmojiPicker from './EmojiPicker'
+import VideoEditor from './VideoEditor'
 
 // Extract hashtags from content (NIP-01)
 function extractHashtags(content) {
@@ -156,6 +157,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const [videoFile, setVideoFile] = useState(null)
   const [videoPreview, setVideoPreview] = useState(null)
   const [videoMeta, setVideoMeta] = useState(null)
+  const [showVideoEditor, setShowVideoEditor] = useState(false)
+  const [pendingVideoFile, setPendingVideoFile] = useState(null)
   const [viewingProfile, setViewingProfile] = useState(null)
   const [mutedPubkeys, setMutedPubkeys] = useState(new Set())
   const [showZapModal, setShowZapModal] = useState(null)
@@ -1291,17 +1294,23 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     setImageFiles([])
     setImagePreviews([])
 
-    try {
-      const meta = await getVideoMeta(file)
-      setVideoFile(file)
-      setVideoMeta(meta)
-      setVideoPreview(URL.createObjectURL(file))
-    } catch (err) {
-      console.error('Failed to read video metadata:', err)
-      alert('動画の読み込みに失敗しました')
-    }
+    setPendingVideoFile(file)
+    setShowVideoEditor(true)
 
     if (postVideoInputRef.current) postVideoInputRef.current.value = ''
+  }
+
+  const handleVideoEditorDone = (trimmedFile, meta) => {
+    setShowVideoEditor(false)
+    setPendingVideoFile(null)
+    setVideoFile(trimmedFile)
+    setVideoMeta(meta)
+    setVideoPreview(URL.createObjectURL(trimmedFile))
+  }
+
+  const handleVideoEditorCancel = () => {
+    setShowVideoEditor(false)
+    setPendingVideoFile(null)
   }
 
   const handleRemovePostVideo = () => {
@@ -1865,6 +1874,15 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
             </div>
           </div>
         </div>
+      )}
+
+      {/* Video Editor */}
+      {showVideoEditor && pendingVideoFile && (
+        <VideoEditor
+          file={pendingVideoFile}
+          onDone={handleVideoEditorDone}
+          onCancel={handleVideoEditorCancel}
+        />
       )}
 
       {/* Zap Modal */}
