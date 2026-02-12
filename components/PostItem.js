@@ -708,7 +708,7 @@ export default function PostItem({
   }
 
   return (
-    <article className="px-4 py-3 lg:px-5 lg:py-4 relative transition-colors hover:bg-[var(--bg-secondary)]/30">
+    <article className={`px-4 py-3 lg:px-5 lg:py-4 relative transition-colors hover:bg-[var(--bg-secondary)]/30 ${showMenu ? 'z-50' : ''}`}>
       {/* Repost indicator */}
       {isRepost && repostedBy && (
         <div className="flex items-center gap-2 mb-2 text-[var(--text-tertiary)] text-xs">
