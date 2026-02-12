@@ -36,19 +36,30 @@ export default function VideoEditor({ file, onDone, onCancel }) {
   // Strict Mode runs setup → cleanup → setup. Immediate revoke in cleanup
   // invalidates the URL while the video is still loading → AbortError in Firefox.
   // setTimeout defers revocation until after the re-mount creates a new URL.
+  // The file is copied via ArrayBuffer → new Blob to avoid Service Worker interference.
   useEffect(() => {
     if (!file) return
+    let cancelled = false
 
-    const newUrl = URL.createObjectURL(file)
-    videoUrlRef.current = newUrl
-    setVideoUrl(newUrl)
+    ;(async () => {
+      const arrayBuffer = await file.arrayBuffer()
+      if (cancelled) return
+      const blob = new Blob([arrayBuffer], { type: file.type })
+      const newUrl = URL.createObjectURL(blob)
+      videoUrlRef.current = newUrl
+      setVideoUrl(newUrl)
+    })()
 
     return () => {
+      cancelled = true
       // Delay revocation so the browser has time to finish fetching
       // before the URL is invalidated (prevents AbortError in Strict Mode)
-      setTimeout(() => {
-        URL.revokeObjectURL(newUrl)
-      }, 1000)
+      const urlToRevoke = videoUrlRef.current
+      if (urlToRevoke) {
+        setTimeout(() => {
+          URL.revokeObjectURL(urlToRevoke)
+        }, 1000)
+      }
     }
   }, [file])
 
@@ -262,7 +273,6 @@ export default function VideoEditor({ file, onDone, onCancel }) {
             key={videoUrl}
             ref={videoRef}
             src={videoUrl}
-            crossOrigin="anonymous"
             className="max-w-full max-h-full object-contain"
             playsInline
             preload="auto"
