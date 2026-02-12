@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   shortenPubkey,
   formatTimestamp,
@@ -821,8 +822,8 @@ export default function PostItem({
                 </svg>
               </button>
 
-              {/* Dropdown menu */}
-              {showMenu && (
+              {/* Dropdown menu - rendered via portal to escape stacking contexts */}
+              {showMenu && createPortal(
                 <>
                   <div
                     className="fixed inset-0 z-[60]"
@@ -899,7 +900,8 @@ export default function PostItem({
                       </button>
                     )}
                   </div>
-                </>
+                </>,
+                document.body
               )}
             </div>
           </div>

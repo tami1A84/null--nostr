@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { nip19 } from 'nostr-tools'
 import {
   fetchEvents,
@@ -633,8 +634,8 @@ export default function UserProfileView({
                   </svg>
                 </button>
 
-                {/* Dropdown menu */}
-                {showMenu && (
+                {/* Dropdown menu - rendered via portal to escape stacking contexts */}
+                {showMenu && createPortal(
                   <>
                     <div
                       className="fixed inset-0 z-[60]"
@@ -656,7 +657,8 @@ export default function UserProfileView({
                         {muting ? 'ミュート中...' : 'ミュート'}
                       </button>
                     </div>
-                  </>
+                  </>,
+                  document.body
                 )}
               </div>
           )}
