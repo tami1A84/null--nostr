@@ -17,6 +17,7 @@ export default function VideoEditor({ file, onDone, onCancel }) {
   const trackRef = useRef(null)
   const animFrameRef = useRef(null)
   const trimmingRef = useRef(false)
+  const videoUrlRef = useRef(null)
 
   const [duration, setDuration] = useState(0)
   const [trimStart, setTrimStart] = useState(0)
@@ -31,15 +32,29 @@ export default function VideoEditor({ file, onDone, onCancel }) {
   const clipDuration = Math.min(MAX_CLIP_DURATION, duration)
   const trimEnd = Math.min(trimStart + clipDuration, duration)
 
-  // Create object URL
+  // Create object URL with delayed revocation to survive React Strict Mode.
+  // Strict Mode runs setup → cleanup → setup. Immediate revoke in cleanup
+  // invalidates the URL while the video is still loading → AbortError in Firefox.
+  // setTimeout defers revocation until after the re-mount creates a new URL.
   useEffect(() => {
-    const url = URL.createObjectURL(file)
-    setVideoUrl(url)
-    return () => URL.revokeObjectURL(url)
+    if (!file) return
+
+    const newUrl = URL.createObjectURL(file)
+    videoUrlRef.current = newUrl
+    setVideoUrl(newUrl)
+
+    return () => {
+      setTimeout(() => {
+        // Only revoke if this URL is no longer the active one
+        if (newUrl !== videoUrlRef.current) {
+          URL.revokeObjectURL(newUrl)
+        }
+      }, 1000)
+    }
   }, [file])
 
-  // When metadata loaded - force first frame render
-  const handleLoadedMetadata = () => {
+  // When first frame data loaded - force render of the first frame
+  const handleLoadedData = () => {
     const video = videoRef.current
     if (!video) return
     setDuration(video.duration)
@@ -245,12 +260,13 @@ export default function VideoEditor({ file, onDone, onCancel }) {
       <div className="flex-1 flex items-center justify-center bg-black relative overflow-hidden min-h-0">
         {videoUrl && (
           <video
+            key={videoUrl}
             ref={videoRef}
             src={videoUrl}
             className="max-w-full max-h-full object-contain"
             playsInline
             preload="auto"
-            onLoadedMetadata={handleLoadedMetadata}
+            onLoadedData={handleLoadedData}
             onTimeUpdate={handleTimeUpdate}
             onClick={!trimming ? togglePlay : undefined}
           />
