@@ -359,19 +359,32 @@ export default function UserProfileView({
     }
   }
 
-  const handleLike = async (event) => {
+  const handleLike = async (event, emoji = null) => {
     if (!myPubkey || !hasNip07() || userReactions.has(event.id)) return
 
     setLikeAnimating(event.id)
     setTimeout(() => setLikeAnimating(null), 300)
 
     try {
-      const reactionEvent = createEventTemplate(7, '+', [
+      // Build reaction content and tags based on emoji type (NIP-25 + NIP-30)
+      let content = '+'
+      const tags = [
         ['e', event.id],
         ['p', event.pubkey]
-      ])
+      ]
+
+      if (emoji) {
+        if (emoji.type === 'custom') {
+          content = `:${emoji.shortcode}:`
+          tags.push(['emoji', emoji.shortcode, emoji.url])
+        } else if (emoji.type === 'unicode') {
+          content = emoji.content
+        }
+      }
+
+      const reactionEvent = createEventTemplate(7, content, tags)
       reactionEvent.pubkey = myPubkey
-      
+
       const signed = await signEventNip07(reactionEvent)
       const success = await publishEvent(signed)
 

@@ -780,22 +780,37 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
     setShowEmojiPicker(false)
   }
 
-  const handleLike = async (event) => {
+  const handleLike = async (event, emoji = null) => {
     if (!pubkey || userReactions.has(event.id)) return
 
     setLikeAnimating(event.id)
     setTimeout(() => setLikeAnimating(null), 300)
 
     try {
-      const reactionEvent = createEventTemplate(7, '+', [
+      // Build reaction content and tags based on emoji type (NIP-25 + NIP-30)
+      let content = '+'
+      const tags = [
         ['e', event.id],
         ['p', event.pubkey]
-      ])
+      ]
+
+      if (emoji) {
+        if (emoji.type === 'custom') {
+          // NIP-30 custom emoji reaction: content is :shortcode:, add emoji tag
+          content = `:${emoji.shortcode}:`
+          tags.push(['emoji', emoji.shortcode, emoji.url])
+        } else if (emoji.type === 'unicode') {
+          // Unicode emoji reaction
+          content = emoji.content
+        }
+      }
+
+      const reactionEvent = createEventTemplate(7, content, tags)
       reactionEvent.pubkey = pubkey
-      
+
       const signed = await signEventNip07(reactionEvent)
       const success = await publishEvent(signed)
-      
+
       if (success) {
         setUserReactions(prev => new Set([...prev, event.id]))
         setUserReactionIds(prev => ({ ...prev, [event.id]: signed.id }))
@@ -1620,6 +1635,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                       onZap={handleZap}
                       onHashtagClick={onHashtagClick}
                       onDelete={handleDelete}
+                      myPubkey={pubkey}
                       isOwnPost={post.pubkey === pubkey}
                       onAvatarClick={(targetPubkey) => {
                         if (targetPubkey !== pubkey) {
@@ -1679,6 +1695,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                       onUnrepost={handleUnrepost}
                       onZap={handleZap}
                       onHashtagClick={onHashtagClick}
+                      myPubkey={pubkey}
                       onAvatarClick={(targetPubkey) => {
                         if (targetPubkey !== pubkey) {
                           setViewingProfile(targetPubkey)

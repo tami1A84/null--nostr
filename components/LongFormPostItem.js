@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { marked } from 'marked'
 import {
@@ -8,6 +8,7 @@ import {
   formatTimestamp
 } from '@/lib/nostr'
 import { getImageUrl } from '@/lib/imageUtils'
+import ReactionEmojiPicker from './ReactionEmojiPicker'
 
 // Configure marked for NIP-23: no HTML allowed in markdown
 marked.use({
@@ -215,6 +216,10 @@ export default function LongFormPostItem({
 }) {
   const [showArticle, setShowArticle] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
+  const [showReactionPicker, setShowReactionPicker] = useState(false)
+  const likeButtonRef = useRef(null)
+  const longPressTimerRef = useRef(null)
+  const longPressTriggeredRef = useRef(false)
   const displayProfile = isRepost ? profiles?.[post.pubkey] : profile
 
   const { title, image, summary, publishedAt, hashtags } = extractLongFormTags(post)
@@ -230,10 +235,36 @@ export default function LongFormPostItem({
   }
 
   const handleLikeClick = () => {
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false
+      return
+    }
     if (hasLiked && myReactionId && onUnlike) {
       onUnlike(post, myReactionId)
     } else if (!hasLiked && onLike) {
       onLike(post)
+    }
+  }
+
+  const handleLikeLongPressStart = useCallback(() => {
+    longPressTriggeredRef.current = false
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true
+      setShowReactionPicker(true)
+    }, 500)
+  }, [])
+
+  const handleLikeLongPressEnd = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }, [])
+
+  const handleReactionSelect = (emoji) => {
+    setShowReactionPicker(false)
+    if (onLike) {
+      onLike(post, emoji)
     }
   }
 
@@ -449,18 +480,35 @@ export default function LongFormPostItem({
             {showActions && (
               <div className="flex items-center justify-between mt-3">
                 <div className="flex items-center gap-8">
-                  {/* Like */}
-                  <button
-                    onClick={handleLikeClick}
-                    className={`action-btn flex items-center gap-1.5 text-sm ${
-                      hasLiked ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'
-                    } ${isLiking ? 'like-animation' : ''}`}
-                  >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill={hasLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8">
-                      <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
-                    </svg>
-                    {likeCount > 0 && <span>{likeCount}</span>}
-                  </button>
+                  {/* Like (long-press for custom emoji reaction) */}
+                  <div className="relative" ref={likeButtonRef}>
+                    <button
+                      onClick={handleLikeClick}
+                      onTouchStart={handleLikeLongPressStart}
+                      onTouchEnd={handleLikeLongPressEnd}
+                      onTouchCancel={handleLikeLongPressEnd}
+                      onMouseDown={handleLikeLongPressStart}
+                      onMouseUp={handleLikeLongPressEnd}
+                      onMouseLeave={handleLikeLongPressEnd}
+                      onContextMenu={(e) => e.preventDefault()}
+                      className={`action-btn flex items-center gap-1.5 text-sm ${
+                        hasLiked ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'
+                      } ${isLiking ? 'like-animation' : ''}`}
+                    >
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill={hasLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8">
+                        <path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>
+                      </svg>
+                      {likeCount > 0 && <span>{likeCount}</span>}
+                    </button>
+                    {showReactionPicker && (
+                      <ReactionEmojiPicker
+                        pubkey={myPubkey}
+                        onSelect={handleReactionSelect}
+                        onClose={() => setShowReactionPicker(false)}
+                        anchorRef={likeButtonRef}
+                      />
+                    )}
+                  </div>
 
                   {/* Repost */}
                   <button

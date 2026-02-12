@@ -382,20 +382,32 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
     localStorage.removeItem('recentSearches')
   }
 
-  // Like handler
-  const handleLike = async (post) => {
+  // Like handler (supports custom emoji reactions: NIP-25 + NIP-30)
+  const handleLike = async (post, emoji = null) => {
     if (!pubkey || userReactions.has(post.id)) return
-    
+
     setLikeAnimating(post.id)
-    
+
     try {
-      const template = createEventTemplate(7, '+', [
+      let content = '+'
+      const tags = [
         ['e', post.id],
         ['p', post.pubkey]
-      ])
+      ]
+
+      if (emoji) {
+        if (emoji.type === 'custom') {
+          content = `:${emoji.shortcode}:`
+          tags.push(['emoji', emoji.shortcode, emoji.url])
+        } else if (emoji.type === 'unicode') {
+          content = emoji.content
+        }
+      }
+
+      const template = createEventTemplate(7, content, tags)
       const signed = await signEventNip07(template)
       await publishEvent(signed, getWriteRelays())
-      
+
       setUserReactions(prev => new Set([...prev, post.id]))
       setReactions(prev => ({
         ...prev,
