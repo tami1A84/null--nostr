@@ -3,6 +3,9 @@ const isCapacitorBuild = process.env.CAPACITOR_BUILD === 'true'
 
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    instrumentationHook: true,
+  },
   // output: 'export' is only enabled for Capacitor builds
   // Vercel deployments need dynamic API routes (e.g., /api/nip05)
   ...(isCapacitorBuild && { output: 'export' }),
@@ -15,6 +18,13 @@ const nextConfig = {
         hostname: '**',
       },
     ],
+  },
+  // Suppress "Critical dependency" warnings from native .node module loading
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.module.exprContextCritical = false
+    }
+    return config
   },
   // Note: headers() only works when NOT using output: 'export'
   ...(!isCapacitorBuild && {
