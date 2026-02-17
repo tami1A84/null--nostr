@@ -15,8 +15,8 @@
 |---|---|---|
 | フロントエンド | Next.js 14 + Tailwind | 稼働中 |
 | Nostr プロトコル | `nostr-tools` (JS) | 稼働中・移行対象 |
-| Rust エンジン (コア) | `nostr-sdk` v0.44 + `nostrdb` v0.8 | 実装済み・未接続 |
-| FFI ブリッジ | `napi-rs` (予定) | **次のステップ** |
+| Rust エンジン (コア) | `nostr-sdk` v0.44 + `nostrdb` v0.8 | 実装済み・接続済み |
+| FFI ブリッジ | `napi-rs` v2 | **実装済み・稼働中** |
 
 ---
 
@@ -25,6 +25,9 @@
 ```
 null--nostr/
 ├── app/                    # Next.js App Router ページ
+│   └── api/
+│       ├── nip05/          # NIP-05 検証 API
+│       └── rust-status/    # Rust エンジン状態確認 API ← 新規追加
 ├── components/             # React コンポーネント
 ├── lib/                    # JS ビジネスロジック（移行元）
 │   ├── nostr.js            # イベント署名・発行・購読
@@ -32,12 +35,18 @@ null--nostr/
 │   ├── recommendation.js   # フィードランキング (X風アルゴリズム)
 │   ├── filters.js          # Nostr Filter ファクトリ
 │   ├── connection-manager.js # リレー接続管理
-│   └── ...
-├── rust-engine/            # Rust コアエンジン（移行先）
-│   ├── Cargo.toml          # Workspace
-│   ├── nurunuru-core/      # コアライブラリ（実装済み）
-│   └── nurunuru-ffi/       # UniFFI バインディング（スキャフォルド済み）
-└── CLAUDE.md               # このファイル
+│   └── rust-bridge.js      # Rust ↔ JS ブリッジ ← 新規追加
+├── instrumentation.js      # サーバー起動時エンジンロード ← 新規追加
+├── next.config.js          # instrumentationHook 有効化済み
+└── rust-engine/            # Rust コアエンジン（移行先）
+    ├── Cargo.toml          # Workspace
+    ├── nurunuru-core/      # コアライブラリ（実装済み）
+    ├── nurunuru-ffi/       # UniFFI バインディング（スキャフォルド済み）
+    └── nurunuru-napi/      # napi-rs ブリッジ ← 新規追加・稼働中
+        ├── Cargo.toml
+        ├── build.rs
+        ├── package.json
+        └── src/lib.rs      # #[napi] ラッパー群
 ```
 
 ---
@@ -54,83 +63,71 @@ null--nostr/
   - `config.rs` — 全設定値 (JS の `constants.js` 対応)
   - `error.rs` — 日本語エラーメッセージ
 - `rust-engine/nurunuru-ffi` スキャフォルド (UniFFI proc-macro)
+- **`rust-engine/nurunuru-napi/` 実装・ビルド完了**
+  - `NuruNuruNapi` クラス（`#[napi]` ラッパー）
+  - `nurunuru-napi.node` が生成済み（`npm run build:rust` で再ビルド可能）
+- **Next.js への接続完了**
+  - `instrumentation.js` — サーバー起動時に自動ロード・ログ出力
+  - `lib/rust-bridge.js` — `getEngine()` 関数でサーバーサイドから取得可能
+  - `app/api/rust-status/route.js` — 動作確認エンドポイント
+  - `next.config.js` — `instrumentationHook: true` 設定済み
+
+### `npm run dev` で確認できること
+
+起動時ログ：
+```
+[rust-bridge] Rust engine loaded — exports: NuruNuruNapi
+```
+
+`http://localhost:3000/api/rust-status/` のレスポンス：
+```json
+{"rustEngine":{"available":true,"exports":["NuruNuruNapi"]},"runtime":"nodejs"}
+```
 
 ### 未実装・次のステップ 🔲
 
-**Step 1: napi-rs ブリッジ（JS ↔ Rust / Node.js/Next.js 直結）**
+**Step 2: フィード API の実装（最優先）**
 
-Web アプリとして使い続けるなら UniFFI より `napi-rs` が最適。
-`.node` ネイティブモジュールとして Next.js から直接呼べる。
+`GET /api/feed` を新規作成し、Rust の `get_recommended_feed()` を使う。
+`TimelineTab.js` はこの API を fetch するように変更する。
 
+アーキテクチャ：
 ```
-rust-engine/nurunuru-napi/   ← 新規作成
-├── Cargo.toml               (napi-rs 依存)
-├── build.rs
-└── src/
-    └── lib.rs               (nurunuru-core をラップした #[napi] 関数群)
+ブラウザ (TimelineTab.js)
+  ├─ WebSocket → リレー   (イベント受信・投稿はそのまま維持)
+  │      ↓ 受信したイベントを
+  └─ POST /api/ingest    → Rust → nostrdb に保存
+
+  └─ GET /api/feed       → Rust → nostrdb からランキング済みフィード返却
 ```
 
-**Step 2: キャッシュ移行（localStorage → nostrdb）**
+実装すべきファイル：
+- `app/api/feed/route.js` — フィード取得 API（Rust `get_recommended_feed` を呼ぶ）
+- `app/api/ingest/route.js` — イベント蓄積 API（Rust `query_local` 経由で nostrdb へ）
+- `components/TimelineTab.js` の修正（`/api/feed` を fetch するよう切り替え）
 
-`lib/cache.js` の `setCachedProfile` / `getCachedProfile` などを、
-napi-rs 経由で nostrdb の `query_local()` に差し替える。
+**Step 3: プロフィールキャッシュ移行**
 
-**Step 3: レコメンド移行**
-
-`lib/recommendation.js` の `sortByRecommendation` / `getRecommendedPosts` を
-napi-rs 経由で Rust の `get_recommended_feed()` に差し替える。
+`hooks/useProfile.js` の `fetchProfileCached()` を `/api/profile/[pubkey]` 経由に。
 
 **Step 4: リレー接続移行**
 
-`lib/connection-manager.js` を Rust の `NuruNuruEngine::connect()` に差し替える。
+`lib/connection-manager.js` を Rust の `NuruNuruEngine::connect()` に差し替え。
 
 ---
 
-## 次の作業指示（AIへ）
+## ビルド手順
 
-### napi-rs ブリッジを作る手順
+```bash
+# 初回セットアップ
+npm install
+npm run build:rust   # Rust ツールチェーン必須（rustup で導入）
 
-1. **`rust-engine/nurunuru-napi/` を新規作成**
+# 開発
+npm run dev
+```
 
-   ```toml
-   # Cargo.toml
-   [dependencies]
-   nurunuru-core = { path = "../nurunuru-core" }
-   napi = { version = "2", features = ["async", "tokio_rt"] }
-   napi-derive = "2"
-   tokio = { version = "1", features = ["rt-multi-thread"] }
-
-   [build-dependencies]
-   napi-build = "2"
-   ```
-
-2. **`src/lib.rs` に `#[napi]` 関数を実装**
-
-   対象関数（優先順）:
-   - `query_local(filter_json: String) -> Vec<String>` — DB から直接イベント取得
-   - `get_recommended_feed(limit: u32) -> Vec<ScoredPost>` — フィードランキング
-   - `fetch_profile(pubkey_hex: String) -> Option<UserProfile>` — プロフィール
-
-3. **`package.json` に napi-rs ビルドスクリプトを追加**
-
-   ```json
-   "scripts": {
-     "build:rust": "cd rust-engine/nurunuru-napi && cargo build --release && napi build --platform --release"
-   }
-   ```
-
-4. **Next.js から呼び出す**
-
-   ```js
-   // lib/rust-bridge.js
-   let engine = null
-   try {
-     engine = require('../rust-engine/nurunuru-napi/index.node')
-   } catch {
-     engine = null // フォールバック: 既存JS実装を使う
-   }
-   export { engine }
-   ```
+`build:rust` の中身：`cd rust-engine/nurunuru-napi && npx napi build --release`
 
 ---
 
@@ -141,6 +138,29 @@ napi-rs 経由で Rust の `get_recommended_feed()` に差し替える。
 - **nostrdb が正**：イベントの永続化・検索は全て nostrdb に集約する
 - **napi-rs > UniFFI**: Web (Next.js) ターゲットは napi-rs を優先。
   モバイル (Android/iOS) は後で nurunuru-ffi (UniFFI) を使う
+- **サーバーサイド限定**: `.node` ネイティブモジュールはサーバーサイドのみ。
+  クライアント（ブラウザ）では動かない。API ルート経由で使う。
+- **WebSocket はブラウザで維持**: リアルタイム購読は既存 JS のまま。
+  Rust は「処理・キャッシュ・ランキング」に専念させる。
+
+## `rust-bridge.js` の使い方（API ルート内）
+
+```js
+// app/api/feed/route.js の例
+import { getEngine } from '@/lib/rust-bridge'
+
+export async function GET(req) {
+  const engine = getEngine()
+  if (!engine) {
+    // フォールバック: JS 実装を呼ぶ
+    return Response.json({ error: 'Rust engine not available' }, { status: 503 })
+  }
+  // NuruNuruNapi インスタンスを作成して使う
+  const client = await engine.NuruNuruNapi.create(secretKeyHex, './nurunuru-db')
+  const feed = await client.getRecommendedFeed(50)
+  return Response.json(feed)
+}
+```
 
 ## デフォルトリレー（日本）
 
@@ -154,5 +174,5 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/rust-backend-migration-YT6oe`
+- 作業ブランチ: `claude/create-napi-rs-bridge-7SBPn`
 - マージ先: `master`
