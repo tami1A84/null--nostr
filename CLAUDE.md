@@ -26,8 +26,10 @@
 null--nostr/
 ├── app/                    # Next.js App Router ページ
 │   └── api/
+│       ├── feed/           # フィード API (Rust ランキング) ← Step 2
+│       ├── ingest/         # イベント蓄積 API ← Step 2
 │       ├── nip05/          # NIP-05 検証 API
-│       └── rust-status/    # Rust エンジン状態確認 API ← 新規追加
+│       └── rust-status/    # Rust エンジン状態確認 API
 ├── components/             # React コンポーネント
 ├── lib/                    # JS ビジネスロジック（移行元）
 │   ├── nostr.js            # イベント署名・発行・購読
@@ -35,7 +37,8 @@ null--nostr/
 │   ├── recommendation.js   # フィードランキング (X風アルゴリズム)
 │   ├── filters.js          # Nostr Filter ファクトリ
 │   ├── connection-manager.js # リレー接続管理
-│   └── rust-bridge.js      # Rust ↔ JS ブリッジ ← 新規追加
+│   ├── rust-bridge.js      # Rust ↔ JS ブリッジ
+│   └── rust-engine-manager.js # エンジンシングルトン管理 ← Step 2
 ├── instrumentation.js      # サーバー起動時エンジンロード ← 新規追加
 ├── next.config.js          # instrumentationHook 有効化済み
 └── rust-engine/            # Rust コアエンジン（移行先）
@@ -84,27 +87,41 @@ null--nostr/
 {"rustEngine":{"available":true,"exports":["NuruNuruNapi"]},"runtime":"nodejs"}
 ```
 
-### 未実装・次のステップ 🔲
-
-**Step 2: フィード API の実装（最優先）**
-
-`GET /api/feed` を新規作成し、Rust の `get_recommended_feed()` を使う。
-`TimelineTab.js` はこの API を fetch するように変更する。
+### Step 2: フィード API ✅ 実装済み
 
 アーキテクチャ：
 ```
 ブラウザ (TimelineTab.js)
   ├─ WebSocket → リレー   (イベント受信・投稿はそのまま維持)
   │      ↓ 受信したイベントを
-  └─ POST /api/ingest    → Rust → nostrdb に保存
+  └─ POST /api/ingest    → Rust → nostrdb に保存（バッファリング中）
 
   └─ GET /api/feed       → Rust → nostrdb からランキング済みフィード返却
 ```
 
-実装すべきファイル：
-- `app/api/feed/route.js` — フィード取得 API（Rust `get_recommended_feed` を呼ぶ）
-- `app/api/ingest/route.js` — イベント蓄積 API（Rust `query_local` 経由で nostrdb へ）
-- `components/TimelineTab.js` の修正（`/api/feed` を fetch するよう切り替え）
+実装済みファイル：
+- `lib/rust-engine-manager.js` — エンジンシングルトン管理
+  - サーバーサイドキーで自動初期化（ユーザーの秘密鍵は不要）
+  - `getOrCreateEngine()` / `loginUser(pubkey)` で利用
+- `app/api/feed/route.js` — フィード取得 API
+  - `GET /api/feed?pubkey=xxx&limit=50`
+  - Rust `getRecommendedFeed` → `queryLocal` で完全イベント返却
+  - エンジン未起動時は `{ posts: [], source: 'fallback' }` を返す
+- `app/api/ingest/route.js` — イベント蓄積 API
+  - `POST /api/ingest` with `{ events: [...] }`
+  - NIP-01 バリデーション + サーバーサイドバッファ（最大500件）
+  - nostrdb 直接書き込みは `store_event` napi メソッド追加後に対応
+- `components/TimelineTab.js` の修正
+  - `loadTimelineFull()` と `loadTimeline()` で `/api/feed` を最初に試行
+  - Rust フィード成功時: ランキング済みポストを使用
+  - 失敗時: 既存 JS アルゴリズムにフォールバック（変更なし）
+
+### 未実装・次のステップ 🔲
+
+**Step 2.5: nostrdb 直接書き込み（ingest 完全化）**
+
+`nurunuru-napi` に `store_event(event_json)` メソッドを追加し、
+`/api/ingest` からブラウザ受信イベントを直接 nostrdb に保存する。
 
 **Step 3: プロフィールキャッシュ移行**
 
@@ -143,22 +160,32 @@ npm run dev
 - **WebSocket はブラウザで維持**: リアルタイム購読は既存 JS のまま。
   Rust は「処理・キャッシュ・ランキング」に専念させる。
 
-## `rust-bridge.js` の使い方（API ルート内）
+## エンジンの使い方（API ルート内）
+
+### 低レベル: `rust-bridge.js` (モジュールロード)
 
 ```js
-// app/api/feed/route.js の例
 import { getEngine } from '@/lib/rust-bridge'
+const mod = getEngine() // { NuruNuruNapi } or null
+```
+
+### 推奨: `rust-engine-manager.js` (シングルトン管理)
+
+```js
+// app/api/feed/route.js で実際に使用中
+import { getOrCreateEngine, loginUser } from '@/lib/rust-engine-manager'
 
 export async function GET(req) {
-  const engine = getEngine()
+  const pubkey = new URL(req.url).searchParams.get('pubkey')
+  const engine = await loginUser(pubkey) // 自動初期化 + リレー接続 + ログイン
   if (!engine) {
-    // フォールバック: JS 実装を呼ぶ
-    return Response.json({ error: 'Rust engine not available' }, { status: 503 })
+    return Response.json({ posts: [], source: 'fallback' })
   }
-  // NuruNuruNapi インスタンスを作成して使う
-  const client = await engine.NuruNuruNapi.create(secretKeyHex, './nurunuru-db')
-  const feed = await client.getRecommendedFeed(50)
-  return Response.json(feed)
+  const scored = await engine.getRecommendedFeed(50)
+  // queryLocal でフルイベント取得
+  const filter = JSON.stringify({ ids: scored.map(s => s.eventId) })
+  const events = (await engine.queryLocal(filter)).map(j => JSON.parse(j))
+  return Response.json({ posts: events, source: 'rust' })
 }
 ```
 
@@ -174,5 +201,5 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/create-napi-rs-bridge-7SBPn`
+- 作業ブランチ: `claude/continue-from-claude-md-mdAJa`
 - マージ先: `master`
