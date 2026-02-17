@@ -1,0 +1,10 @@
+{
+  "name": "nurunuru-napi",
+  "version": "0.1.0",
+  "private": true,
+  "main": "nurunuru-napi.node",
+  "napi": {
+    "binaryName": "nurunuru-napi",
+    "triples": {}
+  }
+}
