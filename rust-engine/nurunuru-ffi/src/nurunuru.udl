@@ -1,0 +1,6 @@
+// UniFFI Definition Language for NuruNuru
+// This file is kept as a reference; actual binding generation
+// uses the proc-macro approach (uniffi::setup_scaffolding!()).
+// See src/lib.rs for the authoritative interface definition.
+
+namespace nurunuru {};
