@@ -1,5 +1,5 @@
 [workspace]
-members = ["nurunuru-core", "nurunuru-ffi"]
+members = ["nurunuru-core", "nurunuru-ffi", "nurunuru-napi"]
 resolver = "2"
 
 [workspace.package]

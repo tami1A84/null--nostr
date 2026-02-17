@@ -39,3 +39,7 @@ android/local.properties
 android/app/src/main/assets/capacitor.config.json
 android/capacitor.settings.gradle
 node_modules/
+
+# Rust napi-rs build artifacts
+*.node
+rust-engine/target/
