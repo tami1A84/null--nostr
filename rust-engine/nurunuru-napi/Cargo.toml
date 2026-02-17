@@ -1,0 +1,20 @@
+[package]
+name = "nurunuru-napi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "napi-rs bridge: NuruNuru Rust engine ↔ Node.js/Next.js"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+nurunuru-core = { path = "../nurunuru-core" }
+napi = { version = "2", features = ["napi8", "async", "tokio_rt"] }
+napi-derive = "2"
+nostr = { workspace = true }
+serde_json = { workspace = true }
+
+[build-dependencies]
+napi-build = "2"
