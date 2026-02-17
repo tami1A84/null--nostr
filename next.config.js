@@ -20,10 +20,11 @@ const nextConfig = {
     ],
   },
   // Suppress "Critical dependency" warnings from native .node module loading
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      config.module.exprContextCritical = false
-    }
+  webpack: (config) => {
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      { message: /Critical dependency: require function is used in a way/ },
+    ]
     return config
   },
   // Note: headers() only works when NOT using output: 'export'
