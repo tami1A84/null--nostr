@@ -1,0 +1,5 @@
+[phases.setup]
+nixPkgs = ["nodePackages.npm", "python3", "gcc", "rustc", "cargo", "openssl"]
+
+[phases.build]
+cmds = ["npm install", "cargo build --release", "npm run build"]
