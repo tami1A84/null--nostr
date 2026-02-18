@@ -35,6 +35,7 @@ null--nostr/
 │       │   ├── [pubkey]/   # 単一プロフィール取得 API ← Step 3
 │       │   └── batch/      # バッチプロフィール取得 API ← Step 3
 │       ├── nip05/          # NIP-05 検証 API
+│       ├── publish/        # イベント発行 API ← Step 5
 │       ├── relay/          # リレー管理 API ← Step 4
 │       │   └── reconnect/  # 強制再接続 API ← Step 4
 │       └── rust-status/    # Rust エンジン状態確認 API
@@ -346,6 +347,21 @@ await engine.reconnect()
 import { getRelayList, addRelay, removeRelay, reconnectRelays } from '@/lib/rust-engine-manager'
 ```
 
+### publish API (Step 5〜)
+
+```js
+// app/api/publish/route.js で実際に使用中
+import { getOrCreateEngine } from '@/lib/rust-engine-manager'
+
+// 署名済みイベントを全リレーにブロードキャスト
+// engine.publishEvent(eventJson) → nostr-sdk が署名検証 → relay pool に送出
+const eventId = await engine.publishEvent(JSON.stringify(signedEvent))
+// → イベント ID の hex 文字列
+
+// lib/nostr.js の publishEvent() から自動呼び出し (透過的)
+// ブラウザ側コードの変更は不要 — Rust broadcast が優先され、失敗時は JS fallback
+```
+
 ## デフォルトリレー（日本）
 
 ```
@@ -358,7 +374,7 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/complete-relay-migration-LTFSb`
+- 作業ブランチ: `claude/complete-event-api-WiHhn`
 - マージ先: `master`
 
 ---
@@ -376,7 +392,7 @@ Step 1〜4 で「Rust エンジンのキャッシュ・ランキング・リレ�
 | イベント永続化 | ✅ Rust (nostrdb 直接書き込み) |
 | プロフィールキャッシュ | ✅ Rust (nostrdb → リレーの2段階) |
 | リレー管理 | ✅ Rust (add/remove/reconnect) |
-| イベント発行 | ❌ JS (publishManaged → connection-manager) |
+| イベント発行 | ✅ Rust (/api/publish → engine.publishEvent) |
 | リアルタイム購読 | ❌ JS (subscribeManaged → nostr-tools SimplePool) |
 | フォロー/ミュートリスト編集 | ❌ JS |
 | DM 暗号化・送信 | ❌ JS |
@@ -396,32 +412,46 @@ Step 1〜4 で「Rust エンジンのキャッシュ・ランキング・リレ�
 
 ## 次フェーズのロードマップ
 
-### Step 5: イベント発行の API 化 🔲
+### Step 5: イベント発行の API 化 ✅ 実装済み
 
-**目標**: ブラウザで署名した済みイベントを Rust エンジン経由でリレーに送る。
-`publishManaged()` を `POST /api/publish` に置き換えることで
-`connection-manager.js` の publish 依存を排除する。
-
+アーキテクチャ：
 ```
 ブラウザ (NIP-07 / Amber / NIP-46)
   └─ signEvent(event) → signedEvent
         ↓
   POST /api/publish { event: signedEvent }
         ↓
-  Rust engine.client.send_event(event)
+  engine.publishEvent(eventJson) → client.send_event(&event)
         ↓
   接続中の全リレーに broadcast
+        ↓
+  { id, relays: ['wss://...'], source: 'rust' }
 ```
 
-実装予定ファイル：
+実装済みファイル：
 - `nurunuru-core/src/engine.rs` — `publish_raw_event(event: Event) -> Result<EventId>`
-  - `client.send_event(event)` — 検証済みイベントをそのまま送出
+  - `client.send_event(&event)` — 署名済みイベントをそのまま送出
+  - nostr-sdk が署名を自動検証してから broadcast
 - `nurunuru-napi/src/lib.rs` — `publishEvent(eventJson: String) -> Result<String>`
+  - `Event::from_json()` でデシリアライズ → `publish_raw_event()` 呼び出し
+  - 成功時: イベント ID の hex 文字列を返す
 - `app/api/publish/route.js` — `POST /api/publish { event }` エンドポイント
-  - NIP-01 署名検証 (Rust 側で自動) → broadcast
+  - NIP-01 フィールドバリデーション (id/pubkey/sig の形式チェック)
+  - Rust 側でも署名検証 → 全リレーに broadcast
   - レスポンス: `{ id, relays: ['wss://...'], source: 'rust' }`
+  - エンジン未起動時: `503 { error, source: 'unavailable' }`
 - `lib/nostr.js` の `publishEvent()` を修正
-  - Rust API 試行 → 失敗時 JS フォールバック維持
+  - まず `/api/publish` を試行 (Rust broadcast)
+  - 失敗時: 既存 `publishManaged()` JS フォールバック維持
+
+`POST /api/publish` レスポンス例：
+```json
+{
+  "id": "a1b2c3...64hex...",
+  "relays": ["wss://yabu.me", "wss://relay-jp.nostr.wirednet.jp"],
+  "source": "rust"
+}
+```
 
 ### Step 6: フォロー/ミュートリスト管理の API 化 🔲
 
