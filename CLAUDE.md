@@ -43,6 +43,7 @@ null--nostr/
 │       │   └── mutes/      # ミュートリスト取得・更新 API ← Step 6
 │       ├── dm/             # DM 取得・発行 API ← Step 7
 │       ├── search/         # NIP-50 検索 API ← Step 7
+│       ├── stream/         # SSE リアルタイム配信 API ← Step 8
 │       └── rust-status/    # Rust エンジン状態確認 API
 ├── components/             # React コンポーネント
 ├── lib/                    # JS ビジネスロジック（移行元）
@@ -52,7 +53,8 @@ null--nostr/
 │   ├── filters.js          # Nostr Filter ファクトリ
 │   ├── connection-manager.js # リレー接続管理
 │   ├── rust-bridge.js      # Rust ↔ JS ブリッジ
-│   └── rust-engine-manager.js # エンジンシングルトン管理 ← Step 2
+│   ├── rust-engine-manager.js # エンジンシングルトン管理 ← Step 2
+│   └── nostr-sse.js        # SSE クライアント ← Step 8
 ├── instrumentation.js      # サーバー起動時エンジンロード
 ├── next.config.js          # instrumentationHook 有効化済み
 └── rust-engine/            # Rust コアエンジン（移行先）
@@ -439,6 +441,47 @@ import { searchEvents } from '@/lib/rust-engine-manager'
 const results = await searchEvents('日本語クエリ', 50) // NostrEvent[] | null
 ```
 
+### stream API (Step 8〜)
+
+```js
+// app/api/stream/route.js で実際に使用中
+// ブラウザ側は lib/nostr-sse.js / hooks/useNostrSubscription.js を使用
+
+// ─── サーバーサイド (API Route 内) ───
+import { getOrCreateEngine } from '@/lib/rust-engine-manager'
+
+// 購読開始: REQ を全リレーに送信、sub_id を返す
+const subId = await engine.subscribeStream(filterJson) // filterJson = JSON.stringify(filter)
+
+// イベントのポーリング (50ms ごとに呼び出す)
+const events = await engine.pollSubscription(subId, 50) // → string[] (event JSON)
+
+// 購読終了: CLOSE 送信 + バッファ削除
+await engine.unsubscribeStream(subId)
+
+// ─── ブラウザサイド (React コンポーネント内) ───
+import { subscribeSSE } from '@/lib/nostr-sse'
+
+// subscribeManaged() と同一インターフェースで置き換え可能
+const sub = subscribeSSE({ kinds: [1], limit: 50 }, {
+  onEvent: (event) => { /* ... */ },
+  onEose: () => { /* ... */ },
+  onError: (err) => { /* ... */ },
+  autoReconnect: true,
+})
+// sub.close() で購読終了
+
+// ─── React Hook ───
+import { useNostrSubscription } from '@/hooks/useNostrSubscription'
+
+// transport: 'auto' (デフォルト) — Rust エンジン稼働時は SSE、未稼働時は WebSocket
+const { isConnected, eventCount, activeTransport } = useNostrSubscription(filter, {
+  transport: 'auto',  // 'auto' | 'sse' | 'websocket'
+  onEvent: (event) => { /* ... */ },
+})
+// activeTransport → 'sse' | 'websocket' | null
+```
+
 ## デフォルトリレー（日本）
 
 ```
@@ -451,7 +494,7 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/complete-dm-api-THeRA`
+- 作業ブランチ: `claude/rust-sse-proxy-streaming-opdfQ`
 - マージ先: `master`
 
 ---
@@ -470,7 +513,7 @@ Step 1〜7 で「Rust エンジンのキャッシュ・ランキング・リレ�
 | プロフィールキャッシュ | ✅ Rust (nostrdb → リレーの2段階) |
 | リレー管理 | ✅ Rust (add/remove/reconnect) |
 | イベント発行 | ✅ Rust (/api/publish → engine.publishEvent) |
-| リアルタイム購読 | ❌ JS (subscribeManaged → nostr-tools SimplePool) |
+| リアルタイム購読 | ✅ Rust (/api/stream SSE → engine.subscribeStream) |
 | フォロー/ミュートリスト取得 | ✅ Rust (/api/social/follows, /api/social/mutes) |
 | フォロー/ミュートリスト編集 | ✅ Rust (/api/social/* → /api/publish 委譲) |
 | DM 取得 (kind 1059) | ✅ Rust (/api/dm → engine.fetchDms / nostrdb) |
@@ -648,14 +691,9 @@ Step 1〜7 で「Rust エンジンのキャッシュ・ランキング・リレ�
 }
 ```
 
-### Step 8: リアルタイム配信の Rust SSE プロキシ化 🔲
+### Step 8: リアルタイム配信の Rust SSE プロキシ化 ✅ 実装済み
 
-**目標**: `subscribeManaged()` (nostr-tools WebSocket) を
-Server-Sent Events (SSE) 経由の Rust プッシュに置き換える。
-
-これが **最難関かつ最大インパクト** のステップ。
-完了すれば `connection-manager.js` を完全削除できる。
-
+アーキテクチャ：
 ```
 現在:
   ブラウザ ──WebSocket──→ リレー (nostr-tools SimplePool)
@@ -666,18 +704,47 @@ Server-Sent Events (SSE) 経由の Rust プッシュに置き換える。
                                nostrdb に蓄積
 ```
 
-実装予定ファイル：
-- `nurunuru-core/src/engine.rs` — `subscribe_stream(filter) -> impl Stream<Item=Event>`
-  - `nostr-sdk` の `client.subscribe()` → tokio channel → SSE
-- `app/api/stream/route.js` — SSE エンドポイント
+実装済みファイル：
+- `nurunuru-core/src/engine.rs` — SSE 購読メソッド追加
+  - `subscribe_stream(filter) -> String` — フィルタ購読開始、sub_id を返す
+    - `client.notifications()` reciever を先に取得、`client.subscribe(filter, None)` で REQ 送信
+    - バックグラウンドタスクで `RelayPoolNotification::Event` をフィルタリング
+    - `Weak<Mutex<VecDeque<String>>>` を使ってライフタイム管理（unsubscribe で自動終了）
+  - `poll_subscription(sub_id, max_count) -> Vec<String>` — バッファからイベントをドレイン
+  - `unsubscribe_stream(sub_id)` — バッファ削除 + CLOSE 送信
+- `nurunuru-napi/src/lib.rs` — NAPI バインディング追加
+  - `subscribeStream(filterJson: String) -> Promise<String>`
+  - `pollSubscription(subscriptionId: String, maxCount: u32) -> Promise<Vec<String>>`
+  - `unsubscribeStream(subscriptionId: String) -> Promise<()>`
+- `app/api/stream/route.js` — SSE エンドポイント（新規）
   - `GET /api/stream?filter=xxx` → `text/event-stream`
-  - Rust エンジンの購読 → `data: {...}\n\n` ストリーミング
-- `lib/nostr-sse.js` — SSE クライアント（`EventSource` API）
-  - `connection-manager.js` の `subscribeManaged()` の置き換え
-- `hooks/useNostrSubscription.js` — SSE を使うように更新
+  - `export const runtime = 'nodejs'`（Node.js Runtime 必須）
+  - 50ms ポーリングループ + 25秒ハートビート
+  - disconnect 時に `engine.unsubscribeStream()` でクリーンアップ
+- `lib/nostr-sse.js` — SSE クライアント（新規）
+  - `subscribeSSE(filter, callbacks)` — `EventSource` API ラッパー
+  - `subscribeManaged()` と同一インターフェース（透過的移行）
+  - 指数バックオフ付き自動再接続（最大10回）
+  - イベント重複排除（seenEventIds Set）
+  - `isSseAvailable()` — Rust エンジン稼働確認
+- `hooks/useNostrSubscription.js` — SSE/WebSocket 自動選択
+  - `transport: 'auto'` (デフォルト) — Rust エンジン稼働時は SSE 優先
+  - `transport: 'sse'` — SSE 固定
+  - `transport: 'websocket'` — WebSocket 固定（既存動作）
+  - `activeTransport` 状態を返す（'sse' | 'websocket'）
 
-> **注意**: この実装は Next.js の Streaming Response + Rust の tokio チャンネルが必要。
-> Node.js の Edge Runtime ではなく Node.js Runtime で動かすこと (`export const runtime = 'nodejs'`)。
+`GET /api/stream` の動作確認：
+```bash
+curl -N "http://localhost:3000/api/stream?filter=%7B%22kinds%22%3A%5B1%5D%2C%22limit%22%3A10%7D"
+# → text/event-stream
+# : connected
+# data: {"id":"abc...","kind":1,"content":"..."}
+# : heartbeat
+```
+
+> **設計方針**: バックグラウンドタスクの終了は `Weak<Arc>` パターンで管理。
+> `unsubscribeStream` がバッファの strong Arc を drop すると、次の `Weak::upgrade()` が
+> `None` を返してタスクが自動終了。JoinHandle の abort() 不要でシンプル。
 
 ### Step 9: nostr-tools 依存削除 🔲
 

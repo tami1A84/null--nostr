@@ -550,4 +550,51 @@ impl NuruNuruNapi {
     pub fn format_timestamp(&self, timestamp: f64) -> String {
         format_timestamp_ja(timestamp as u64)
     }
+
+    // ─── SSE Streaming (Step 8) ──────────────────────────────────
+
+    /// Start a persistent relay subscription for Server-Sent Events.
+    ///
+    /// `filter_json` — Nostr filter as JSON string (same format as `queryLocal`).
+    ///
+    /// Returns a subscription ID string.  Pass it to `pollSubscription` to
+    /// drain buffered events, and to `unsubscribeStream` when done.
+    ///
+    /// Called from `/api/stream` to bridge Rust relay subscriptions → SSE.
+    #[napi]
+    pub async fn subscribe_stream(&self, filter_json: String) -> Result<String> {
+        let filter: nostr::Filter =
+            nostr::Filter::from_json(&filter_json).map_err(to_napi_err)?;
+        let engine = self.engine.clone();
+        engine.subscribe_stream(filter).await.map_err(to_napi_err)
+    }
+
+    /// Drain up to `max_count` buffered events from a streaming subscription.
+    ///
+    /// Returns an array of event JSON strings (empty when no new events).
+    /// Should be called in a polling loop (every 50 ms) from the SSE route.
+    #[napi]
+    pub async fn poll_subscription(
+        &self,
+        subscription_id: String,
+        max_count: u32,
+    ) -> Result<Vec<String>> {
+        let engine = self.engine.clone();
+        Ok(engine
+            .poll_subscription(&subscription_id, max_count as usize)
+            .await)
+    }
+
+    /// Cancel a streaming subscription and release its resources.
+    ///
+    /// Sends CLOSE to all relays and drops the event buffer.  The background
+    /// forwarding task exits automatically on the next loop iteration.
+    #[napi]
+    pub async fn unsubscribe_stream(&self, subscription_id: String) -> Result<()> {
+        let engine = self.engine.clone();
+        engine
+            .unsubscribe_stream(&subscription_id)
+            .await
+            .map_err(to_napi_err)
+    }
 }
