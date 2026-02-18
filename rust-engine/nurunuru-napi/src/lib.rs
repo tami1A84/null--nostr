@@ -348,6 +348,23 @@ impl NuruNuruNapi {
         Ok(result.to_hex())
     }
 
+    /// Publish an already-signed Nostr event to all connected relays.
+    ///
+    /// `event_json` — full NIP-01 signed event as a JSON string (must include `sig`).
+    ///
+    /// The Rust engine validates the signature before broadcasting.
+    /// Returns the event ID hex on success.
+    ///
+    /// Called from `/api/publish` to broadcast browser-signed events via the
+    /// Rust relay pool without exposing the user's private key to the server.
+    #[napi]
+    pub async fn publish_event(&self, event_json: String) -> Result<String> {
+        let event: Event = Event::from_json(&event_json).map_err(to_napi_err)?;
+        let engine = self.engine.clone();
+        let eid = engine.publish_raw_event(event).await.map_err(to_napi_err)?;
+        Ok(eid.to_hex())
+    }
+
     // ─── DMs (NIP-17) ─────────────────────────────────────────
 
     /// Send an encrypted DM via NIP-17 gift wrapping.

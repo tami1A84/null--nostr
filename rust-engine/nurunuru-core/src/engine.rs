@@ -804,6 +804,19 @@ impl NuruNuruEngine {
         Ok(events.into_iter().collect())
     }
 
+    /// Publish an already-signed Nostr event to all connected relays.
+    ///
+    /// Unlike `publish_note` which builds and signs an event, this method
+    /// takes a fully-signed event from the browser (signed via NIP-07 / Amber
+    /// / NIP-46) and broadcasts it as-is. The nostr-sdk client verifies the
+    /// signature before sending.
+    ///
+    /// Returns the event ID on success.
+    pub async fn publish_raw_event(&self, event: Event) -> Result<EventId> {
+        let output = self.client.send_event(&event).await?;
+        Ok(output.val)
+    }
+
     /// Store a raw event directly into nostrdb (bypasses relay network).
     ///
     /// Used by `/api/ingest` to persist browser-received events so they are
