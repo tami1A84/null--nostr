@@ -296,11 +296,27 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
     setLoading(true)
 
     try {
-      // Fetch NIP-17 gift wrapped messages (kind 1059) - limit for faster loading
-      const giftWraps = await fetchEvents(
-        { kinds: [1059], '#p': [pubkey], limit: 50 },
-        RELAYS
-      )
+      // Try fetching gift wraps via Rust engine API first (nostrdb → relay)
+      let giftWraps = null
+      try {
+        const res = await fetch(`/api/dm?pubkey=${pubkey}&limit=50`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.events && data.source !== 'fallback') {
+            giftWraps = data.events
+          }
+        }
+      } catch (e) {
+        // API unavailable, will fall back to JS below
+      }
+
+      // Fallback: fetch gift wraps directly via nostr-tools
+      if (!giftWraps) {
+        giftWraps = await fetchEvents(
+          { kinds: [1059], '#p': [pubkey], limit: 50 },
+          RELAYS
+        )
+      }
 
       if (giftWraps.length === 0) {
         setLoading(false)
@@ -416,11 +432,27 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
     }
 
     try {
-      // Fetch NIP-17 gift wraps addressed to me
-      const giftWraps = await fetchEvents(
-        { kinds: [1059], '#p': [pubkey], limit: 200 },
-        RELAYS
-      )
+      // Try fetching gift wraps via Rust engine API first (nostrdb → relay)
+      let giftWraps = null
+      try {
+        const res = await fetch(`/api/dm?pubkey=${pubkey}&limit=200`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.events && data.source !== 'fallback') {
+            giftWraps = data.events
+          }
+        }
+      } catch (e) {
+        // API unavailable, fall back to JS below
+      }
+
+      // Fallback: fetch gift wraps directly via nostr-tools
+      if (!giftWraps) {
+        giftWraps = await fetchEvents(
+          { kinds: [1059], '#p': [pubkey], limit: 200 },
+          RELAYS
+        )
+      }
 
       const allMessages = []
 
