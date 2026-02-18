@@ -35,6 +35,8 @@ null--nostr/
 │       │   ├── [pubkey]/   # 単一プロフィール取得 API ← Step 3
 │       │   └── batch/      # バッチプロフィール取得 API ← Step 3
 │       ├── nip05/          # NIP-05 検証 API
+│       ├── relay/          # リレー管理 API ← Step 4
+│       │   └── reconnect/  # 強制再接続 API ← Step 4
 │       └── rust-status/    # Rust エンジン状態確認 API
 ├── components/             # React コンポーネント
 ├── lib/                    # JS ビジネスロジック（移行元）
@@ -195,11 +197,48 @@ null--nostr/
   - `fetchProfilesBatchViaApi()`: `/api/profile/batch` を呼び出し
   - `source: 'fallback'` 時は既存 JS にフォールバック（段階的移行を維持）
 
-### 未実装・次のステップ 🔲
+### Step 4: リレー接続移行 ✅ 実装済み
 
-**Step 4: リレー接続移行**
+アーキテクチャ：
+```
+ブラウザ (WebSocket via connection-manager.js)   ← リアルタイム購読は JS のまま維持
+  └─ GET  /api/relay            → Rust → リレー一覧 + 接続ステータス取得
+  └─ POST /api/relay            → Rust → リレー追加 { url }
+  └─ DELETE /api/relay          → Rust → リレー削除 { url }
+  └─ POST /api/relay/reconnect  → Rust → 全リレー再接続
+```
 
-`lib/connection-manager.js` を Rust の `NuruNuruEngine::connect()` に差し替え。
+実装済みファイル：
+- `nurunuru-core/src/types.rs` — `RelayInfo { url, status, connected }` 型追加
+- `nurunuru-core/src/engine.rs` — リレー管理メソッド追加
+  - `get_relay_list() -> Vec<RelayInfo>`
+  - `add_relay(url) -> Result<()>`
+  - `remove_relay(url) -> Result<()>`
+  - `reconnect() -> Result<()>`
+- `nurunuru-napi/src/lib.rs` — NAPI バインディング追加
+  - `NapiRelayInfo` 構造体
+  - `getRelayList()` / `addRelay(url)` / `removeRelay(url)` / `reconnect()`
+- `app/api/relay/route.js` — リレー管理エンドポイント
+  - `GET /api/relay` — リレー一覧 + 接続統計
+  - `POST /api/relay` with `{ url }` — リレー追加
+  - `DELETE /api/relay` with `{ url }` — リレー削除
+- `app/api/relay/reconnect/route.js` — `POST /api/relay/reconnect` — 強制再接続
+- `lib/rust-engine-manager.js` — リレー管理ヘルパー追加
+  - `getRelayList()` / `addRelay(url)` / `removeRelay(url)` / `reconnectRelays()`
+
+`GET /api/relay` レスポンス例：
+```json
+{
+  "relays": [
+    { "url": "wss://yabu.me", "status": "Connected", "connected": true },
+    { "url": "wss://relay-jp.nostr.wirednet.jp", "status": "Connected", "connected": true },
+    { "url": "wss://r.kojira.io", "status": "Connecting", "connected": false },
+    { "url": "wss://relay.damus.io", "status": "Connected", "connected": true }
+  ],
+  "stats": { "connectedRelays": 3, "totalRelays": 4 },
+  "source": "rust"
+}
+```
 
 ---
 
@@ -284,6 +323,29 @@ const napiProfile = await engine.fetchProfile(pubkey)
 const profilesJson = await engine.fetchProfilesJson(pubkeys) // JSON string
 ```
 
+### relay API (Step 4〜)
+
+```js
+// app/api/relay/route.js で実際に使用中
+import { getOrCreateEngine } from '@/lib/rust-engine-manager'
+
+// リレー一覧取得
+const relays = await engine.getRelayList()
+// → [{ url, status, connected }, ...]
+
+// 接続統計
+const stats = await engine.connectionStats()
+// → { connectedRelays, totalRelays }
+
+// リレー追加・削除・再接続
+await engine.addRelay('wss://relay.example.com')
+await engine.removeRelay('wss://relay.example.com')
+await engine.reconnect()
+
+// rust-engine-manager.js ヘルパー経由でも使用可能
+import { getRelayList, addRelay, removeRelay, reconnectRelays } from '@/lib/rust-engine-manager'
+```
+
 ## デフォルトリレー（日本）
 
 ```
@@ -296,5 +358,207 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/complete-profile-cache-migration-8WtpF`
+- 作業ブランチ: `claude/complete-relay-migration-LTFSb`
 - マージ先: `master`
+
+---
+
+## 現状の正直な評価と残り課題
+
+### 何が達成されたか
+
+Step 1〜4 で「Rust エンジンのキャッシュ・ランキング・リレー管理層」が完成した。
+ただし「JS からの完全移行」ではなく **「Rust が最適化レイヤーとして追加された」** が正確な表現。
+
+| 機能 | 現状 |
+|---|---|
+| フィードランキング | ✅ Rust (nostrdb + recommendation.rs) |
+| イベント永続化 | ✅ Rust (nostrdb 直接書き込み) |
+| プロフィールキャッシュ | ✅ Rust (nostrdb → リレーの2段階) |
+| リレー管理 | ✅ Rust (add/remove/reconnect) |
+| イベント発行 | ❌ JS (publishManaged → connection-manager) |
+| リアルタイム購読 | ❌ JS (subscribeManaged → nostr-tools SimplePool) |
+| フォロー/ミュートリスト編集 | ❌ JS |
+| DM 暗号化・送信 | ❌ JS |
+| 検索 (NIP-50) | ❌ JS |
+| 画像アップロード | ❌ JS (外部 API — 移行不要) |
+| イベント署名 | ❌ JS (NIP-07/Amber/NIP-46 — **移行不可**・ブラウザ責務) |
+
+### 移行できない機能（設計上）
+
+**イベント署名は永久にブラウザ責務**。
+秘密鍵は NIP-07 拡張 (Alby, nos2x) や Amber が保持するため、
+サーバーサイドの Rust エンジンが署名することは**セキュリティ上不可能かつ不適切**。
+
+→ 「署名はブラウザ、発行は Rust エンジン経由」が正しいアーキテクチャ。
+
+---
+
+## 次フェーズのロードマップ
+
+### Step 5: イベント発行の API 化 🔲
+
+**目標**: ブラウザで署名した済みイベントを Rust エンジン経由でリレーに送る。
+`publishManaged()` を `POST /api/publish` に置き換えることで
+`connection-manager.js` の publish 依存を排除する。
+
+```
+ブラウザ (NIP-07 / Amber / NIP-46)
+  └─ signEvent(event) → signedEvent
+        ↓
+  POST /api/publish { event: signedEvent }
+        ↓
+  Rust engine.client.send_event(event)
+        ↓
+  接続中の全リレーに broadcast
+```
+
+実装予定ファイル：
+- `nurunuru-core/src/engine.rs` — `publish_raw_event(event: Event) -> Result<EventId>`
+  - `client.send_event(event)` — 検証済みイベントをそのまま送出
+- `nurunuru-napi/src/lib.rs` — `publishEvent(eventJson: String) -> Result<String>`
+- `app/api/publish/route.js` — `POST /api/publish { event }` エンドポイント
+  - NIP-01 署名検証 (Rust 側で自動) → broadcast
+  - レスポンス: `{ id, relays: ['wss://...'], source: 'rust' }`
+- `lib/nostr.js` の `publishEvent()` を修正
+  - Rust API 試行 → 失敗時 JS フォールバック維持
+
+### Step 6: フォロー/ミュートリスト管理の API 化 🔲
+
+**目標**: フォロー・ミュートリストの**取得**を `/api/social` 経由に統一。
+編集（kind 3 / kind 10000 発行）は Step 5 の `/api/publish` を使う。
+
+```
+GET  /api/social/follows?pubkey=xxx  → nostrdb → リレーの2段階取得
+GET  /api/social/mutes?pubkey=xxx    → nostrdb → リレーの2段階取得
+POST /api/social/follows             → { signedKind3Event } → /api/publish 委譲
+```
+
+実装予定ファイル：
+- `app/api/social/follows/route.js` — フォローリスト取得・更新
+- `app/api/social/mutes/route.js` — ミュートリスト取得・更新
+- `lib/nostr.js` の `fetchFollowListCached()` / `fetchMuteListCached()` を API 経由に
+
+### Step 7: DM 取得・検索の API 化 🔲
+
+**目標**: DM 取得 (kind 1059) と NIP-50 検索を Rust エンジン経由に。
+DM 送信は署名が必要なため Step 5 の `/api/publish` + ギフトラップを活用。
+
+```
+GET  /api/dm?since=xxx&limit=50      → engine.fetchDms() → nostrdb
+GET  /api/search?q=xxx&limit=20      → engine.search() → NIP-50 リレー
+POST /api/publish                    → DM の gift wrap イベント発行に再利用
+```
+
+実装予定ファイル：
+- `app/api/dm/route.js`
+- `app/api/search/route.js`
+- `components/TalkTab.js` — DM 取得を API 経由に
+- `components/SearchModal.js` — 検索を API 経由に
+
+### Step 8: リアルタイム配信の Rust SSE プロキシ化 🔲
+
+**目標**: `subscribeManaged()` (nostr-tools WebSocket) を
+Server-Sent Events (SSE) 経由の Rust プッシュに置き換える。
+
+これが **最難関かつ最大インパクト** のステップ。
+完了すれば `connection-manager.js` を完全削除できる。
+
+```
+現在:
+  ブラウザ ──WebSocket──→ リレー (nostr-tools SimplePool)
+
+移行後:
+  ブラウザ ──SSE──→ /api/stream ──WebSocket──→ リレー (Rust nostr-sdk)
+                                    ↓
+                               nostrdb に蓄積
+```
+
+実装予定ファイル：
+- `nurunuru-core/src/engine.rs` — `subscribe_stream(filter) -> impl Stream<Item=Event>`
+  - `nostr-sdk` の `client.subscribe()` → tokio channel → SSE
+- `app/api/stream/route.js` — SSE エンドポイント
+  - `GET /api/stream?filter=xxx` → `text/event-stream`
+  - Rust エンジンの購読 → `data: {...}\n\n` ストリーミング
+- `lib/nostr-sse.js` — SSE クライアント（`EventSource` API）
+  - `connection-manager.js` の `subscribeManaged()` の置き換え
+- `hooks/useNostrSubscription.js` — SSE を使うように更新
+
+> **注意**: この実装は Next.js の Streaming Response + Rust の tokio チャンネルが必要。
+> Node.js の Edge Runtime ではなく Node.js Runtime で動かすこと (`export const runtime = 'nodejs'`)。
+
+### Step 9: nostr-tools 依存削除 🔲
+
+Step 5〜8 完了後に実施。
+
+- `package.json` から `nostr-tools` を削除
+- `lib/connection-manager.js` を削除
+- `lib/nostr.js` を大幅削減（署名ロジックのみ残す）
+- `lib/recommendation.js` を削除（Rust に完全移行済み）
+- `lib/filters.js` を削除（Rust に移行済み）
+
+削除後も残るもの：
+- `lib/nostr.js` — 署名 (NIP-07 / Amber / NIP-46) のみ
+- `lib/secure-key-store.js` — 鍵管理（移行不可）
+- `lib/imageUtils.js` — 画像アップロード（外部 API、Rust 不要）
+- `lib/cache.js` — nostrdb でカバーできない UI キャッシュ（localStorage）
+
+### Step 10: nurunuru-ffi 完成 (モバイル対応) 🔲
+
+**目標**: iOS / Android 向け UniFFI バインディングを完成させる。
+
+```
+nurunuru-ffi/
+  ├─ src/lib.rs       — #[uniffi::export] ラッパー
+  ├─ nurunuru.udl     — UniFFI 定義ファイル
+  └─ bindgen/         — Swift / Kotlin バインディング生成
+```
+
+実装予定：
+- `nurunuru-ffi/src/lib.rs` — uniffi::export ラッパー (napi と同じ機能を expose)
+- `nurunuru-ffi/nurunuru.udl` — 型・メソッド定義
+- iOS: Swift Package として配布
+- Android: AAR / Kotlin bindings として配布
+- 前提: `nurunuru-core` の API は napi/ffi 両対応で変更不要
+
+---
+
+## 移行完了の定義
+
+以下が全て達成された時点で「Rust への完全移行」と言える：
+
+- [ ] `nostr-tools` が `package.json` から削除されている
+- [ ] `lib/connection-manager.js` が削除されている
+- [ ] `lib/recommendation.js` が削除されている
+- [ ] 全てのイベント発行が `/api/publish` 経由
+- [ ] 全てのリアルタイム購読が SSE (`/api/stream`) 経由
+- [ ] フォロー/ミュートリストが `/api/social` 経由
+- [ ] DM・検索が `/api/dm` / `/api/search` 経由
+- [ ] イベント署名のみ `lib/nostr.js` に残る（仕様上正しい）
+- [ ] `nurunuru-ffi` で iOS/Android 対応
+
+---
+
+## アーキテクチャ目標図（完成形）
+
+```
+ブラウザ
+  ├─ 署名のみ: nostr.js (NIP-07 / Amber / NIP-46)
+  ├─ EventSource → /api/stream   [SSE] ← Rust がリレーから受信してプッシュ
+  ├─ POST /api/publish           ← 署名済みイベントを Rust 経由でブロードキャスト
+  ├─ GET  /api/feed              ← nostrdb からランキング済みフィード
+  ├─ GET  /api/profile/[pubkey]  ← nostrdb プロフィールキャッシュ
+  ├─ GET  /api/social/follows    ← nostrdb フォローリスト
+  ├─ GET  /api/dm                ← nostrdb DM
+  ├─ GET  /api/search            ← Rust NIP-50 検索
+  └─ GET  /api/relay             ← Rust リレー状態
+
+サーバー (Rust NuruNuruEngine)
+  ├─ nostrdb       ← 全イベント永続化・クエリ
+  ├─ recommendation ← フィードスコアリング
+  └─ nostr-sdk Client ──WebSocket──→ リレー群
+       ├─ wss://yabu.me
+       ├─ wss://relay-jp.nostr.wirednet.jp
+       ├─ wss://r.kojira.io
+       └─ wss://search.nos.today (NIP-50)
+```

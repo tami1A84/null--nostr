@@ -82,6 +82,23 @@ pub struct NapiConnectionStats {
 }
 
 #[napi(object)]
+pub struct NapiRelayInfo {
+    pub url: String,
+    pub status: String,
+    pub connected: bool,
+}
+
+impl From<RelayInfo> for NapiRelayInfo {
+    fn from(r: RelayInfo) -> Self {
+        Self {
+            url: r.url,
+            status: r.status,
+            connected: r.connected,
+        }
+    }
+}
+
+#[napi(object)]
 pub struct NapiEngagementData {
     pub likes: u32,
     pub reposts: u32,
@@ -466,6 +483,37 @@ impl NuruNuruNapi {
             connected_relays: stats.connected_relays as u32,
             total_relays: stats.total_relays as u32,
         })
+    }
+
+    /// Get the list of relays with their connection status.
+    #[napi]
+    pub async fn get_relay_list(&self) -> Result<Vec<NapiRelayInfo>> {
+        let engine = self.engine.clone();
+        let relays = engine.get_relay_list().await;
+        Ok(relays.into_iter().map(NapiRelayInfo::from).collect())
+    }
+
+    /// Add a relay URL and connect to it.
+    ///
+    /// `url` must be a valid `wss://` URL. Silently ignores invalid URLs.
+    #[napi]
+    pub async fn add_relay(&self, url: String) -> Result<()> {
+        let engine = self.engine.clone();
+        engine.add_relay(&url).await.map_err(to_napi_err)
+    }
+
+    /// Remove a relay URL and disconnect from it.
+    #[napi]
+    pub async fn remove_relay(&self, url: String) -> Result<()> {
+        let engine = self.engine.clone();
+        engine.remove_relay(&url).await.map_err(to_napi_err)
+    }
+
+    /// Disconnect then reconnect to all configured relays.
+    #[napi]
+    pub async fn reconnect(&self) -> Result<()> {
+        let engine = self.engine.clone();
+        engine.reconnect().await.map_err(to_napi_err)
     }
 
     /// Format a unix timestamp in Japanese relative format (e.g. "3分", "2時間").

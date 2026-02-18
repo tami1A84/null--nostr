@@ -98,6 +98,14 @@ pub struct ConnectionStats {
     pub pending_subscriptions: usize,
 }
 
+/// Per-relay information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelayInfo {
+    pub url: String,
+    pub status: String,
+    pub connected: bool,
+}
+
 /// Japanese-friendly timestamp display
 pub fn format_timestamp_ja(timestamp: u64) -> String {
     let now = std::time::SystemTime::now()

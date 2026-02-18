@@ -748,6 +748,51 @@ impl NuruNuruEngine {
         }
     }
 
+    /// Get the list of configured relays with their connection status.
+    pub async fn get_relay_list(&self) -> Vec<RelayInfo> {
+        let relays = self.client.relays().await;
+        relays
+            .iter()
+            .map(|(url, relay)| {
+                let status = relay.status();
+                let status_str = format!("{:?}", status);
+                RelayInfo {
+                    url: url.to_string(),
+                    status: status_str,
+                    connected: status == RelayStatus::Connected,
+                }
+            })
+            .collect()
+    }
+
+    /// Add a relay URL and immediately connect to it.
+    pub async fn add_relay(&self, url: &str) -> Result<()> {
+        let relay_url = relay::parse_relay_url(url)?;
+        self.client
+            .add_relay(relay_url.clone())
+            .await
+            .map_err(|e| NuruNuruError::RelayError(e.to_string()))?;
+        let _ = self.client.connect_relay(relay_url).await;
+        Ok(())
+    }
+
+    /// Remove a relay URL and disconnect from it.
+    pub async fn remove_relay(&self, url: &str) -> Result<()> {
+        let relay_url = relay::parse_relay_url(url)?;
+        self.client
+            .remove_relay(relay_url)
+            .await
+            .map_err(|e| NuruNuruError::RelayError(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Disconnect and reconnect to all relays.
+    pub async fn reconnect(&self) -> Result<()> {
+        self.client.disconnect().await;
+        self.client.connect().await;
+        Ok(())
+    }
+
     /// Query local nostrdb cache without hitting relays.
     pub async fn query_local(&self, filter: Filter) -> Result<Vec<Event>> {
         let events = self
