@@ -1,15 +1,16 @@
 [phases.setup]
-nixPkgs = ["nodePackages.npm", "gcc", "rustc", "cargo", "openssl", "pkg-config", "curl"]
+nixPkgs = ["nodePackages.npm", "gcc", "openssl", "pkg-config", "curl"]
 
 [phases.build]
 cmds = [
-    # 1. Rustupを導入して、コンパイラを明示的に最新の stable (1.85+) に更新する
+    # 1. コンパイラを最新版に無理やり更新
     "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
-    ". $HOME/.cargo/env && rustup default stable",
-    # 2. 最新の Rust を使ってビルド
+    ". $HOME/.cargo/env && rustup default 1.85",
+    # 2. 最新の Rust (1.85+) 環境でビルドを実行
     ". $HOME/.cargo/env && cd rust-engine/nurunuru-napi && cargo build --release",
     "mkdir -p rust-engine/nurunuru-napi",
     "cp target/release/libnurunuru_napi.so rust-engine/nurunuru-napi/nurunuru-napi.node || cp target/release/nurunuru_napi.node rust-engine/nurunuru-napi/nurunuru-napi.node",
+    # 3. 本体の Next.js ビルド
     "npm install",
     "npm run build"
 ]
