@@ -35,6 +35,8 @@ null--nostr/
 │       │   ├── [pubkey]/   # 単一プロフィール取得 API ← Step 3
 │       │   └── batch/      # バッチプロフィール取得 API ← Step 3
 │       ├── nip05/          # NIP-05 検証 API
+│       ├── relay/          # リレー管理 API ← Step 4
+│       │   └── reconnect/  # 強制再接続 API ← Step 4
 │       └── rust-status/    # Rust エンジン状態確認 API
 ├── components/             # React コンポーネント
 ├── lib/                    # JS ビジネスロジック（移行元）
@@ -195,11 +197,48 @@ null--nostr/
   - `fetchProfilesBatchViaApi()`: `/api/profile/batch` を呼び出し
   - `source: 'fallback'` 時は既存 JS にフォールバック（段階的移行を維持）
 
-### 未実装・次のステップ 🔲
+### Step 4: リレー接続移行 ✅ 実装済み
 
-**Step 4: リレー接続移行**
+アーキテクチャ：
+```
+ブラウザ (WebSocket via connection-manager.js)   ← リアルタイム購読は JS のまま維持
+  └─ GET  /api/relay            → Rust → リレー一覧 + 接続ステータス取得
+  └─ POST /api/relay            → Rust → リレー追加 { url }
+  └─ DELETE /api/relay          → Rust → リレー削除 { url }
+  └─ POST /api/relay/reconnect  → Rust → 全リレー再接続
+```
 
-`lib/connection-manager.js` を Rust の `NuruNuruEngine::connect()` に差し替え。
+実装済みファイル：
+- `nurunuru-core/src/types.rs` — `RelayInfo { url, status, connected }` 型追加
+- `nurunuru-core/src/engine.rs` — リレー管理メソッド追加
+  - `get_relay_list() -> Vec<RelayInfo>`
+  - `add_relay(url) -> Result<()>`
+  - `remove_relay(url) -> Result<()>`
+  - `reconnect() -> Result<()>`
+- `nurunuru-napi/src/lib.rs` — NAPI バインディング追加
+  - `NapiRelayInfo` 構造体
+  - `getRelayList()` / `addRelay(url)` / `removeRelay(url)` / `reconnect()`
+- `app/api/relay/route.js` — リレー管理エンドポイント
+  - `GET /api/relay` — リレー一覧 + 接続統計
+  - `POST /api/relay` with `{ url }` — リレー追加
+  - `DELETE /api/relay` with `{ url }` — リレー削除
+- `app/api/relay/reconnect/route.js` — `POST /api/relay/reconnect` — 強制再接続
+- `lib/rust-engine-manager.js` — リレー管理ヘルパー追加
+  - `getRelayList()` / `addRelay(url)` / `removeRelay(url)` / `reconnectRelays()`
+
+`GET /api/relay` レスポンス例：
+```json
+{
+  "relays": [
+    { "url": "wss://yabu.me", "status": "Connected", "connected": true },
+    { "url": "wss://relay-jp.nostr.wirednet.jp", "status": "Connected", "connected": true },
+    { "url": "wss://r.kojira.io", "status": "Connecting", "connected": false },
+    { "url": "wss://relay.damus.io", "status": "Connected", "connected": true }
+  ],
+  "stats": { "connectedRelays": 3, "totalRelays": 4 },
+  "source": "rust"
+}
+```
 
 ---
 
@@ -284,6 +323,29 @@ const napiProfile = await engine.fetchProfile(pubkey)
 const profilesJson = await engine.fetchProfilesJson(pubkeys) // JSON string
 ```
 
+### relay API (Step 4〜)
+
+```js
+// app/api/relay/route.js で実際に使用中
+import { getOrCreateEngine } from '@/lib/rust-engine-manager'
+
+// リレー一覧取得
+const relays = await engine.getRelayList()
+// → [{ url, status, connected }, ...]
+
+// 接続統計
+const stats = await engine.connectionStats()
+// → { connectedRelays, totalRelays }
+
+// リレー追加・削除・再接続
+await engine.addRelay('wss://relay.example.com')
+await engine.removeRelay('wss://relay.example.com')
+await engine.reconnect()
+
+// rust-engine-manager.js ヘルパー経由でも使用可能
+import { getRelayList, addRelay, removeRelay, reconnectRelays } from '@/lib/rust-engine-manager'
+```
+
 ## デフォルトリレー（日本）
 
 ```
@@ -296,5 +358,5 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/complete-profile-cache-migration-8WtpF`
+- 作業ブランチ: `claude/complete-relay-migration-LTFSb`
 - マージ先: `master`
