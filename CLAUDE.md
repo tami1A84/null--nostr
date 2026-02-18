@@ -27,7 +27,7 @@ null--nostr/
 ├── app/                    # Next.js App Router ページ
 │   └── api/
 │       ├── feed/           # フィード API (Rust ランキング) ← Step 2
-│       ├── ingest/         # イベント蓄積 API ← Step 2
+│       ├── ingest/         # イベント蓄積 API ← Step 2.5 完全稼働中
 │       ├── nip05/          # NIP-05 検証 API
 │       └── rust-status/    # Rust エンジン状態確認 API
 ├── components/             # React コンポーネント
@@ -39,13 +39,13 @@ null--nostr/
 │   ├── connection-manager.js # リレー接続管理
 │   ├── rust-bridge.js      # Rust ↔ JS ブリッジ
 │   └── rust-engine-manager.js # エンジンシングルトン管理 ← Step 2
-├── instrumentation.js      # サーバー起動時エンジンロード ← 新規追加
+├── instrumentation.js      # サーバー起動時エンジンロード
 ├── next.config.js          # instrumentationHook 有効化済み
 └── rust-engine/            # Rust コアエンジン（移行先）
     ├── Cargo.toml          # Workspace
     ├── nurunuru-core/      # コアライブラリ（実装済み）
     ├── nurunuru-ffi/       # UniFFI バインディング（スキャフォルド済み）
-    └── nurunuru-napi/      # napi-rs ブリッジ ← 新規追加・稼働中
+    └── nurunuru-napi/      # napi-rs ブリッジ（稼働中）
         ├── Cargo.toml
         ├── build.rs
         ├── package.json
@@ -94,7 +94,7 @@ null--nostr/
 ブラウザ (TimelineTab.js)
   ├─ WebSocket → リレー   (イベント受信・投稿はそのまま維持)
   │      ↓ 受信したイベントを
-  └─ POST /api/ingest    → Rust → nostrdb に保存（バッファリング中）
+  └─ POST /api/ingest    → Rust → nostrdb に保存（Step 2.5 で完全稼働）
 
   └─ GET /api/feed       → Rust → nostrdb からランキング済みフィード返却
 ```
@@ -107,25 +107,62 @@ null--nostr/
   - `GET /api/feed?pubkey=xxx&limit=50`
   - Rust `getRecommendedFeed` → `queryLocal` で完全イベント返却
   - エンジン未起動時は `{ posts: [], source: 'fallback' }` を返す
-- `app/api/ingest/route.js` — イベント蓄積 API
+- `app/api/ingest/route.js` — イベント蓄積 API（完全稼働）
   - `POST /api/ingest` with `{ events: [...] }`
-  - NIP-01 バリデーション + サーバーサイドバッファ（最大500件）
-  - nostrdb 直接書き込みは `store_event` napi メソッド追加後に対応
+  - NIP-01 バリデーション + `engine.storeEvent()` で nostrdb に直接書き込み
+  - エンジン未起動時は受け付けのみ（graceful degradation）
 - `components/TimelineTab.js` の修正
   - `loadTimelineFull()` と `loadTimeline()` で `/api/feed` を最初に試行
   - Rust フィード成功時: ランキング済みポストを使用
   - 失敗時: 既存 JS アルゴリズムにフォールバック（変更なし）
 
+### Step 2.5: nostrdb 直接書き込み ✅ 実装済み
+
+**全コンポーネントが稼働中。**
+
+実装の流れ：
+```
+ブラウザ (JS fetchEvents) → リレーからイベント受信
+  ├─ 画面に表示（従来通り）
+  └─ POST /api/ingest     ← ingestToNostrdb() (fire-and-forget)
+        ↓
+      engine.storeEvent(eventJson)
+        ↓
+      nostrdb に永続化
+        ↓
+      次回 /api/feed で Rust がランキングに使用
+```
+
+実装済みコンポーネント：
+- `nurunuru-core/src/engine.rs` — `store_event(event: Event) -> Result<bool>`
+  - `database().save_event()` で nostrdb に直接書き込み
+  - 重複・置き換えイベントの場合は `false` を返す
+- `nurunuru-napi/src/lib.rs` — `store_event(event_json: String) -> Result<bool>` napi ラッパー
+- `app/api/ingest/route.js` — `engine.storeEvent()` 呼び出し、accepted/stored/duplicate を返却
+- `components/TimelineTab.js` — `ingestToNostrdb()` ヘルパー（100件チャンク・fire-and-forget）
+  - `loadTimelineQuick`: 初期表示ノートを ingest
+  - `loadTimelineFull` JS fallback: ノート・リポスト・2次ネットワーク投稿・リアクションを ingest
+  - `loadFollowingTimeline`: フォロー中フィードを ingest
+  - `loadTimeline`（手動更新）: global/following 両モードで ingest
+
+`POST /api/ingest` レスポンス例：
+```json
+{
+  "accepted": 10,
+  "stored": 8,
+  "duplicate": 2,
+  "invalid": 0,
+  "total": 10,
+  "engineAvailable": true
+}
+```
+
 ### 未実装・次のステップ 🔲
-
-**Step 2.5: nostrdb 直接書き込み（ingest 完全化）**
-
-`nurunuru-napi` に `store_event(event_json)` メソッドを追加し、
-`/api/ingest` からブラウザ受信イベントを直接 nostrdb に保存する。
 
 **Step 3: プロフィールキャッシュ移行**
 
 `hooks/useProfile.js` の `fetchProfileCached()` を `/api/profile/[pubkey]` 経由に。
+Rust `engine.fetchProfile(pubkey)` → nostrdb キャッシュ → フォールバックでリレー取得。
 
 **Step 4: リレー接続移行**
 
@@ -189,6 +226,16 @@ export async function GET(req) {
 }
 ```
 
+### ingest API (Step 2.5〜)
+
+```js
+// app/api/ingest/route.js で実際に使用中
+import { getOrCreateEngine } from '@/lib/rust-engine-manager'
+
+// engine.storeEvent(eventJson) → nostrdb に直接書き込み
+const isNew = await engine.storeEvent(JSON.stringify(event))
+```
+
 ## デフォルトリレー（日本）
 
 ```
@@ -201,5 +248,5 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/continue-from-claude-md-mdAJa`
+- 作業ブランチ: `claude/nostrdb-direct-write-DNBlp`
 - マージ先: `master`
