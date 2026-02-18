@@ -1,11 +1,17 @@
 [phases.setup]
+# Rust コンパイラと、Nostr（OpenSSL等）のビルドに必要なツールをすべて入れます
 nixPkgs = ["nodePackages.npm", "gcc", "rustc", "cargo", "openssl", "pkg-config"]
 
 [phases.build]
-# Rust のビルドを先に行い、その後に Next.js をビルドします
+# 1. まず Rust エンジンをビルドして .node ファイルを生成
+# 2. その後 Next.js をビルド
 cmds = [
     "cd rust-engine/nurunuru-napi && cargo build --release",
-    "cp rust-engine/target/release/libnurunuru_napi.so rust-engine/nurunuru-napi/nurunuru-napi.node || cp rust-engine/target/release/nurunuru_napi.node rust-engine/nurunuru-napi/nurunuru-napi.node",
+    "mkdir -p rust-engine/nurunuru-napi",
+    "cp target/release/libnurunuru_napi.so rust-engine/nurunuru-napi/nurunuru-napi.node || cp target/release/nurunuru_napi.node rust-engine/nurunuru-napi/nurunuru-napi.node",
     "npm install",
     "npm run build"
 ]
+
+[start]
+cmd = "npm run start"
