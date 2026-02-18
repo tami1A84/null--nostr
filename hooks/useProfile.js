@@ -15,6 +15,99 @@ import { getCachedProfile, setCachedProfile } from '../lib/cache'
 const pendingProfileRequests = new Map()
 
 /**
+ * Fetch a single profile via the Rust-backed /api/profile/[pubkey] endpoint.
+ * Falls back to the existing JS fetchProfileCached if the API is unavailable.
+ *
+ * @param {string} pubkey - 64-char hex public key
+ * @param {boolean} forceRefresh - Skip client-side localStorage cache
+ * @returns {Promise<Object|null>} Profile object or null
+ */
+async function fetchProfileViaApi(pubkey, forceRefresh = false) {
+  // Check client-side cache first (unless force refresh)
+  if (!forceRefresh) {
+    const cached = getCachedProfile(pubkey)
+    if (cached) return cached
+  }
+
+  try {
+    const res = await fetch(`/api/profile/${pubkey}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+    const { profile, source } = await res.json()
+
+    if (source === 'fallback' || !profile) {
+      // Rust engine unavailable — fall back to JS WebSocket fetch
+      return fetchProfileCached(pubkey, forceRefresh)
+    }
+
+    // Cache the result in localStorage for future renders
+    setCachedProfile(pubkey, profile)
+    return profile
+  } catch {
+    // Network error or unexpected response — fall back to JS
+    return fetchProfileCached(pubkey, forceRefresh)
+  }
+}
+
+/**
+ * Batch-fetch profiles via the Rust-backed /api/profile/batch endpoint.
+ * Falls back to the existing JS fetchProfilesBatch if the API is unavailable.
+ *
+ * @param {string[]} pubkeys - Array of 64-char hex public keys
+ * @param {boolean} forceRefresh - Skip client-side localStorage cache
+ * @returns {Promise<Object>} Map of { [pubkey]: profile }
+ */
+async function fetchProfilesBatchViaApi(pubkeys, forceRefresh = false) {
+  if (!pubkeys || pubkeys.length === 0) return {}
+
+  // Separate cached vs uncached pubkeys
+  const uncached = forceRefresh ? pubkeys : pubkeys.filter(pk => !getCachedProfile(pk))
+
+  // All cached — return from localStorage
+  if (uncached.length === 0) {
+    const result = {}
+    for (const pk of pubkeys) {
+      const profile = getCachedProfile(pk)
+      if (profile) result[pk] = profile
+    }
+    return result
+  }
+
+  try {
+    const res = await fetch('/api/profile/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pubkeys: uncached }),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+    const { profiles, source } = await res.json()
+
+    if (source === 'fallback' || !profiles) {
+      // Rust engine unavailable — fall back to JS WebSocket fetch
+      return fetchProfilesBatch(pubkeys, forceRefresh)
+    }
+
+    // Cache newly fetched profiles
+    for (const [pk, profile] of Object.entries(profiles)) {
+      setCachedProfile(pk, profile)
+    }
+
+    // Merge with already-cached profiles
+    const result = {}
+    for (const pk of pubkeys) {
+      const fromCache = getCachedProfile(pk)
+      if (fromCache) result[pk] = fromCache
+      else if (profiles[pk]) result[pk] = profiles[pk]
+    }
+    return result
+  } catch {
+    // Network error or unexpected response — fall back to JS
+    return fetchProfilesBatch(pubkeys, forceRefresh)
+  }
+}
+
+/**
  * Custom hook for fetching a single profile with caching
  *
  * @param {string} pubkey - Public key to fetch profile for
@@ -65,7 +158,7 @@ export function useProfile(pubkey, options = {}) {
     setLoading(true)
     setError(null)
 
-    const promise = fetchProfileCached(pubkey, forceRefresh)
+    const promise = fetchProfileViaApi(pubkey, forceRefresh)
     pendingProfileRequests.set(pubkey, promise)
 
     try {
@@ -94,7 +187,7 @@ export function useProfile(pubkey, options = {}) {
   }, [fetchProfile])
 
   const refetch = useCallback(() => {
-    return fetchProfileCached(pubkey, true).then(result => {
+    return fetchProfileViaApi(pubkey, true).then(result => {
       if (isMountedRef.current) {
         setProfile(result)
       }
@@ -167,7 +260,7 @@ export function useProfiles(pubkeys, options = {}) {
     setError(null)
 
     try {
-      const fetched = await fetchProfilesBatch(uncached, forceRefresh)
+      const fetched = await fetchProfilesBatchViaApi(uncached, forceRefresh)
       if (isMountedRef.current) {
         setProfiles(prev => ({
           ...prev,
@@ -199,7 +292,7 @@ export function useProfiles(pubkeys, options = {}) {
   }, [fetchProfiles, pubkeys])
 
   const refetch = useCallback(() => {
-    return fetchProfilesBatch(pubkeys, true).then(result => {
+    return fetchProfilesBatchViaApi(pubkeys, true).then(result => {
       if (isMountedRef.current) {
         setProfiles(result)
       }
