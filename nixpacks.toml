@@ -8,7 +8,7 @@ nixPkgs = ["nodePackages.npm", "gcc", "rustc", "cargo", "openssl", "pkg-config"]
 cmds = [
     "cd rust-engine/nurunuru-napi && cargo build --release",
     "mkdir -p rust-engine/nurunuru-napi",
-    "cp target/release/libnurunuru_napi.so rust-engine/nurunuru-napi/nurunuru-napi.node || cp target/release/nurunuru_napi.node rust-engine/nurunuru-napi/nurunuru-napi.node",
+    "cp ../../target/release/libnurunuru_napi.so ./nurunuru-napi.node || cp ../../target/release/nurunuru_napi.node ./nurunuru-napi.node",
     "npm install",
     "npm run build"
 ]
