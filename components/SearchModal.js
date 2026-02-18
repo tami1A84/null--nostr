@@ -233,8 +233,23 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
         // NIP-05 resolution failed, fall through to text search
       }
 
-      // 4. Default: Full-text search using NIP-50
-      const notes = await searchNotes(searchQuery, { limit: 50 })
+      // 4. Default: Full-text search — try Rust engine API first, fall back to JS
+      let notes = null
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&limit=50`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.results && data.source !== 'fallback') {
+            notes = data.results
+          }
+        }
+      } catch (e) {
+        // API unavailable, fall back to JS below
+      }
+
+      if (!notes) {
+        notes = await searchNotes(searchQuery, { limit: 50 })
+      }
       setResults(notes)
 
       // Fetch profiles for results

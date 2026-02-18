@@ -41,6 +41,8 @@ null--nostr/
 │       ├── social/
 │       │   ├── follows/    # フォローリスト取得・更新 API ← Step 6
 │       │   └── mutes/      # ミュートリスト取得・更新 API ← Step 6
+│       ├── dm/             # DM 取得・発行 API ← Step 7
+│       ├── search/         # NIP-50 検索 API ← Step 7
 │       └── rust-status/    # Rust エンジン状態確認 API
 ├── components/             # React コンポーネント
 ├── lib/                    # JS ビジネスロジック（移行元）
@@ -398,6 +400,45 @@ const mutes  = await getMuteList(pubkey)     // string[] | null (pubkeys のみ)
 // → /api/publish に委譲し全リレーに broadcast
 ```
 
+### DM API (Step 7〜)
+
+```js
+// app/api/dm/route.js で実際に使用中
+import { getOrCreateEngine, loginUser } from '@/lib/rust-engine-manager'
+
+// DM (gift wrap) 取得: nostrdb → リレーの2段階
+// ⚠️ 返却されるのは暗号化された gift wrap (kind 1059) のまま
+// 復号 (seal→rumor) はブラウザで decryptNip44() を使って実施
+const localFilter = JSON.stringify({ kinds: [1059], '#p': [pubkey], limit: 50 })
+const localEvents = await engine.queryLocal(localFilter)
+// 未キャッシュ時 (loginUser で pubkey コンテキストを設定してから fetch):
+await engine.login(pubkey)
+const dmJsons = await engine.fetchDms(since, limit) // → string[] (event JSON)
+
+// rust-engine-manager.js ヘルパー経由でも使用可能
+import { fetchDms, searchEvents } from '@/lib/rust-engine-manager'
+const giftWraps = await fetchDms(pubkey, since, 50)  // NostrEvent[] | null
+
+// DM gift wrap 発行: ブラウザで署名 → POST /api/dm → /api/publish 委譲
+// POST /api/dm { event: signedKind1059GiftWrap }
+// → /api/publish に委譲し全リレーに broadcast
+```
+
+### search API (Step 7〜)
+
+```js
+// app/api/search/route.js で実際に使用中
+import { getOrCreateEngine } from '@/lib/rust-engine-manager'
+
+// NIP-50 全文検索 (search.nos.today 経由)
+const eventJsons = await engine.search(query, limit) // → string[] (event JSON)
+// 結果は自動的に nostrdb にキャッシュ保存される
+
+// rust-engine-manager.js ヘルパー経由でも使用可能
+import { searchEvents } from '@/lib/rust-engine-manager'
+const results = await searchEvents('日本語クエリ', 50) // NostrEvent[] | null
+```
+
 ## デフォルトリレー（日本）
 
 ```
@@ -410,7 +451,7 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/follow-mute-list-api-WyXHj`
+- 作業ブランチ: `claude/complete-dm-api-THeRA`
 - マージ先: `master`
 
 ---
@@ -419,7 +460,7 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ### 何が達成されたか
 
-Step 1〜6 で「Rust エンジンのキャッシュ・ランキング・リレー管理・ソーシャルリスト管理層」が完成した。
+Step 1〜7 で「Rust エンジンのキャッシュ・ランキング・リレー管理・ソーシャルリスト管理・DM取得・NIP-50検索層」が完成した。
 ただし「JS からの完全移行」ではなく **「Rust が最適化レイヤーとして追加された」** が正確な表現。
 
 | 機能 | 現状 |
@@ -432,8 +473,10 @@ Step 1〜6 で「Rust エンジンのキャッシュ・ランキング・リレ�
 | リアルタイム購読 | ❌ JS (subscribeManaged → nostr-tools SimplePool) |
 | フォロー/ミュートリスト取得 | ✅ Rust (/api/social/follows, /api/social/mutes) |
 | フォロー/ミュートリスト編集 | ✅ Rust (/api/social/* → /api/publish 委譲) |
-| DM 暗号化・送信 | ❌ JS |
-| 検索 (NIP-50) | ❌ JS |
+| DM 取得 (kind 1059) | ✅ Rust (/api/dm → engine.fetchDms / nostrdb) |
+| DM 暗号化・復号 | ❌ JS (NIP-44 — **移行不可**・ブラウザ責務) |
+| DM 送信 | ✅ Rust (/api/dm POST → /api/publish 委譲) |
+| 検索 (NIP-50) | ✅ Rust (/api/search → engine.search) |
 | 画像アップロード | ❌ JS (外部 API — 移行不要) |
 | イベント署名 | ❌ JS (NIP-07/Amber/NIP-46 — **移行不可**・ブラウザ責務) |
 
@@ -545,22 +588,65 @@ Step 1〜6 で「Rust エンジンのキャッシュ・ランキング・リレ�
 }
 ```
 
-### Step 7: DM 取得・検索の API 化 🔲
+### Step 7: DM 取得・検索の API 化 ✅ 実装済み
 
-**目標**: DM 取得 (kind 1059) と NIP-50 検索を Rust エンジン経由に。
-DM 送信は署名が必要なため Step 5 の `/api/publish` + ギフトラップを活用。
-
+アーキテクチャ：
 ```
-GET  /api/dm?since=xxx&limit=50      → engine.fetchDms() → nostrdb
-GET  /api/search?q=xxx&limit=20      → engine.search() → NIP-50 リレー
-POST /api/publish                    → DM の gift wrap イベント発行に再利用
+ブラウザ (components/TalkTab.js)
+  └─ GET  /api/dm?pubkey=xxx&limit=50   → nostrdb (kind 1059) → relay fetch
+        ↓ 返却: 生の gift wrap イベント群
+        ↓ (decryptNip44 による復号はブラウザで実施 — 秘密鍵はサーバーに渡さない)
+
+ブラウザ (components/SearchModal.js)
+  └─ GET  /api/search?q=xxx&limit=50    → engine.search() → NIP-50 リレー
+        ↓ 返却: マッチするイベント群 (nostrdb にも自動保存)
+
+ブラウザ → POST /api/dm { event: kind1059 }
+  └─ /api/publish に委譲 → Rust が全リレーに broadcast
 ```
 
-実装予定ファイル：
-- `app/api/dm/route.js`
-- `app/api/search/route.js`
+実装済みファイル：
+- `app/api/dm/route.js` — DM 取得・発行
+  - `GET /api/dm?pubkey=xxx&since=xxx&limit=50` — nostrdb → relay の2段階取得
+  - `POST /api/dm { event: signedKind1059 }` — gift wrap を `/api/publish` に委譲
+  - レスポンス: `{ events: NostrEvent[], source: 'nostrdb' | 'rust' | 'fallback' }`
+- `app/api/search/route.js` — NIP-50 全文検索
+  - `GET /api/search?q=xxx&limit=50` — engine.search() → search.nos.today
+  - 返却イベントは nostrdb にバックグラウンド保存
+  - レスポンス: `{ results: NostrEvent[], source: 'rust' | 'fallback' }`
+- `lib/rust-engine-manager.js` — DM/検索ヘルパー追加
+  - `fetchDms(pubkey, since, limit)` — nostrdb → relay の2段階
+  - `searchEvents(query, limit)` — NIP-50 検索
 - `components/TalkTab.js` — DM 取得を API 経由に
+  - `loadConversations()`: `/api/dm?pubkey=xxx&limit=50` を最初に試行
+  - `openChat()`: `/api/dm?pubkey=xxx&limit=200` を最初に試行
+  - 失敗時: 既存 `fetchEvents(kind 1059)` JS フォールバック維持
 - `components/SearchModal.js` — 検索を API 経由に
+  - `handleSearch()` テキスト検索: `/api/search?q=xxx` を最初に試行
+  - 失敗時: 既存 `searchNotes()` JS フォールバック維持
+
+**重要な設計方針**: DM の復号 (seal + rumor 2段階 NIP-44) はブラウザ責務のまま。
+サーバーは暗号化された gift wrap (kind 1059) を返すだけ。秘密鍵はサーバーに渡さない。
+
+`GET /api/dm` レスポンス例：
+```json
+{
+  "events": [
+    { "id": "abc...", "kind": 1059, "pubkey": "...", "content": "...(encrypted)...", ... }
+  ],
+  "source": "nostrdb"
+}
+```
+
+`GET /api/search` レスポンス例：
+```json
+{
+  "results": [
+    { "id": "abc...", "kind": 1, "content": "検索ヒットしたノート", ... }
+  ],
+  "source": "rust"
+}
+```
 
 ### Step 8: リアルタイム配信の Rust SSE プロキシ化 🔲
 
