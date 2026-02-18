@@ -360,6 +360,24 @@ impl NuruNuruNapi {
             .collect()
     }
 
+    // ─── Local DB Write ───────────────────────────────────────
+
+    /// Store a raw Nostr event directly into nostrdb.
+    ///
+    /// `event_json` — full NIP-01 event as a JSON string (must include `sig`).
+    ///
+    /// Returns `true` if the event was newly saved, `false` if it was a
+    /// duplicate or superseded by a newer replaceable event.
+    ///
+    /// Called from `/api/ingest` to persist browser-received relay events
+    /// so the recommendation engine can rank them without a relay round-trip.
+    #[napi]
+    pub async fn store_event(&self, event_json: String) -> Result<bool> {
+        let event: Event = Event::from_json(&event_json).map_err(to_napi_err)?;
+        let engine = self.engine.clone();
+        engine.store_event(event).await.map_err(to_napi_err)
+    }
+
     // ─── Local DB Query ───────────────────────────────────────
 
     /// Query the local nostrdb cache without hitting relays.

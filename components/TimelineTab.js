@@ -55,6 +55,23 @@ import SearchModal from './SearchModal'
 import EmojiPicker from './EmojiPicker'
 import { NOSTR_KINDS } from '@/lib/constants'
 
+/**
+ * Fire-and-forget: send events to /api/ingest so they are stored in nostrdb.
+ * Splits into chunks of 100 (API limit). Never throws — errors are suppressed.
+ */
+function ingestToNostrdb(events) {
+  if (!events || events.length === 0) return
+  const CHUNK = 100
+  for (let i = 0; i < events.length; i += CHUNK) {
+    const chunk = events.slice(i, i + CHUNK)
+    fetch('/api/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events: chunk }),
+    }).catch(() => {})
+  }
+}
+
 // Extract hashtags from content (NIP-01)
 function extractHashtags(content) {
   if (!content) return []
@@ -508,9 +525,11 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           // Still no notes - might be connection issue
           setLoadError(true)
         } else {
+          ingestToNostrdb(expandedNotes)
           setGlobalPosts(expandedNotes.sort((a, b) => b.created_at - a.created_at))
         }
       } else {
+        ingestToNostrdb(notes)
         const sortedPosts = notes.sort((a, b) => b.created_at - a.created_at)
         setGlobalPosts(sortedPosts)
       }
@@ -632,6 +651,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         fetchEvents(repostFilter, readRelays)
       ])
 
+      // Ingest raw events into nostrdb for future Rust feed cycles
+      ingestToNostrdb([...notes, ...reposts])
+
       // Parse reposts
       const repostData = []
       const originalAuthors = new Set()
@@ -676,6 +698,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                 secondDegreeArray,
                 { timeout: 12000 }
               )
+              ingestToNostrdb(secondDegreePosts)
               // Add 2nd-degree posts to candidates
               allPosts = [...allPosts, ...secondDegreePosts]
             } catch (e) {
@@ -749,11 +772,14 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           fetchEvents({ kinds: [7], '#e': eventIds, limit: 500 }, readRelays),
           fetchEvents({ kinds: [6], authors: [pubkey], limit: 100 }, readRelays)
         ])
-        
+
+        // Ingest reaction/repost events for engagement scoring in nostrdb
+        ingestToNostrdb([...reactionEvents, ...myRepostEvents])
+
         const reactionCounts = {}
         const myReactions = new Set()
         const myReactionIds = {}
-        
+
         for (const event of reactionEvents) {
           const targetId = event.tags.find(t => t[0] === 'e')?.[1]
           if (targetId) {
@@ -810,6 +836,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         fetchEvents(noteFilter, readRelays),
         fetchEvents(repostFilter, readRelays)
       ])
+
+      // Ingest following feed events into nostrdb
+      ingestToNostrdb([...notes, ...reposts])
 
       const repostData = []
       const originalAuthors = new Set()
@@ -886,6 +915,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM], authors: followList, since: oneHourAgo, limit: 100 }, readRelays),
           fetchEvents({ kinds: [6], authors: followList, since: oneHourAgo, limit: 50 }, readRelays)
         ])
+
+        ingestToNostrdb([...notes, ...reposts])
 
         const repostData = []
         for (const repost of reposts) {
@@ -1014,6 +1045,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         setLoadError(true)
       }
 
+      ingestToNostrdb([...notes, ...reposts])
+
       const repostData = []
       const originalAuthors = new Set()
 
@@ -1052,6 +1085,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
               secondDegreeArray,
               { timeout: 12000 }
             )
+            ingestToNostrdb(secondDegreePosts)
             allPosts = [...allPosts, ...secondDegreePosts]
           }
         } catch (e) {
@@ -1113,11 +1147,13 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           fetchEvents({ kinds: [7], '#e': eventIds, limit: 500 }, readRelays),
           fetchEvents({ kinds: [6], authors: [pubkey], limit: 100 }, readRelays)
         ])
-        
+
+        ingestToNostrdb([...reactionEvents, ...myRepostEvents])
+
         const reactionCounts = {}
         const myReactions = new Set()
         const myReactionIds = {}
-        
+
         for (const event of reactionEvents) {
           const targetId = event.tags.find(t => t[0] === 'e')?.[1]
           if (targetId) {

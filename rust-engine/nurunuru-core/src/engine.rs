@@ -758,4 +758,21 @@ impl NuruNuruEngine {
             .map_err(|e| NuruNuruError::DatabaseError(e.to_string()))?;
         Ok(events.into_iter().collect())
     }
+
+    /// Store a raw event directly into nostrdb (bypasses relay network).
+    ///
+    /// Used by `/api/ingest` to persist browser-received events so they are
+    /// available to the recommendation engine without waiting for relay fetch.
+    ///
+    /// Returns `true` if the event was newly saved, `false` if it was a
+    /// duplicate or superseded by a newer replaceable event.
+    pub async fn store_event(&self, event: Event) -> Result<bool> {
+        let status = self
+            .client
+            .database()
+            .save_event(&event)
+            .await
+            .map_err(|e| NuruNuruError::DatabaseError(e.to_string()))?;
+        Ok(status.is_success())
+    }
 }
