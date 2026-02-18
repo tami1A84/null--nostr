@@ -21,8 +21,8 @@
 //! | `fetchEngagementData`         | `fetch_engagement_data`              |
 //! | `createGiftWrap`              | handled by `client.send_private_msg` |
 
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use nostr::nips::nip09::EventDeletionRequest;
@@ -30,7 +30,7 @@ use nostr::nips::nip25::ReactionTarget;
 use nostr::prelude::*;
 use nostr_ndb::NdbDatabase;
 use nostr_sdk::prelude::*;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::config::NuruNuruConfig;
 use crate::error::{NuruNuruError, Result};
@@ -38,6 +38,13 @@ use crate::filters;
 use crate::recommendation::RecommendationEngine;
 use crate::relay;
 use crate::types::*;
+
+/// Shared buffer type for SSE subscriptions.
+///
+/// `Arc<Mutex<VecDeque<String>>>` — each active `/api/stream` subscription
+/// gets one buffer. The background task holds a `Weak` reference; when the
+/// strong reference is dropped (via `unsubscribe_stream`) the task exits.
+type SubBuffer = Arc<Mutex<VecDeque<String>>>;
 
 /// The main NuruNuru engine.
 ///
@@ -56,6 +63,9 @@ pub struct NuruNuruEngine {
     engagement_history: RwLock<EngagementHistory>,
     not_interested_posts: RwLock<HashSet<String>>,
     author_scores: RwLock<HashMap<String, f64>>,
+
+    // SSE streaming subscriptions: sub_id → event buffer
+    subscription_buffers: Arc<Mutex<HashMap<String, SubBuffer>>>,
 }
 
 impl NuruNuruEngine {
@@ -103,6 +113,7 @@ impl NuruNuruEngine {
             engagement_history: RwLock::new(EngagementHistory::default()),
             not_interested_posts: RwLock::new(HashSet::new()),
             author_scores: RwLock::new(HashMap::new()),
+            subscription_buffers: Arc::new(Mutex::new(HashMap::new())),
         });
 
         Ok(engine)
@@ -832,5 +843,117 @@ impl NuruNuruEngine {
             .await
             .map_err(|e| NuruNuruError::DatabaseError(e.to_string()))?;
         Ok(status.is_success())
+    }
+
+    // ─── SSE Streaming (Step 8) ─────────────────────────────────
+
+    /// Start a persistent relay subscription and return its ID.
+    ///
+    /// Events matching `filter` are buffered in memory.  Call `poll_subscription`
+    /// to drain the buffer, and `unsubscribe_stream` to cancel.
+    ///
+    /// Internally spawns a background tokio task that listens to the nostr-sdk
+    /// notification broadcast and appends matching events to a shared buffer.
+    /// The task exits automatically when `unsubscribe_stream` drops the buffer.
+    pub async fn subscribe_stream(&self, filter: Filter) -> Result<String> {
+        // Acquire notification receiver BEFORE subscribing so we don't miss
+        // events that arrive immediately after the REQ is sent.
+        let mut notif_rx = self.client.notifications();
+
+        // Subscribe — nostr-sdk sends REQ to all connected relays.
+        let output = self
+            .client
+            .subscribe(filter, None)
+            .await
+            .map_err(|e| NuruNuruError::RelayError(e.to_string()))?;
+        let sub_id = output.val.to_string();
+
+        // Create event buffer and register it in the map.
+        let buf: SubBuffer = Arc::new(Mutex::new(VecDeque::new()));
+        let buf_weak: Weak<Mutex<VecDeque<String>>> = Arc::downgrade(&buf);
+        {
+            let mut map = self.subscription_buffers.lock().await;
+            map.insert(sub_id.clone(), buf);
+        }
+
+        let sub_id_clone = sub_id.clone();
+
+        // Background task: forward matching events into the buffer.
+        // Uses a Weak reference — when the strong Arc is dropped by
+        // `unsubscribe_stream`, `upgrade()` returns None and the task exits.
+        tokio::spawn(async move {
+            loop {
+                match notif_rx.recv().await {
+                    Ok(notification) => {
+                        if let RelayPoolNotification::Event {
+                            subscription_id,
+                            event,
+                            ..
+                        } = notification
+                        {
+                            if subscription_id.to_string() == sub_id_clone {
+                                if let Some(buf) = buf_weak.upgrade() {
+                                    if let Ok(json) = serde_json::to_string(&*event) {
+                                        let mut guard = buf.lock().await;
+                                        if guard.len() < 2000 {
+                                            guard.push_back(json);
+                                        }
+                                    }
+                                } else {
+                                    // Buffer was dropped — subscription cancelled.
+                                    break;
+                                }
+                            }
+                        } else if let RelayPoolNotification::Shutdown = notification {
+                            break;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!(
+                            "[subscribe_stream] Missed {} notifications for sub {}",
+                            n,
+                            sub_id_clone
+                        );
+                        // Continue — don't break on lag.
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        });
+
+        Ok(sub_id)
+    }
+
+    /// Drain up to `max_count` buffered events from a streaming subscription.
+    ///
+    /// Returns event JSON strings (empty vec when the buffer is empty or the
+    /// subscription ID is unknown).
+    pub async fn poll_subscription(&self, sub_id: &str, max_count: usize) -> Vec<String> {
+        let map = self.subscription_buffers.lock().await;
+        if let Some(buf) = map.get(sub_id) {
+            let buf = buf.clone(); // clone Arc so we can drop the map lock
+            drop(map);
+            let mut guard = buf.lock().await;
+            let count = max_count.min(guard.len());
+            guard.drain(..count).collect()
+        } else {
+            vec![]
+        }
+    }
+
+    /// Cancel a streaming subscription and clean up all resources.
+    ///
+    /// Drops the buffer (background task detects this via `Weak::upgrade` →
+    /// `None` and exits on the next iteration), then sends CLOSE to relays.
+    pub async fn unsubscribe_stream(&self, sub_id: &str) -> Result<()> {
+        {
+            let mut map = self.subscription_buffers.lock().await;
+            map.remove(sub_id); // drops Arc → background task will exit
+        }
+        // Send CLOSE to relays.
+        self.client
+            .unsubscribe(&SubscriptionId::new(sub_id))
+            .await;
+        Ok(())
     }
 }
