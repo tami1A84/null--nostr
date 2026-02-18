@@ -1,5 +1,11 @@
 [phases.setup]
-nixPkgs = ["nodePackages.npm", "python3", "gcc", "rustc", "cargo", "openssl"]
+nixPkgs = ["nodePackages.npm", "gcc", "rustc", "cargo", "openssl", "pkg-config"]
 
 [phases.build]
-cmds = ["npm install", "cargo build --release", "npm run build"]
+# Rust のビルドを先に行い、その後に Next.js をビルドします
+cmds = [
+    "cd rust-engine/nurunuru-napi && cargo build --release",
+    "cp rust-engine/target/release/libnurunuru_napi.so rust-engine/nurunuru-napi/nurunuru-napi.node || cp rust-engine/target/release/nurunuru_napi.node rust-engine/nurunuru-napi/nurunuru-napi.node",
+    "npm install",
+    "npm run build"
+]
