@@ -1,16 +1,18 @@
 [phases.setup]
-# rustc と cargo を削除し、代わりにより新しいツールを入れる設定を試みます
-nixPkgs = ["nodePackages.npm", "gcc", "openssl", "pkg-config"]
-nixOverlays = ["https://github.com/oxalica/rust-overlay/archive/master.tar.gz"]
+# 必要なパッケージを揃えます。cargoとrustcをここに戻します。
+nixPkgs = ["nodePackages.npm", "gcc", "rustc", "cargo", "openssl", "pkg-config"]
 
 [phases.build]
-# ビルド前に Rust の最新版(stable)をインストールするコマンドを追加
+# ビルドコマンドを整理します。
+# 1. まず Rust のツールチェーンを最新(stable)に更新してからビルドします
 cmds = [
-    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
-    ". $HOME/.cargo/env",
+    "rustup default stable || true", 
     "cd rust-engine/nurunuru-napi && cargo build --release",
     "mkdir -p rust-engine/nurunuru-napi",
     "cp ../../target/release/libnurunuru_napi.so ./nurunuru-napi.node || cp ../../target/release/nurunuru_napi.node ./nurunuru-napi.node",
     "npm install",
     "npm run build"
 ]
+
+[start]
+cmd = "npm run start"
