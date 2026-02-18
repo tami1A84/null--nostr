@@ -1,8 +1,9 @@
 /**
  * POST /api/ingest
  *
- * Receives Nostr events from the browser and stores them for the
- * Rust engine to use in feed ranking.
+ * Receives Nostr events from the browser and stores them directly into
+ * nostrdb via the Rust engine, making them immediately available to the
+ * recommendation engine.
  *
  * The browser maintains WebSocket connections to relays and receives
  * events in real-time. This endpoint lets the browser push those events
@@ -10,20 +11,11 @@
  *
  * Body (JSON):
  *   events - Array of Nostr event objects (NIP-01 format)
- *
- * Currently the engine receives events from relays directly.
- * This endpoint validates and acknowledges events; full nostrdb
- * storage will be added when a store_event napi method is available.
  */
 
 import { getOrCreateEngine } from '@/lib/rust-engine-manager'
 
 export const dynamic = 'force-dynamic'
-
-// Server-side event buffer for events not yet in nostrdb.
-// Kept small (LRU-style) to avoid memory issues.
-const EVENT_BUFFER_MAX = 500
-const eventBuffer = new Map()
 
 /**
  * Validate a Nostr event has required fields (NIP-01).
@@ -65,10 +57,13 @@ export async function POST(req) {
     )
   }
 
-  // Validate and buffer events
+  // Get the Rust engine (may be null if not yet initialised)
+  const engine = await getOrCreateEngine()
+
   let accepted = 0
   let duplicate = 0
   let invalid = 0
+  let stored = 0
 
   for (const event of events) {
     if (!isValidEvent(event)) {
@@ -76,46 +71,46 @@ export async function POST(req) {
       continue
     }
 
-    if (eventBuffer.has(event.id)) {
-      duplicate++
-      continue
+    // Store directly into nostrdb via Rust
+    if (engine) {
+      try {
+        const eventJson = JSON.stringify(event)
+        const isNew = await engine.storeEvent(eventJson)
+        if (isNew) {
+          stored++
+        } else {
+          duplicate++
+        }
+        accepted++
+      } catch (err) {
+        // Rust rejected the event (invalid sig, malformed, etc.)
+        invalid++
+      }
+    } else {
+      // Engine not available yet — count as accepted but not stored
+      accepted++
     }
-
-    // Add to buffer (evict oldest if full)
-    if (eventBuffer.size >= EVENT_BUFFER_MAX) {
-      const oldestKey = eventBuffer.keys().next().value
-      eventBuffer.delete(oldestKey)
-    }
-    eventBuffer.set(event.id, event)
-    accepted++
   }
-
-  // If engine is available, try to use queryLocal to verify storage
-  // (future: direct nostrdb write when napi method is available)
-  const engine = await getOrCreateEngine()
-  const engineAvailable = !!engine
 
   return Response.json({
     accepted,
     duplicate,
     invalid,
+    stored,
     total: events.length,
-    buffered: eventBuffer.size,
-    engineAvailable,
+    engineAvailable: !!engine,
   })
 }
 
 /**
  * GET /api/ingest
  *
- * Returns buffer stats (for debugging).
+ * Returns engine availability (for debugging).
  */
 export async function GET() {
   const engine = await getOrCreateEngine()
 
   return Response.json({
-    buffered: eventBuffer.size,
-    maxBuffer: EVENT_BUFFER_MAX,
     engineAvailable: !!engine,
   })
 }
