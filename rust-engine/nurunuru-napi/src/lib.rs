@@ -218,6 +218,18 @@ impl NuruNuruNapi {
         engine.fetch_follow_list(pk).await.map_err(to_napi_err)
     }
 
+    /// Fetch mute list (kind 10000, NIP-51). Returns pubkey hex strings.
+    ///
+    /// Note: Only returns muted pubkeys (`p` tags). For the full mute list
+    /// structure (eventIds, hashtags, words), use `queryLocal` with kind 10000
+    /// to inspect all tag types from the cached event.
+    #[napi]
+    pub async fn fetch_mute_list(&self, pubkey_hex: String) -> Result<Vec<String>> {
+        let pk = PublicKey::from_hex(&pubkey_hex).map_err(to_napi_err)?;
+        let engine = self.engine.clone();
+        engine.fetch_mute_list(pk).await.map_err(to_napi_err)
+    }
+
     /// Follow a user (publishes updated kind 3).
     #[napi]
     pub async fn follow_user(&self, target_pubkey_hex: String) -> Result<()> {
