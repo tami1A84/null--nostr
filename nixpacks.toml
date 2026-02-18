@@ -1,17 +1,16 @@
 [phases.setup]
-# Rust コンパイラと、Nostr（OpenSSL等）のビルドに必要なツールをすべて入れます
-nixPkgs = ["nodePackages.npm", "gcc", "rustc", "cargo", "openssl", "pkg-config"]
+# rustc と cargo を削除し、代わりにより新しいツールを入れる設定を試みます
+nixPkgs = ["nodePackages.npm", "gcc", "openssl", "pkg-config"]
+nixOverlays = ["https://github.com/oxalica/rust-overlay/archive/master.tar.gz"]
 
 [phases.build]
-# 1. まず Rust エンジンをビルドして .node ファイルを生成
-# 2. その後 Next.js をビルド
+# ビルド前に Rust の最新版(stable)をインストールするコマンドを追加
 cmds = [
+    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
+    ". $HOME/.cargo/env",
     "cd rust-engine/nurunuru-napi && cargo build --release",
     "mkdir -p rust-engine/nurunuru-napi",
     "cp ../../target/release/libnurunuru_napi.so ./nurunuru-napi.node || cp ../../target/release/nurunuru_napi.node ./nurunuru-napi.node",
     "npm install",
     "npm run build"
 ]
-
-[start]
-cmd = "npm run start"
