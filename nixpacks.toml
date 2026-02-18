@@ -1,15 +1,15 @@
 [phases.setup]
-# 必要なパッケージを揃えます。cargoとrustcをここに戻します。
-nixPkgs = ["nodePackages.npm", "gcc", "rustc", "cargo", "openssl", "pkg-config"]
+nixPkgs = ["nodePackages.npm", "gcc", "rustc", "cargo", "openssl", "pkg-config", "curl"]
 
 [phases.build]
-# ビルドコマンドを整理します。
-# 1. まず Rust のツールチェーンを最新(stable)に更新してからビルドします
 cmds = [
-    "rustup default stable || true", 
-    "cd rust-engine/nurunuru-napi && cargo build --release",
+    # 1. Rustupを導入して、コンパイラを明示的に最新の stable (1.85+) に更新する
+    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
+    ". $HOME/.cargo/env && rustup default stable",
+    # 2. 最新の Rust を使ってビルド
+    ". $HOME/.cargo/env && cd rust-engine/nurunuru-napi && cargo build --release",
     "mkdir -p rust-engine/nurunuru-napi",
-    "cp ../../target/release/libnurunuru_napi.so ./nurunuru-napi.node || cp ../../target/release/nurunuru_napi.node ./nurunuru-napi.node",
+    "cp target/release/libnurunuru_napi.so rust-engine/nurunuru-napi/nurunuru-napi.node || cp target/release/nurunuru_napi.node rust-engine/nurunuru-napi/nurunuru-napi.node",
     "npm install",
     "npm run build"
 ]
