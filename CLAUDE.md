@@ -38,6 +38,9 @@ null--nostr/
 │       ├── publish/        # イベント発行 API ← Step 5
 │       ├── relay/          # リレー管理 API ← Step 4
 │       │   └── reconnect/  # 強制再接続 API ← Step 4
+│       ├── social/
+│       │   ├── follows/    # フォローリスト取得・更新 API ← Step 6
+│       │   └── mutes/      # ミュートリスト取得・更新 API ← Step 6
 │       └── rust-status/    # Rust エンジン状態確認 API
 ├── components/             # React コンポーネント
 ├── lib/                    # JS ビジネスロジック（移行元）
@@ -362,6 +365,39 @@ const eventId = await engine.publishEvent(JSON.stringify(signedEvent))
 // ブラウザ側コードの変更は不要 — Rust broadcast が優先され、失敗時は JS fallback
 ```
 
+### social API (Step 6〜)
+
+```js
+// app/api/social/follows/route.js, app/api/social/mutes/route.js で実際に使用中
+import { getOrCreateEngine } from '@/lib/rust-engine-manager'
+
+// フォローリスト取得: nostrdb → リレーの2段階
+const localFilter = JSON.stringify({ kinds: [3], authors: [pubkey], limit: 1 })
+const localEvents = await engine.queryLocal(localFilter)
+// localEvents[0] から p タグをパース → follows: string[]
+// 未キャッシュ時:
+const follows = await engine.fetchFollowList(pubkey)
+// → string[] (followed pubkey hex 一覧)
+
+// ミュートリスト取得: nostrdb → リレーの2段階
+const muteFilter = JSON.stringify({ kinds: [10000], authors: [pubkey], limit: 1 })
+const muteEvents = await engine.queryLocal(muteFilter)
+// muteEvents[0] から p/e/t/word タグをパース → { pubkeys, eventIds, hashtags, words }
+// 未キャッシュ時:
+const mutedPubkeys = await engine.fetchMuteList(pubkey)
+// → string[] (muted pubkey hex 一覧、pubkeys のみ)
+
+// rust-engine-manager.js ヘルパー経由でも使用可能
+import { getFollowList, getMuteList } from '@/lib/rust-engine-manager'
+const follows = await getFollowList(pubkey)   // string[] | null
+const mutes  = await getMuteList(pubkey)     // string[] | null (pubkeys のみ)
+
+// フォロー/ミュートリスト更新: ブラウザで署名 → /api/social/* POST → /api/publish 委譲
+// POST /api/social/follows { event: signedKind3Event }
+// POST /api/social/mutes   { event: signedKind10000Event }
+// → /api/publish に委譲し全リレーに broadcast
+```
+
 ## デフォルトリレー（日本）
 
 ```
@@ -374,7 +410,7 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/complete-event-api-WiHhn`
+- 作業ブランチ: `claude/follow-mute-list-api-WyXHj`
 - マージ先: `master`
 
 ---
@@ -383,7 +419,7 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ### 何が達成されたか
 
-Step 1〜4 で「Rust エンジンのキャッシュ・ランキング・リレー管理層」が完成した。
+Step 1〜6 で「Rust エンジンのキャッシュ・ランキング・リレー管理・ソーシャルリスト管理層」が完成した。
 ただし「JS からの完全移行」ではなく **「Rust が最適化レイヤーとして追加された」** が正確な表現。
 
 | 機能 | 現状 |
@@ -394,7 +430,8 @@ Step 1〜4 で「Rust エンジンのキャッシュ・ランキング・リレ�
 | リレー管理 | ✅ Rust (add/remove/reconnect) |
 | イベント発行 | ✅ Rust (/api/publish → engine.publishEvent) |
 | リアルタイム購読 | ❌ JS (subscribeManaged → nostr-tools SimplePool) |
-| フォロー/ミュートリスト編集 | ❌ JS |
+| フォロー/ミュートリスト取得 | ✅ Rust (/api/social/follows, /api/social/mutes) |
+| フォロー/ミュートリスト編集 | ✅ Rust (/api/social/* → /api/publish 委譲) |
 | DM 暗号化・送信 | ❌ JS |
 | 検索 (NIP-50) | ❌ JS |
 | 画像アップロード | ❌ JS (外部 API — 移行不要) |
@@ -453,21 +490,60 @@ Step 1〜4 で「Rust エンジンのキャッシュ・ランキング・リレ�
 }
 ```
 
-### Step 6: フォロー/ミュートリスト管理の API 化 🔲
+### Step 6: フォロー/ミュートリスト管理の API 化 ✅ 実装済み
 
-**目標**: フォロー・ミュートリストの**取得**を `/api/social` 経由に統一。
-編集（kind 3 / kind 10000 発行）は Step 5 の `/api/publish` を使う。
-
+アーキテクチャ：
 ```
-GET  /api/social/follows?pubkey=xxx  → nostrdb → リレーの2段階取得
-GET  /api/social/mutes?pubkey=xxx    → nostrdb → リレーの2段階取得
-POST /api/social/follows             → { signedKind3Event } → /api/publish 委譲
+ブラウザ (lib/nostr.js fetchFollowListCached / fetchMuteListCached)
+  └─ GET  /api/social/follows?pubkey=xxx
+        ├─ queryLocal (nostrdb) → 即時返却
+        └─ engine.fetchFollowList(pubkey) → リレー取得
+  └─ GET  /api/social/mutes?pubkey=xxx
+        ├─ queryLocal (nostrdb) → 全タグ型で即時返却
+        └─ engine.fetchMuteList(pubkey) → リレー取得（pubkey のみ）
+  └─ POST /api/social/follows { event: signedKind3Event }
+        └─ /api/publish に委譲 → Rust が全リレーに broadcast
+  └─ POST /api/social/mutes { event: signedKind10000Event }
+        └─ /api/publish に委譲 → Rust が全リレーに broadcast
 ```
 
-実装予定ファイル：
+実装済みファイル：
+- `nurunuru-napi/src/lib.rs` — `fetchMuteList(pubkeyHex)` NAPI バインディング追加
+  - `engine.fetch_mute_list(pk)` を呼び出し、`Vec<String>` (muted pubkeys) を返す
 - `app/api/social/follows/route.js` — フォローリスト取得・更新
+  - `GET /api/social/follows?pubkey=xxx` — nostrdb → リレーの2段階取得
+  - `POST /api/social/follows { event }` — kind 3 イベントを `/api/publish` に委譲
+  - レスポンス: `{ follows: string[], source: 'nostrdb' | 'rust' | 'fallback' }`
 - `app/api/social/mutes/route.js` — ミュートリスト取得・更新
+  - `GET /api/social/mutes?pubkey=xxx` — nostrdb → リレーの2段階取得
+  - `POST /api/social/mutes { event }` — kind 10000 イベントを `/api/publish` に委譲
+  - レスポンス: `{ mutes: { pubkeys, eventIds, hashtags, words }, source: '...' }`
+- `lib/rust-engine-manager.js` — ソーシャルリストヘルパー追加
+  - `getFollowList(pubkey)` / `getMuteList(pubkey)`
 - `lib/nostr.js` の `fetchFollowListCached()` / `fetchMuteListCached()` を API 経由に
+  - `/api/social/follows` / `/api/social/mutes` を最初に試行
+  - `source: 'fallback'` 時は既存 JS 実装にフォールバック
+
+`GET /api/social/follows` レスポンス例：
+```json
+{
+  "follows": ["abc123...", "def456..."],
+  "source": "nostrdb"
+}
+```
+
+`GET /api/social/mutes` レスポンス例：
+```json
+{
+  "mutes": {
+    "pubkeys": ["abc123..."],
+    "eventIds": [],
+    "hashtags": ["spam"],
+    "words": ["NG ワード"]
+  },
+  "source": "nostrdb"
+}
+```
 
 ### Step 7: DM 取得・検索の API 化 🔲
 
