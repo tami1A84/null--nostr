@@ -175,6 +175,22 @@ impl NuruNuruNapi {
         Ok(profile.map(NapiUserProfile::from))
     }
 
+    /// Batch-fetch user profiles. Returns a JSON string:
+    /// `{ [pubkeyHex]: { name, display_name, about, picture, banner, nip05, lud16, website, pubkey } }`.
+    ///
+    /// Called from `/api/profile/batch` to fetch multiple profiles in a single
+    /// relay subscription rather than N individual requests.
+    #[napi]
+    pub async fn fetch_profiles_json(&self, pubkey_hexes: Vec<String>) -> Result<String> {
+        let pubkeys: Vec<PublicKey> = pubkey_hexes
+            .iter()
+            .filter_map(|hex| PublicKey::from_hex(hex).ok())
+            .collect();
+        let engine = self.engine.clone();
+        let profiles = engine.fetch_profiles(&pubkeys).await.map_err(to_napi_err)?;
+        serde_json::to_string(&profiles).map_err(to_napi_err)
+    }
+
     // ─── Follow List (NIP-02) ─────────────────────────────────
 
     /// Fetch follow list. Returns pubkey hex strings.

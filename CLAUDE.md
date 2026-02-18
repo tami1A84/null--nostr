@@ -2,6 +2,9 @@
 
 > **AIへの指示書**。このファイルはセッション開始時に必ず読むこと。
 
+> **重要**: 作業完了後は必ずこの CLAUDE.md を更新すること。
+> 完了した Step を ✅ に変更し、新規実装ファイル・API エンドポイント・使い方を追記する。
+
 ---
 
 ## プロジェクト概要
@@ -28,6 +31,9 @@ null--nostr/
 │   └── api/
 │       ├── feed/           # フィード API (Rust ランキング) ← Step 2
 │       ├── ingest/         # イベント蓄積 API ← Step 2.5 完全稼働中
+│       ├── profile/
+│       │   ├── [pubkey]/   # 単一プロフィール取得 API ← Step 3
+│       │   └── batch/      # バッチプロフィール取得 API ← Step 3
 │       ├── nip05/          # NIP-05 検証 API
 │       └── rust-status/    # Rust エンジン状態確認 API
 ├── components/             # React コンポーネント
@@ -157,12 +163,39 @@ null--nostr/
 }
 ```
 
+### Step 3: プロフィールキャッシュ移行 ✅ 実装済み
+
+アーキテクチャ：
+```
+ブラウザ (hooks/useProfile.js)
+  └─ fetchProfileViaApi(pubkey)
+        ↓
+      GET /api/profile/[pubkey]
+        ├─ queryLocal (nostrdb) → 即時返却
+        └─ engine.fetchProfile(pubkey) → リレー取得
+      POST /api/profile/batch
+        ├─ queryLocal (nostrdb) → 一括検索
+        └─ engine.fetchProfilesJson(pubkeys) → バッチリレー取得
+  エンジン未起動時: 既存 JS fetchProfileCached にフォールバック
+```
+
+実装済みファイル：
+- `nurunuru-napi/src/lib.rs` — `fetch_profiles_json(pubkey_hexes)` napi バインディング追加
+  - 複数 pubkey を一度のリレー購読でバッチ取得
+- `app/api/profile/[pubkey]/route.js` — 単一プロフィール取得
+  - `GET /api/profile/[pubkey]`
+  - nostrdb → リレーの2段階戦略
+  - レスポンス: `{ profile, source: 'nostrdb' | 'rust' | 'fallback' }`
+- `app/api/profile/batch/route.js` — バッチプロフィール取得
+  - `POST /api/profile/batch` with `{ pubkeys: string[] }` (最大200件)
+  - nostrdb で一括検索 → 不足分をリレーバッチ取得
+  - レスポンス: `{ profiles: { [pubkey]: UserProfile }, source: 'nostrdb' | 'rust' | 'mixed' | 'fallback' }`
+- `hooks/useProfile.js` — API ルート経由に移行
+  - `fetchProfileViaApi()`: `/api/profile/[pubkey]` を呼び出し
+  - `fetchProfilesBatchViaApi()`: `/api/profile/batch` を呼び出し
+  - `source: 'fallback'` 時は既存 JS にフォールバック（段階的移行を維持）
+
 ### 未実装・次のステップ 🔲
-
-**Step 3: プロフィールキャッシュ移行**
-
-`hooks/useProfile.js` の `fetchProfileCached()` を `/api/profile/[pubkey]` 経由に。
-Rust `engine.fetchProfile(pubkey)` → nostrdb キャッシュ → フォールバックでリレー取得。
 
 **Step 4: リレー接続移行**
 
@@ -236,6 +269,21 @@ import { getOrCreateEngine } from '@/lib/rust-engine-manager'
 const isNew = await engine.storeEvent(JSON.stringify(event))
 ```
 
+### profile API (Step 3〜)
+
+```js
+// app/api/profile/[pubkey]/route.js で実際に使用中
+import { getOrCreateEngine } from '@/lib/rust-engine-manager'
+
+// 単一プロフィール: nostrdb → リレーの順に検索
+const localJson = await engine.queryLocal(JSON.stringify({ kinds: [0], authors: [pubkey] }))
+// または
+const napiProfile = await engine.fetchProfile(pubkey)
+
+// バッチプロフィール: app/api/profile/batch/route.js
+const profilesJson = await engine.fetchProfilesJson(pubkeys) // JSON string
+```
+
 ## デフォルトリレー（日本）
 
 ```
@@ -248,5 +296,5 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/nostrdb-direct-write-DNBlp`
+- 作業ブランチ: `claude/complete-profile-cache-migration-8WtpF`
 - マージ先: `master`
