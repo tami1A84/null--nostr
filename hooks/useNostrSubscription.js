@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useCallback, useState } from 'react'
-import { subscribeSSE, isSseAvailable } from '../lib/nostr-sse'
 import { subscribeManaged, getConnectionState } from '../lib/connection-manager'
 import { getDefaultRelay, FALLBACK_RELAYS } from '../lib/nostr'
 import { CONNECTION_STATE } from '../lib/constants'
@@ -9,15 +8,7 @@ import { CONNECTION_STATE } from '../lib/constants'
 /**
  * Custom hook for managing Nostr subscriptions with auto-cleanup.
  *
- * Step 8: SSE transport preferred, WebSocket fallback maintained.
- *
- * Transport selection:
- *   1. SSE via `/api/stream` (Rust engine) — preferred, lower server load.
- *   2. WebSocket via nostr-tools SimplePool — fallback when Rust engine is
- *      unavailable or the `transport` option is explicitly set to 'websocket'.
- *
- * The returned API is identical to the previous version so all callers
- * (TimelineTab, TalkTab, etc.) continue to work without changes.
+ * Uses WebSocket via nostr-tools SimplePool (direct relay connection).
  *
  * @param {Object} filter - Nostr filter object
  * @param {Object} options - Subscription options
@@ -28,7 +19,6 @@ export function useNostrSubscription(filter, options = {}) {
     enabled = true,
     relays = [getDefaultRelay(), ...FALLBACK_RELAYS],
     autoReconnect = true,
-    transport = 'auto', // 'auto' | 'sse' | 'websocket'
     onEvent,
     onEose,
     onError,
@@ -40,7 +30,6 @@ export function useNostrSubscription(filter, options = {}) {
   const [eventCount, setEventCount] = useState(0)
   const [lastEvent, setLastEvent] = useState(null)
   const [eoseReceived, setEoseReceived] = useState(false)
-  const [activeTransport, setActiveTransport] = useState(null) // 'sse' | 'websocket'
 
   const subscriptionRef = useRef(null)
   const seenEventsRef = useRef(new Set())
@@ -86,46 +75,13 @@ export function useNostrSubscription(filter, options = {}) {
     if (onEventRef.current) onEventRef.current(event)
   }, [dedupe])
 
-  // SSE subscription
-  const subscribeViaSse = useCallback(() => {
+  // WebSocket subscription
+  const subscribe = useCallback(() => {
     if (!enabled || !filter) return
 
     cleanup()
     setConnectionState(CONNECTION_STATE.CONNECTING)
     setEoseReceived(false)
-    setActiveTransport('sse')
-
-    subscriptionRef.current = subscribeSSE(filter, {
-      onEvent: handleEvent,
-      onEose: () => {
-        if (!isMountedRef.current) return
-        setEoseReceived(true)
-        if (onEoseRef.current) onEoseRef.current()
-      },
-      onError: (error) => {
-        if (!isMountedRef.current) return
-        setConnectionState(CONNECTION_STATE.ERROR)
-        if (onErrorRef.current) onErrorRef.current(error)
-      },
-      onReconnect: (attempt) => {
-        if (!isMountedRef.current) return
-        setConnectionState(CONNECTION_STATE.RECONNECTING)
-        if (onReconnectRef.current) onReconnectRef.current(attempt)
-      },
-      autoReconnect,
-    })
-
-    setConnectionState(CONNECTION_STATE.CONNECTED)
-  }, [enabled, filter, autoReconnect, handleEvent, cleanup])
-
-  // WebSocket subscription (legacy path)
-  const subscribeViaWebSocket = useCallback(() => {
-    if (!enabled || !filter) return
-
-    cleanup()
-    setConnectionState(CONNECTION_STATE.CONNECTING)
-    setEoseReceived(false)
-    setActiveTransport('websocket')
 
     subscriptionRef.current = subscribeManaged(
       filter,
@@ -153,35 +109,6 @@ export function useNostrSubscription(filter, options = {}) {
 
     setConnectionState(CONNECTION_STATE.CONNECTED)
   }, [enabled, filter, relays, autoReconnect, handleEvent, cleanup])
-
-  // Main subscribe function: auto-selects transport
-  const subscribe = useCallback(async () => {
-    if (!enabled || !filter) return
-
-    if (transport === 'websocket') {
-      subscribeViaWebSocket()
-      return
-    }
-
-    if (transport === 'sse') {
-      subscribeViaSse()
-      return
-    }
-
-    // 'auto': try SSE first, fall back to WebSocket
-    try {
-      const sseOk = await isSseAvailable()
-      if (sseOk && isMountedRef.current) {
-        subscribeViaSse()
-      } else if (isMountedRef.current) {
-        subscribeViaWebSocket()
-      }
-    } catch {
-      if (isMountedRef.current) {
-        subscribeViaWebSocket()
-      }
-    }
-  }, [enabled, filter, transport, subscribeViaSse, subscribeViaWebSocket])
 
   // Setup subscription on mount/filter change
   useEffect(() => {
@@ -220,7 +147,7 @@ export function useNostrSubscription(filter, options = {}) {
     eventCount,
     lastEvent,
     eoseReceived,
-    activeTransport,
+    activeTransport: 'websocket',
 
     // Controls
     pause,

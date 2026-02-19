@@ -55,23 +55,6 @@ import SearchModal from './SearchModal'
 import EmojiPicker from './EmojiPicker'
 import { NOSTR_KINDS } from '@/lib/constants'
 
-/**
- * Fire-and-forget: send events to /api/ingest so they are stored in nostrdb.
- * Splits into chunks of 100 (API limit). Never throws — errors are suppressed.
- */
-function ingestToNostrdb(events) {
-  if (!events || events.length === 0) return
-  const CHUNK = 100
-  for (let i = 0; i < events.length; i += CHUNK) {
-    const chunk = events.slice(i, i + CHUNK)
-    fetch('/api/ingest', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ events: chunk }),
-    }).catch(() => {})
-  }
-}
-
 // Extract hashtags from content (NIP-01)
 function extractHashtags(content) {
   if (!content) return []
@@ -525,11 +508,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           // Still no notes - might be connection issue
           setLoadError(true)
         } else {
-          ingestToNostrdb(expandedNotes)
           setGlobalPosts(expandedNotes.sort((a, b) => b.created_at - a.created_at))
         }
       } else {
-        ingestToNostrdb(notes)
         const sortedPosts = notes.sort((a, b) => b.created_at - a.created_at)
         setGlobalPosts(sortedPosts)
       }
@@ -565,84 +546,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     const threeHoursAgo = Math.floor(Date.now() / 1000) - 10800 // 3 hours for more candidate posts
 
     try {
-      // Try Rust engine feed first (server-side ranking via nostrdb)
-      if (pubkey) {
-        try {
-          const res = await fetch(`/api/feed?pubkey=${pubkey}&limit=100`)
-          if (res.ok) {
-            const data = await res.json()
-            if (data.source === 'rust' && data.posts && data.posts.length > 0) {
-              console.log(`[timeline] Rust feed: ${data.posts.length} posts`)
-
-              // Filter muted pubkeys and not-interested posts
-              const rustPosts = data.posts.filter(p =>
-                !mutedPubkeys.has(p.pubkey) && !notInterestedPosts.has(p.id)
-              )
-
-              setGlobalPosts(rustPosts)
-
-              // Fetch profiles for all authors
-              const rustAuthors = new Set()
-              rustPosts.forEach(p => {
-                rustAuthors.add(p.pubkey)
-                if (p._repostedBy) rustAuthors.add(p._repostedBy)
-              })
-              if (rustAuthors.size > 0) {
-                const profileMap = await fetchProfilesBatch(Array.from(rustAuthors))
-                setProfiles(prev => ({ ...prev, ...profileMap }))
-              }
-
-              // Fetch user reactions and reposts
-              if (rustPosts.length > 0) {
-                const rustEventIds = rustPosts.map(p => p.id)
-                const readRelaysForRust = getReadRelays()
-                const [rustReactionEvents, rustMyRepostEvents] = await Promise.all([
-                  fetchEvents({ kinds: [7], '#e': rustEventIds, limit: 500 }, readRelaysForRust),
-                  fetchEvents({ kinds: [6], authors: [pubkey], limit: 100 }, readRelaysForRust)
-                ])
-
-                const rustReactionCounts = {}
-                const rustMyReactions = new Set()
-                const rustMyReactionIds = {}
-                for (const event of rustReactionEvents) {
-                  const targetId = event.tags.find(t => t[0] === 'e')?.[1]
-                  if (targetId) {
-                    rustReactionCounts[targetId] = (rustReactionCounts[targetId] || 0) + 1
-                    if (event.pubkey === pubkey) {
-                      rustMyReactions.add(targetId)
-                      rustMyReactionIds[targetId] = event.id
-                    }
-                  }
-                }
-
-                const rustMyReposts = new Set()
-                const rustMyRepostIdsMap = {}
-                for (const repost of rustMyRepostEvents) {
-                  const targetId = repost.tags.find(t => t[0] === 'e')?.[1]
-                  if (targetId) {
-                    rustMyReposts.add(targetId)
-                    rustMyRepostIdsMap[targetId] = repost.id
-                  }
-                }
-
-                setReactions(rustReactionCounts)
-                setUserReactions(rustMyReactions)
-                setUserReposts(rustMyReposts)
-                setUserReactionIds(rustMyReactionIds)
-                setUserRepostIds(rustMyRepostIdsMap)
-                fetchBirdwatchForPosts(rustEventIds)
-              }
-
-              setLoadingMore(false)
-              return // Rust feed succeeded — skip JS fallback
-            }
-          }
-        } catch (rustErr) {
-          console.warn('[timeline] Rust feed unavailable, using JS fallback:', rustErr.message)
-        }
-      }
-
-      // JS fallback: Step 1: Fetch base timeline posts (include kind 30023 for NIP-23 long-form)
+      // Fetch base timeline posts (include kind 30023 for NIP-23 long-form)
       const noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 200 }
       const repostFilter = { kinds: [6], since: threeHoursAgo, limit: 100 }
 
@@ -650,9 +554,6 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         fetchEvents(noteFilter, readRelays),
         fetchEvents(repostFilter, readRelays)
       ])
-
-      // Ingest raw events into nostrdb for future Rust feed cycles
-      ingestToNostrdb([...notes, ...reposts])
 
       // Parse reposts
       const repostData = []
@@ -698,7 +599,6 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                 secondDegreeArray,
                 { timeout: 12000 }
               )
-              ingestToNostrdb(secondDegreePosts)
               // Add 2nd-degree posts to candidates
               allPosts = [...allPosts, ...secondDegreePosts]
             } catch (e) {
@@ -773,9 +673,6 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           fetchEvents({ kinds: [6], authors: [pubkey], limit: 100 }, readRelays)
         ])
 
-        // Ingest reaction/repost events for engagement scoring in nostrdb
-        ingestToNostrdb([...reactionEvents, ...myRepostEvents])
-
         const reactionCounts = {}
         const myReactions = new Set()
         const myReactionIds = {}
@@ -836,9 +733,6 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         fetchEvents(noteFilter, readRelays),
         fetchEvents(repostFilter, readRelays)
       ])
-
-      // Ingest following feed events into nostrdb
-      ingestToNostrdb([...notes, ...reposts])
 
       const repostData = []
       const originalAuthors = new Set()
@@ -916,8 +810,6 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           fetchEvents({ kinds: [6], authors: followList, since: oneHourAgo, limit: 50 }, readRelays)
         ])
 
-        ingestToNostrdb([...notes, ...reposts])
-
         const repostData = []
         for (const repost of reposts) {
           try {
@@ -957,80 +849,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         return
       }
 
-      // おすすめ (global) mode — try Rust engine feed first
-      if (pubkey) {
-        try {
-          const res = await fetch(`/api/feed?pubkey=${pubkey}&limit=100`)
-          if (res.ok) {
-            const data = await res.json()
-            if (data.source === 'rust' && data.posts && data.posts.length > 0) {
-              console.log(`[timeline] Rust feed (refresh): ${data.posts.length} posts`)
-
-              const rustPosts = data.posts.filter(p =>
-                !mutedPubkeys.has(p.pubkey) && !notInterestedPosts.has(p.id)
-              )
-
-              currentSetPosts(rustPosts)
-
-              const rustAuthors = new Set()
-              rustPosts.forEach(p => {
-                rustAuthors.add(p.pubkey)
-                if (p._repostedBy) rustAuthors.add(p._repostedBy)
-              })
-              if (rustAuthors.size > 0) {
-                const profileMap = await fetchProfilesBatch(Array.from(rustAuthors))
-                setProfiles(prev => ({ ...prev, ...profileMap }))
-              }
-
-              if (rustPosts.length > 0) {
-                const rustEventIds = rustPosts.map(p => p.id)
-                const [rustReactionEvents, rustMyRepostEvents] = await Promise.all([
-                  fetchEvents({ kinds: [7], '#e': rustEventIds, limit: 500 }, readRelays),
-                  fetchEvents({ kinds: [6], authors: [pubkey], limit: 100 }, readRelays)
-                ])
-
-                const rustReactionCounts = {}
-                const rustMyReactions = new Set()
-                const rustMyReactionIds = {}
-                for (const event of rustReactionEvents) {
-                  const targetId = event.tags.find(t => t[0] === 'e')?.[1]
-                  if (targetId) {
-                    rustReactionCounts[targetId] = (rustReactionCounts[targetId] || 0) + 1
-                    if (event.pubkey === pubkey) {
-                      rustMyReactions.add(targetId)
-                      rustMyReactionIds[targetId] = event.id
-                    }
-                  }
-                }
-
-                const rustMyReposts = new Set()
-                const rustMyRepostIdsMap = {}
-                for (const repost of rustMyRepostEvents) {
-                  const targetId = repost.tags.find(t => t[0] === 'e')?.[1]
-                  if (targetId) {
-                    rustMyReposts.add(targetId)
-                    rustMyRepostIdsMap[targetId] = repost.id
-                  }
-                }
-
-                setReactions(rustReactionCounts)
-                setUserReactions(rustMyReactions)
-                setUserReposts(rustMyReposts)
-                setUserReactionIds(rustMyReactionIds)
-                setUserRepostIds(rustMyRepostIdsMap)
-                fetchBirdwatchForPosts(rustEventIds)
-              }
-
-              setLoading(false)
-              return // Rust feed succeeded
-            }
-          }
-        } catch (rustErr) {
-          console.warn('[timeline] Rust feed unavailable on refresh:', rustErr.message)
-        }
-      }
-
-      // JS fallback: おすすめ (global) mode - with recommendation algorithm
+      // おすすめ (global) mode - with recommendation algorithm
       let noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 200 }
       let repostFilter = { kinds: [6], since: threeHoursAgo, limit: 100 }
 
@@ -1044,8 +863,6 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         console.warn('No events received - possible connection issue')
         setLoadError(true)
       }
-
-      ingestToNostrdb([...notes, ...reposts])
 
       const repostData = []
       const originalAuthors = new Set()
@@ -1085,7 +902,6 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
               secondDegreeArray,
               { timeout: 12000 }
             )
-            ingestToNostrdb(secondDegreePosts)
             allPosts = [...allPosts, ...secondDegreePosts]
           }
         } catch (e) {
@@ -1147,8 +963,6 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           fetchEvents({ kinds: [7], '#e': eventIds, limit: 500 }, readRelays),
           fetchEvents({ kinds: [6], authors: [pubkey], limit: 100 }, readRelays)
         ])
-
-        ingestToNostrdb([...reactionEvents, ...myRepostEvents])
 
         const reactionCounts = {}
         const myReactions = new Set()
