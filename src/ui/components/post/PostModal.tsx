@@ -126,16 +126,16 @@ export function PostModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)] flex-shrink-0">
-          <button onClick={handleClose} className="text-[var(--text-secondary)] action-btn">
+          <button onClick={handleClose} className="text-[var(--text-secondary)] action-btn whitespace-nowrap flex-shrink-0">
             キャンセル
           </button>
-          <span className="font-semibold text-[var(--text-primary)]">新規投稿</span>
+          <span className="font-semibold text-[var(--text-primary)] whitespace-nowrap flex-shrink-0">新規投稿</span>
           <button
             onClick={handleSubmit}
             disabled={isSubmitDisabled}
-            className="btn-line text-sm py-1.5 px-4 disabled:opacity-50"
+            className="btn-line text-sm py-1.5 px-4 disabled:opacity-50 whitespace-nowrap flex-shrink-0"
           >
-            {uploadingImage ? uploadProgress || '画像アップロード中...' : posting ? '投稿中...' : '投稿'}
+            {uploadingImage ? uploadProgress || 'アップロード中...' : posting ? '投稿中...' : '投稿'}
           </button>
         </div>
 
