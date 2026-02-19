@@ -4,16 +4,24 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "UniFFI bindings for nurunuru-core (Kotlin, Swift, WASM)"
+description = "UniFFI bindings for nurunuru-core (Swift/iOS, Kotlin/Android)"
 
 [lib]
 crate-type = ["cdylib", "staticlib"]
 name = "nurunuru_ffi"
 
+# Bindgen binary: generates Swift/Kotlin bindings from the compiled library.
+# Usage: cargo run --bin uniffi-bindgen -- generate --library <path> --language swift|kotlin --out-dir <dir>
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
 [dependencies]
 nurunuru-core = { path = "../nurunuru-core" }
 uniffi = { version = "0.29", features = ["cli"] }
 tokio = { workspace = true }
+nostr = { workspace = true }
+thiserror = { workspace = true }
 
 [build-dependencies]
 uniffi = { version = "0.29", features = ["build"] }
