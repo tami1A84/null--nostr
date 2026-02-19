@@ -635,11 +635,12 @@ export default function SearchModal({ pubkey, onClose, onViewProfile, initialQue
                 {recentSearches.map((search, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[var(--bg-secondary)] text-sm"
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[var(--bg-secondary)] text-sm max-w-[200px] min-w-0"
                   >
                     <button
                       onClick={() => { setQuery(search); handleSearch(search); }}
-                      className="text-[var(--text-primary)] hover:text-[var(--line-green)]"
+                      className="text-[var(--text-primary)] hover:text-[var(--line-green)] truncate min-w-0"
+                      title={search}
                     >
                       {search}
                     </button>
