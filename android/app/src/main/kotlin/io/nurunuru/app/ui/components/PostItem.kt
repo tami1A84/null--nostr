@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.outlined.ChatBubble
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -112,7 +114,7 @@ fun PostItem(
                 ) {
                     // Reply
                     ActionButton(
-                        icon = Icons.Outlined.ChatBubbleOutline,
+                        icon = Icons.Outlined.ChatBubble,
                         count = post.replyCount,
                         onClick = onReply,
                         tint = nuruColors.textTertiary
@@ -126,7 +128,7 @@ fun PostItem(
                     )
                     // Like
                     ActionButton(
-                        icon = if (post.isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        icon = if (post.isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                         count = post.likeCount,
                         onClick = onLike,
                         tint = if (post.isLiked) Color(0xFFFF6B6B) else nuruColors.textTertiary

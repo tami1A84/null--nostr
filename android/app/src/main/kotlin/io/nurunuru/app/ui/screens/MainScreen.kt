@@ -32,12 +32,12 @@ enum class BottomTab(
     TALK(
         label = "トーク",
         selectedIcon = Icons.Filled.ChatBubble,
-        unselectedIcon = Icons.Outlined.ChatBubbleOutline
+        unselectedIcon = Icons.Outlined.ChatBubble
     ),
     TIMELINE(
         label = "タイムライン",
-        selectedIcon = Icons.Filled.ViewStream,
-        unselectedIcon = Icons.Outlined.ViewStream
+        selectedIcon = Icons.Filled.DynamicFeed,
+        unselectedIcon = Icons.Outlined.DynamicFeed
     ),
     MINIAPP(
         label = "ミニアプリ",
