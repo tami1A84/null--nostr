@@ -1287,11 +1287,11 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       if (imageFiles.length > 0) {
         try {
           setUploadingPostImage(true)
-          setUploadProgress(`画像をアップロード中... (0/${imageFiles.length})`)
+          setUploadProgress(`アップロード中... (0/${imageFiles.length})`)
 
           const { urls: uploadedUrls, errors } = await uploadImagesInParallel(imageFiles, {
             onProgress: (current, total) => {
-              setUploadProgress(`画像をアップロード中... (${current}/${total})`)
+              setUploadProgress(`アップロード中... (${current}/${total})`)
             }
           })
 
@@ -1520,14 +1520,14 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between p-4 border-b border-[var(--border-color)] flex-shrink-0">
-              <button onClick={() => { setShowPostModal(false); setImageFiles([]); setImagePreviews([]) }} className="text-[var(--text-secondary)] action-btn">
+              <button onClick={() => { setShowPostModal(false); setImageFiles([]); setImagePreviews([]) }} className="text-[var(--text-secondary)] action-btn whitespace-nowrap flex-shrink-0">
                 キャンセル
               </button>
-              <span className="font-semibold text-[var(--text-primary)]">新規投稿</span>
+              <span className="font-semibold text-[var(--text-primary)] whitespace-nowrap flex-shrink-0">新規投稿</span>
               <button
                 onClick={handlePost}
                 disabled={posting || uploadingPostImage || (!newPost.trim() && imageFiles.length === 0)}
-                className="btn-line text-sm py-1.5 px-4 disabled:opacity-50"
+                className="btn-line text-sm py-1.5 px-4 disabled:opacity-50 whitespace-nowrap flex-shrink-0"
               >
                 {uploadingPostImage ? uploadProgress : posting ? '投稿中...' : '投稿'}
               </button>
