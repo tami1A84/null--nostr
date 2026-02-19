@@ -7,7 +7,6 @@
 //!
 //! All async operations are bridged through a Tokio runtime.
 
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use nurunuru_core::config::NuruNuruConfig;

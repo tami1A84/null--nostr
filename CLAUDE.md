@@ -19,7 +19,7 @@
 | Nostr プロトコル (Web) | `nostr-tools` (JS) + WebSocket | **正規の実装・維持** |
 | Rust エンジン (コア) | `nostr-sdk` v0.44 + `nostrdb` v0.8 | 実装済み・**ネイティブアプリ向け** |
 | FFI ブリッジ (Web) | `napi-rs` v2 | 実装済み・**Web では使わない方針へ変更** |
-| FFI ブリッジ (Mobile) | UniFFI | スキャフォルド済み・Step 10 で完成予定 |
+| FFI ブリッジ (Mobile) | UniFFI v0.29 | **実装完了 (Step 10)** |
 
 ---
 
@@ -92,7 +92,13 @@ null--nostr/
 └── rust-engine/            # Rust コアエンジン（ネイティブアプリ向け）
     ├── Cargo.toml          # Workspace
     ├── nurunuru-core/      # コアライブラリ（実装済み）← ネイティブアプリで使う
-    ├── nurunuru-ffi/       # UniFFI バインディング（スキャフォルド済み）← Step 10
+    ├── nurunuru-ffi/       # UniFFI バインディング（完成）← Step 10 ✅
+    │   ├── src/lib.rs      # proc-macro FFI ラッパー
+    │   ├── src/nurunuru.udl# インターフェース定義（ドキュメント）
+    │   ├── src/bin/uniffi-bindgen.rs  # バインディング生成バイナリ
+    │   ├── bindgen/        # gen_swift.sh / gen_kotlin.sh / Makefile
+    │   ├── ios/            # Package.swift + Swift async 拡張
+    │   └── android/        # build.gradle.kts + Kotlin Coroutine 拡張
     └── nurunuru-napi/      # napi-rs ブリッジ（デスクトップ/Tauri 向け）
         ├── Cargo.toml
         ├── build.rs
@@ -113,7 +119,15 @@ null--nostr/
   - `relay.rs` — リレーURL検証 + ジオハッシュ近接選択
   - `config.rs` — 全設定値
   - `error.rs` — 日本語エラーメッセージ
-- `rust-engine/nurunuru-ffi` スキャフォルド (UniFFI proc-macro)
+- `rust-engine/nurunuru-ffi` 実装完了 (UniFFI proc-macro, Step 10) ✅
+  - `src/lib.rs` — `#[uniffi::export]` / `uniffi::setup_scaffolding!()` ラッパー完成
+  - `src/nurunuru.udl` — 完全なインターフェース定義（ドキュメント）
+  - `src/bin/uniffi-bindgen.rs` — Swift/Kotlin バインディング生成バイナリ
+  - `bindgen/gen_swift.sh` + `gen_kotlin.sh` + `Makefile` — バインディング生成スクリプト
+  - `ios/Package.swift` — iOS Swift Package 設定
+  - `ios/Sources/NuruNuru/NuruNuruClient+Extensions.swift` — async/await 拡張
+  - `android/build.gradle.kts` — Android ライブラリモジュール設定
+  - `android/src/main/kotlin/io/nurunuru/NuruNuruBridge.kt` — Coroutine 拡張
 - `rust-engine/nurunuru-napi/` 実装・ビルド完了
 
 ### Web 版 (nostr-tools ベース) の実装 ✅
@@ -182,7 +196,7 @@ wss://search.nos.today     (NIP-50 検索専用)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/nostr-relay-websocket-PIB7K`
+- 作業ブランチ: `claude/complete-nurunuru-ffi-hIhra`
 - マージ先: `master`
 
 ---
@@ -204,24 +218,57 @@ wss://search.nos.today     (NIP-50 検索専用)
 8. `lib/nostr-sse.js` — 削除（`/api/stream` 廃止のため不要）
 9. 廃止 API ルート削除: `feed`, `ingest`, `profile`, `publish`, `relay`, `social`, `dm`, `search`, `stream`, `rust-status`
 
-### Step 10: nurunuru-ffi 完成 (ネイティブアプリ対応) 🔲
+### Step 10: nurunuru-ffi 完成 (ネイティブアプリ対応) ✅
 
-**目標**: iOS / Android 向け UniFFI バインディングを完成させる。
-これが Rust コア (`nurunuru-core`) の本来の行き先。
+**完了（2026-02-19）**
+
+iOS / Android 向け UniFFI バインディングを完成させた。
 
 ```
 nurunuru-ffi/
-  ├─ src/lib.rs       — #[uniffi::export] ラッパー
-  ├─ nurunuru.udl     — UniFFI 定義ファイル
-  └─ bindgen/         — Swift / Kotlin バインディング生成
+  ├─ src/lib.rs              — #[uniffi::export] ラッパー（proc-macro 方式）
+  ├─ src/nurunuru.udl        — インターフェース定義（ドキュメント兼）
+  ├─ src/bin/uniffi-bindgen.rs — uniffi::uniffi_bindgen_main() バイナリ
+  ├─ bindgen/
+  │   ├─ gen_swift.sh        — Swift バインディング生成スクリプト
+  │   ├─ gen_kotlin.sh       — Kotlin バインディング生成スクリプト
+  │   └─ Makefile            — ios-device / ios-sim / xcframework / android-all 等
+  ├─ ios/
+  │   ├─ Package.swift       — Swift Package (iOS 16+ / macOS 13+)
+  │   └─ Sources/NuruNuru/NuruNuruClient+Extensions.swift — async/await 拡張
+  └─ android/
+      ├─ build.gradle.kts    — Android ライブラリモジュール
+      └─ src/main/kotlin/io/nurunuru/NuruNuruBridge.kt — Coroutine 拡張
+
 ```
 
-実装予定：
-- `nurunuru-ffi/src/lib.rs` — uniffi::export ラッパー
-- `nurunuru-ffi/nurunuru.udl` — 型・メソッド定義
-- iOS: Swift Package として配布
-- Android: AAR / Kotlin bindings として配布
-- 前提: `nurunuru-core` の API は変更不要
+バインディング生成手順：
+```bash
+# iOS (macOS ホスト必須)
+cd rust-engine/nurunuru-ffi/bindgen
+make xcframework          # XCFramework → ios/ に出力
+
+# Android
+make android-all          # arm64-v8a + x86_64 .so → android/libs/ に出力
+make kotlin               # Kotlin バインディング → bindgen/kotlin-out/ に出力
+```
+
+使い方（Swift）:
+```swift
+import NuruNuru
+let client = try NuruNuruClient(secretKeyHex: nsec, dbPath: NuruNuruClient.defaultDbPath())
+client.connect()
+try await client.loginAsync(pubkeyHex: npub)
+let feed = try await client.getRecommendedFeedAsync(limit: 50)
+```
+
+使い方（Kotlin/Android）:
+```kotlin
+val client = NuruNuruBridge.create(context, nsecKey)
+client.connectAsync()
+client.loginAsync(npubHex)
+val feed = client.getRecommendedFeedAsync(50u)
+```
 
 ---
 
@@ -240,7 +287,7 @@ nurunuru-ffi/
 サーバー (Next.js / Vercel)
   └─ 静的ページ配信のみ（Rust エンジン不使用）
 
-ネイティブアプリ (将来 Step 10)
+ネイティブアプリ (Step 10 完了)
   ├─ iOS: Swift → nurunuru-ffi (UniFFI) → nurunuru-core
   └─ Android: Kotlin → nurunuru-ffi (UniFFI) → nurunuru-core
                                                     ↓

@@ -1,6 +1,149 @@
-// UniFFI Definition Language for NuruNuru
-// This file is kept as a reference; actual binding generation
-// uses the proc-macro approach (uniffi::setup_scaffolding!()).
-// See src/lib.rs for the authoritative interface definition.
+// UniFFI Definition Language — NuruNuru FFI interface
+//
+// This file documents the public interface exposed to Swift (iOS/macOS) and
+// Kotlin (Android) via UniFFI.  The actual authoritative source is the
+// proc-macro annotations in src/lib.rs (uniffi::setup_scaffolding!(),
+// #[uniffi::export], #[derive(uniffi::Object/Record/Error)]).
+//
+// Binding generation uses the compiled library, not this file:
+//   cargo run --bin uniffi-bindgen -- generate \
+//     --library target/release/libnurunuru_ffi.dylib \
+//     --language swift --out-dir bindgen/swift-out/
 
 namespace nurunuru {};
+
+// ─── Error type ────────────────────────────────────────────────
+
+[Error]
+enum NuruNuruFfiError {
+    "RuntimeError",
+    "KeyError",
+    "EngineError",
+};
+
+// ─── Value types (records) ─────────────────────────────────────
+
+/// Parsed user profile (NIP-01 kind 0 metadata).
+dictionary FfiUserProfile {
+    string name;
+    string display_name;
+    string about;
+    string picture;
+    string nip05;
+    string lud16;
+    string pubkey;
+};
+
+/// Scored post entry from the recommendation engine.
+dictionary FfiScoredPost {
+    string event_id;
+    string pubkey;
+    double score;
+    u64 created_at;
+};
+
+/// Relay pool connection statistics.
+dictionary FfiConnectionStats {
+    u32 connected_relays;
+    u32 total_relays;
+};
+
+// ─── Main interface ────────────────────────────────────────────
+
+/// NuruNuru client for iOS / Android native apps.
+///
+/// Wraps nurunuru-core (nostr-sdk + nostrdb) behind a synchronous FFI
+/// boundary.  All network calls block the calling thread; use background
+/// threads / coroutines on the platform side.
+///
+/// Lifecycle:
+///   1. Construct with the user's private key hex/nsec and a DB path.
+///   2. Call connect() to open relay WebSocket connections.
+///   3. Call login(pubkeyHex) to load follow/mute lists.
+///   4. Use feed/profile/DM/publish methods as needed.
+///   5. Call disconnect() before releasing the object.
+interface NuruNuruClient {
+    /// Create a new client.
+    /// `secret_key_hex` — hex private key or nsec Bech32.
+    /// `db_path`        — directory for the local nostrdb (LMDB) cache.
+    [Throws=NuruNuruFfiError]
+    constructor(string secret_key_hex, string db_path);
+
+    // ── Relay lifecycle ────────────────────────────────────────
+
+    /// Connect to all default Japanese Nostr relays.
+    void connect();
+
+    /// Disconnect from all relays.
+    [Throws=NuruNuruFfiError]
+    void disconnect();
+
+    // ── User session ───────────────────────────────────────────
+
+    /// Set the active user and load their follow/mute lists from relays.
+    [Throws=NuruNuruFfiError]
+    void login(string pubkey_hex);
+
+    // ── Profile ────────────────────────────────────────────────
+
+    /// Fetch a user's profile (kind 0 metadata event).
+    /// Returns null if no profile is found within the timeout.
+    [Throws=NuruNuruFfiError]
+    FfiUserProfile? fetch_profile(string pubkey_hex);
+
+    // ── Social graph (NIP-02 / NIP-51) ────────────────────────
+
+    /// Fetch the follow list for a user. Returns pubkey hex strings.
+    [Throws=NuruNuruFfiError]
+    sequence<string> fetch_follow_list(string pubkey_hex);
+
+    /// Follow a user (publishes updated kind 3 contact list).
+    [Throws=NuruNuruFfiError]
+    void follow_user(string target_pubkey_hex);
+
+    /// Unfollow a user (publishes updated kind 3 contact list).
+    [Throws=NuruNuruFfiError]
+    void unfollow_user(string target_pubkey_hex);
+
+    // ── Publishing ─────────────────────────────────────────────
+
+    /// Publish a plain text note (kind 1). Returns the event ID hex.
+    [Throws=NuruNuruFfiError]
+    string publish_note(string content);
+
+    // ── Direct Messages (NIP-17) ───────────────────────────────
+
+    /// Send an encrypted DM via NIP-17 gift wrapping.
+    [Throws=NuruNuruFfiError]
+    void send_dm(string recipient_hex, string content);
+
+    // ── Search (NIP-50) ────────────────────────────────────────
+
+    /// Full-text search. Returns matching event ID hex strings.
+    [Throws=NuruNuruFfiError]
+    sequence<string> search(string query, u32 limit);
+
+    // ── Recommendation feed ────────────────────────────────────
+
+    /// Get a ranked feed (X-algorithm). Returns scored posts.
+    [Throws=NuruNuruFfiError]
+    sequence<FfiScoredPost> get_recommended_feed(u32 limit);
+
+    // ── Personalization ────────────────────────────────────────
+
+    /// Mark a post as "not interested" (lowers author's score).
+    void mark_not_interested(string event_id, string author_pubkey);
+
+    /// Record an engagement action ("like", "repost", "reply") for
+    /// personalizing future feed rankings.
+    void record_engagement(string action, string author_pubkey);
+
+    // ── Utilities ──────────────────────────────────────────────
+
+    /// Get relay pool connection statistics.
+    FfiConnectionStats connection_stats();
+
+    /// Format a Unix timestamp as a Japanese relative string
+    /// (e.g. "たった今", "3分", "2時間", "5日", "3月14日").
+    string format_timestamp(u64 timestamp);
+};
