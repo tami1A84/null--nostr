@@ -98,11 +98,8 @@ export default function Home() {
     // Register Service Worker for PWA
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js')
-        .then((registration) => {
-          console.log('SW registered:', registration.scope)
-        })
         .catch((error) => {
-          console.log('SW registration failed:', error)
+          console.error('SW registration failed:', error)
         })
     }
     
@@ -304,11 +301,8 @@ export default function Home() {
         <button
           onClick={() => {
             setActiveTab('timeline')
-            // Trigger post modal - will be handled by timeline component
-            setTimeout(() => {
-              const fabButton = document.querySelector('.fab')
-              if (fabButton) fabButton.click()
-            }, 100)
+            // Trigger post modal via exposed ref
+            setTimeout(() => timelineRef.current?.openPostModal?.(), 100)
           }}
           className="compose-btn-desktop mt-4"
         >

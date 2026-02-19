@@ -7,7 +7,7 @@ import {
   getAllCachedProfiles,
   parseProfile,
 } from '../lib/nostr'
-import { getCachedProfile, setCachedProfile } from '../lib/cache'
+import { getCachedProfile, setCachedProfile, clearProfileCache } from '../lib/cache'
 
 /**
  * Pending profile requests for deduplication
@@ -236,10 +236,7 @@ export function useProfileUpdater() {
   }, [])
 
   const invalidateProfile = useCallback((pubkey) => {
-    // Force refetch on next access by removing from cache
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(`nurunuru_cache_profile_${pubkey}`)
-    }
+    clearProfileCache(pubkey)
   }, [])
 
   return {

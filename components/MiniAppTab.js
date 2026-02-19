@@ -43,6 +43,7 @@ import {
   fetchUserRelayList,
   RELAY_LIST_DISCOVERY_RELAYS
 } from '@/lib/outbox'
+import { hasPrivateKey, storePrivateKey } from '@/lib/secure-key-store'
 import { clearBadgeCache } from './BadgeDisplay'
 import SchedulerApp from './SchedulerApp'
 import EventBackupApp from './EventBackupApp'
@@ -59,7 +60,7 @@ function NosskeySettings({ pubkey }) {
   // Load settings
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      if (window.nostrPrivateKey) {
+      if (hasPrivateKey()) {
         setHasExportedKey(true)
       }
       const savedAutoSign = localStorage.getItem('nurunuru_auto_sign')
@@ -108,8 +109,8 @@ function NosskeySettings({ pubkey }) {
       const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
       setExportedNsec(nsec)
       
-      // Store the private key for auto-signing
-      window.nostrPrivateKey = privateKeyHex
+      // Store the private key securely for auto-signing
+      storePrivateKey(pubkey, privateKeyHex)
       setHasExportedKey(true)
       
     } catch (e) {
@@ -130,15 +131,8 @@ function NosskeySettings({ pubkey }) {
       await navigator.clipboard.writeText(exportedNsec)
       setCopied(true)
       setTimeout(() => setCopied(false), 3000)
-    } catch (e) {
-      const textarea = document.createElement('textarea')
-      textarea.value = exportedNsec
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 3000)
+    } catch {
+      // Clipboard API not available
     }
   }
 
