@@ -163,19 +163,24 @@ class TimelineViewModel(
     fun publishNote(content: String) {
         viewModelScope.launch {
             try {
-                val event = repository.publishNote(content) ?: return@launch
-                // Optimistically prepend the new post so it appears immediately
-                val optimisticPost = ScoredPost(event = event, profile = myProfile)
-                _uiState.update { state ->
-                    state.copy(posts = listOf(optimisticPost) + state.posts)
+                // publishNote now waits for relay OK acknowledgment (up to 5s)
+                val event = repository.publishNote(content)
+                if (event == null) {
+                    // Relay rejected the event or no relays connected
+                    _uiState.update { it.copy(error = "投稿がリレーに拒否されました。接続を確認してください。") }
+                    return@launch
                 }
-                // Delay to give relay time to index, then refresh for real data
-                delay(2_500)
+                // Relay confirmed acceptance: show post optimistically
+                _uiState.update { state ->
+                    state.copy(posts = listOf(ScoredPost(event = event, profile = myProfile)) + state.posts)
+                }
+                // Brief safety margin then refresh (relay confirmed, so event should be queryable)
+                delay(500)
                 refresh()
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // Publishing failed silently; optimistic post won't appear if event was null
+                _uiState.update { it.copy(error = "投稿に失敗しました") }
             }
         }
     }

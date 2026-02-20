@@ -21,6 +21,9 @@ private const val TAG = "NostrClient"
 private const val MAX_RECONNECT_ATTEMPTS = 5
 private val RECONNECT_DELAYS_MS = longArrayOf(5_000, 10_000, 20_000, 40_000, 80_000)
 
+// Lenient Json for parsing incoming relay messages (relays may add unknown fields)
+private val RELAY_JSON = Json { ignoreUnknownKeys = true; isLenient = true }
+
 /**
  * WebSocket-based Nostr protocol client (NIP-01).
  * Handles multi-relay connections, subscriptions, and event publishing.
@@ -44,6 +47,9 @@ class NostrClient(
     private val reconnectJobs = ConcurrentHashMap<String, Job>()
     private val reconnectAttempts = ConcurrentHashMap<String, Int>()
 
+    // Track relay OK acknowledgments: eventId → list of (accepted, reason) deferreds per relay
+    private val publishAcks = ConcurrentHashMap<String, MutableList<CompletableDeferred<Boolean>>>()
+
     private val _events = MutableSharedFlow<NostrEvent>(extraBufferCapacity = 100)
     val events: SharedFlow<NostrEvent> = _events.asSharedFlow()
 
@@ -61,7 +67,7 @@ class NostrClient(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d(TAG, "Connected: $relayUrl")
                 connections[relayUrl] = webSocket
-                reconnectAttempts[relayUrl] = 0 // Reset on successful connect
+                reconnectAttempts[relayUrl] = 0
                 // Re-send active subscriptions on reconnect
                 subscriptions.forEach { (subId, callback) ->
                     sendReq(webSocket, subId, callback.filter)
@@ -82,7 +88,6 @@ class NostrClient(
                 Log.d(TAG, "Relay closed: $relayUrl code=$code")
                 connections.remove(relayUrl)
                 if (code != 1000) {
-                    // Abnormal close; try to reconnect
                     scheduleReconnect(relayUrl)
                 }
             }
@@ -96,7 +101,6 @@ class NostrClient(
             Log.w(TAG, "Giving up on relay after $attempt attempts: $relayUrl")
             return
         }
-        // Cancel any pending reconnect for this relay
         reconnectJobs[relayUrl]?.cancel()
 
         val delayMs = RECONNECT_DELAYS_MS[attempt.coerceAtMost(RECONNECT_DELAYS_MS.size - 1)]
@@ -112,7 +116,6 @@ class NostrClient(
     }
 
     fun disconnect() {
-        // Cancel all pending reconnect jobs first
         reconnectJobs.values.forEach { it.cancel() }
         reconnectJobs.clear()
         connections.values.forEach { it.close(1000, "disconnect") }
@@ -126,22 +129,36 @@ class NostrClient(
 
     private fun handleMessage(relayUrl: String, text: String) {
         try {
-            val arr = Json.parseToJsonElement(text).jsonArray
+            val arr = RELAY_JSON.parseToJsonElement(text).jsonArray
             when (val type = arr[0].jsonPrimitive.content) {
                 "EVENT" -> {
                     val subId = arr[1].jsonPrimitive.content
-                    val event = Json.decodeFromJsonElement<NostrEvent>(arr[2])
-                    scope.launch { _events.emit(event) }
-                    subscriptions[subId]?.onEvent?.invoke(event)
+                    // Use lenient parsing: relays may include unknown extra fields
+                    val event = RELAY_JSON.decodeFromJsonElement<NostrEvent>(arr[2])
+                    if (event.id.isNotEmpty() && event.sig.isNotEmpty()) {
+                        scope.launch { _events.emit(event) }
+                        subscriptions[subId]?.onEvent?.invoke(event)
+                    }
                 }
                 "EOSE" -> {
                     val subId = arr[1].jsonPrimitive.content
                     subscriptions[subId]?.onEose?.invoke(relayUrl)
                 }
                 "OK" -> {
+                    val eventId = arr.getOrNull(1)?.jsonPrimitive?.content ?: return
                     val accepted = arr.getOrNull(2)?.jsonPrimitive?.booleanOrNull ?: true
+                    val reason = arr.getOrNull(3)?.jsonPrimitive?.content ?: ""
                     if (!accepted) {
-                        Log.w(TAG, "Event rejected by $relayUrl: ${arr.getOrNull(3)}")
+                        Log.w(TAG, "Event rejected by $relayUrl (${eventId.take(8)}…): $reason")
+                    } else {
+                        Log.d(TAG, "Event accepted by $relayUrl (${eventId.take(8)}…)")
+                    }
+                    // Complete the first pending ack deferred for this event
+                    publishAcks[eventId]?.let { deferreds ->
+                        synchronized(deferreds) {
+                            val pending = deferreds.firstOrNull { !it.isCompleted }
+                            pending?.complete(accepted)
+                        }
                     }
                 }
                 "NOTICE" -> {
@@ -183,7 +200,6 @@ class NostrClient(
     data class SubscriptionCallback(
         val filter: Filter,
         val onEvent: (NostrEvent) -> Unit,
-        // relayUrl passed so callers can count per-relay EOSEs
         val onEose: (String) -> Unit = {}
     )
 
@@ -214,19 +230,13 @@ class NostrClient(
 
     // ─── Fetch (one-shot with EOSE) ───────────────────────────────────────────
 
-    /**
-     * Fetch events matching filter, waiting for EOSE from ALL connected relays
-     * (or until timeout). Events are deduplicated by ID.
-     */
     suspend fun fetchEvents(filter: Filter, timeoutMs: Long = 8_000): List<NostrEvent> =
         withContext(Dispatchers.IO) {
             val subId = "fetch_${System.nanoTime()}"
-            // Thread-safe dedup set
             val seenIds = ConcurrentHashMap.newKeySet<String>()
             val results = java.util.concurrent.CopyOnWriteArrayList<NostrEvent>()
             val deferred = CompletableDeferred<List<NostrEvent>>()
 
-            // Count how many relays we expect EOSE from
             val expectedEose = connections.size.coerceAtLeast(1)
             val eoseCount = AtomicInteger(0)
 
@@ -256,14 +266,60 @@ class NostrClient(
 
     // ─── Publish ──────────────────────────────────────────────────────────────
 
-    suspend fun publishEvent(event: NostrEvent): Boolean = withContext(Dispatchers.IO) {
-        val json = JsonArray(listOf(JsonPrimitive("EVENT"), Json.encodeToJsonElement(event)))
-        val msg = json.toString()
-        val sent = connections.values.sumOf { ws ->
-            if (ws.send(msg)) 1L else 0L
+    /**
+     * Publish a signed event and wait for relay acknowledgment.
+     * Returns true if at least one relay accepted the event.
+     * Times out after [ackTimeoutMs] and falls back to optimistic true if no relay responds.
+     */
+    suspend fun publishEvent(event: NostrEvent, ackTimeoutMs: Long = 5_000): Boolean =
+        withContext(Dispatchers.IO) {
+            if (connections.isEmpty()) {
+                Log.w(TAG, "publishEvent: no relays connected")
+                return@withContext false
+            }
+
+            val msg = JsonArray(listOf(
+                JsonPrimitive("EVENT"),
+                RELAY_JSON.encodeToJsonElement(event)
+            )).toString()
+
+            // Register ack deferreds – one per connected relay
+            val ackDeferreds = connections.keys.map { CompletableDeferred<Boolean>() }
+            if (event.id.isNotEmpty()) {
+                publishAcks[event.id] = ackDeferreds.toMutableList()
+            }
+
+            val sent = connections.values.sumOf { ws -> if (ws.send(msg)) 1L else 0L }
+            if (sent == 0L) {
+                publishAcks.remove(event.id)
+                Log.w(TAG, "publishEvent: send failed for ${event.id.take(8)}…")
+                return@withContext false
+            }
+
+            // Wait until at least one relay accepts, or timeout
+            return@withContext try {
+                withTimeout(ackTimeoutMs) {
+                    // Complete as soon as any relay accepts
+                    val accepted = CompletableDeferred<Boolean>()
+                    ackDeferreds.forEach { d ->
+                        scope.launch {
+                            if (d.await()) accepted.complete(true)
+                        }
+                    }
+                    // Also complete with false if all relays reject
+                    scope.launch {
+                        ackDeferreds.forEach { it.join() }
+                        if (!accepted.isCompleted) accepted.complete(false)
+                    }
+                    accepted.await()
+                }
+            } catch (e: TimeoutCancellationException) {
+                Log.d(TAG, "publishEvent: no OK within ${ackTimeoutMs}ms, assuming accepted")
+                true // Optimistic: relay likely accepted but slow to respond
+            } finally {
+                publishAcks.remove(event.id)
+            }
         }
-        sent > 0
-    }
 
     suspend fun publishNote(content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
         val event = createEvent(NostrEvent(
@@ -291,7 +347,8 @@ class NostrClient(
         val event = createEvent(NostrEvent(
             kind = 6,
             content = "",
-            tags = listOf(listOf("e", eventId, relayUrl, "mention")),
+            // NIP-18: ["e", event_id, relay_url] (3 elements)
+            tags = listOf(listOf("e", eventId, relayUrl)),
             pubkey = publicKeyHex,
             createdAt = System.currentTimeMillis() / 1000
         )) ?: return false
@@ -366,18 +423,58 @@ class NostrClient(
         }
     }
 
+    /**
+     * NIP-01 canonical event serialization for ID computation.
+     * Built manually to guarantee byte-exact output independent of JSON library behavior.
+     * See: https://github.com/nostr-protocol/nostr/blob/master/01.md
+     */
     private fun computeEventId(event: NostrEvent): String {
-        val serialized = buildJsonArray {
-            add(0)
-            add(event.pubkey)
-            add(event.createdAt)
-            add(event.kind)
-            add(JsonArray(event.tags.map { tag ->
-                JsonArray(tag.map { JsonPrimitive(it) })
-            }))
-            add(event.content)
-        }.toString()
-        return sha256(serialized.toByteArray(Charsets.UTF_8)).toHex()
+        val sb = StringBuilder()
+        sb.append("[0,")
+        sb.append(jsonString(event.pubkey))
+        sb.append(',')
+        sb.append(event.createdAt)
+        sb.append(',')
+        sb.append(event.kind)
+        sb.append(',')
+        // Tags array
+        sb.append('[')
+        event.tags.forEachIndexed { i, tag ->
+            if (i > 0) sb.append(',')
+            sb.append('[')
+            tag.forEachIndexed { j, s ->
+                if (j > 0) sb.append(',')
+                sb.append(jsonString(s))
+            }
+            sb.append(']')
+        }
+        sb.append(']')
+        sb.append(',')
+        sb.append(jsonString(event.content))
+        sb.append(']')
+        return sha256(sb.toString().toByteArray(Charsets.UTF_8)).toHex()
+    }
+
+    /**
+     * Encode a string as a JSON string literal, following NIP-01 requirements:
+     * - Escape control chars, backslash, and double-quote
+     * - Do NOT escape non-ASCII Unicode (keep UTF-8 as-is)
+     */
+    private fun jsonString(s: String): String {
+        val sb = StringBuilder("\"")
+        for (ch in s) {
+            when (ch) {
+                '"'  -> sb.append("\\\"")
+                '\\' -> sb.append("\\\\")
+                '\n' -> sb.append("\\n")
+                '\r' -> sb.append("\\r")
+                '\t' -> sb.append("\\t")
+                in '\u0000'..'\u001F' -> sb.append("\\u%04x".format(ch.code))
+                else -> sb.append(ch)   // Unicode kept as-is (NIP-01)
+            }
+        }
+        sb.append('"')
+        return sb.toString()
     }
 
     private fun signEvent(eventId: String, privKey: ByteArray): String {
