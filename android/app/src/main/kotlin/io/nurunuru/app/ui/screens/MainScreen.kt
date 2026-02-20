@@ -147,7 +147,8 @@ fun MainScreen(
                 BottomTab.TIMELINE -> TimelineScreen(
                     viewModel = timelineVM,
                     myPictureUrl = myProfile?.picture,
-                    myDisplayName = myProfile?.displayedName ?: ""
+                    myDisplayName = myProfile?.displayedName ?: "",
+                    myPubkeyHex = pubkeyHex
                 )
                 BottomTab.MINIAPP -> SettingsScreen(
                     authViewModel = authViewModel,

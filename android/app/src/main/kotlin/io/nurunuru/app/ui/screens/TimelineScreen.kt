@@ -38,7 +38,8 @@ import kotlinx.coroutines.delay
 fun TimelineScreen(
     viewModel: TimelineViewModel,
     myPictureUrl: String?,
-    myDisplayName: String
+    myDisplayName: String,
+    myPubkeyHex: String = ""
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
@@ -198,7 +199,10 @@ fun TimelineScreen(
                                     onLike = { viewModel.likePost(post.event.id) },
                                     onRepost = { viewModel.repostPost(post.event.id) },
                                     onReply = { /* TODO: open reply modal */ },
-                                    onProfileClick = { /* TODO: navigate to profile */ }
+                                    onProfileClick = { /* TODO: navigate to profile */ },
+                                    myPubkeyHex = myPubkeyHex.ifEmpty { null },
+                                    onZap = { /* TODO: NIP-57 zap */ },
+                                    onDelete = { viewModel.deletePost(post.event.id) }
                                 )
                             }
                         }

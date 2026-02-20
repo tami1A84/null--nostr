@@ -4,6 +4,7 @@ import android.util.Log
 import io.nurunuru.app.data.NostrKeyUtils.hexToBytes
 import io.nurunuru.app.data.NostrKeyUtils.toHex
 import io.nurunuru.app.data.models.NostrEvent
+import io.nurunuru.app.data.models.NostrKind
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -22,17 +23,26 @@ private const val TAG = "NostrClient"
 private const val MAX_RECONNECT_ATTEMPTS = 5
 private val RECONNECT_DELAYS_MS = longArrayOf(5_000, 10_000, 20_000, 40_000, 80_000)
 
-// Lenient Json for parsing incoming relay messages (relays may add unknown fields)
-private val RELAY_JSON = Json { ignoreUnknownKeys = true; isLenient = true }
+/**
+ * CRITICAL: encodeDefaults = true ensures all NostrEvent fields (kind, tags, content, etc.)
+ * are always included when serializing events to send to relays.
+ * Without this, fields matching their default values (e.g. kind=1, tags=[]) would be omitted,
+ * causing relays to reject events or fail ID verification.
+ */
+private val RELAY_JSON = Json {
+    ignoreUnknownKeys = true
+    isLenient = true
+    encodeDefaults = true
+}
 
 /**
- * WebSocket-based Nostr protocol client (NIP-01).
+ * WebSocket-based Nostr protocol client (NIP-01, NIP-04, NIP-09, NIP-18, NIP-25, NIP-42).
  * Handles multi-relay connections, subscriptions, and event publishing.
  */
 class NostrClient(
     private val relays: List<String>,
     private val privateKeyHex: String,
-    private val publicKeyHex: String
+    val publicKeyHex: String
 ) {
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -88,9 +98,7 @@ class NostrClient(
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "Relay closed: $relayUrl code=$code")
                 connections.remove(relayUrl)
-                if (code != 1000) {
-                    scheduleReconnect(relayUrl)
-                }
+                if (code != 1000) scheduleReconnect(relayUrl)
             }
         }
         httpClient.newWebSocket(request, listener)
@@ -103,10 +111,8 @@ class NostrClient(
             return
         }
         reconnectJobs[relayUrl]?.cancel()
-
         val delayMs = RECONNECT_DELAYS_MS[attempt.coerceAtMost(RECONNECT_DELAYS_MS.size - 1)]
         Log.d(TAG, "Scheduling reconnect #${attempt + 1} to $relayUrl in ${delayMs}ms")
-
         reconnectJobs[relayUrl] = scope.launch {
             delay(delayMs)
             if (isActive) {
@@ -134,7 +140,6 @@ class NostrClient(
             when (val type = arr[0].jsonPrimitive.content) {
                 "EVENT" -> {
                     val subId = arr[1].jsonPrimitive.content
-                    // Use lenient parsing: relays may include unknown extra fields
                     val event = RELAY_JSON.decodeFromJsonElement<NostrEvent>(arr[2])
                     if (event.id.isNotEmpty() && event.sig.isNotEmpty()) {
                         scope.launch { _events.emit(event) }
@@ -156,13 +161,42 @@ class NostrClient(
                     }
                     publishAcks[eventId]?.trySend(accepted)
                 }
+                // NIP-42: Relay Authentication
+                "AUTH" -> {
+                    val challenge = arr.getOrNull(1)?.jsonPrimitive?.content ?: return
+                    Log.d(TAG, "AUTH challenge from $relayUrl")
+                    handleAuthChallenge(relayUrl, challenge)
+                }
                 "NOTICE" -> {
                     Log.d(TAG, "NOTICE from $relayUrl: ${arr.getOrNull(1)}")
                 }
-                else -> Log.d(TAG, "Unknown message type $type from $relayUrl")
+                else -> Log.d(TAG, "Unknown message type '$type' from $relayUrl")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to parse message from $relayUrl: ${e.message}")
+        }
+    }
+
+    // NIP-42: Respond to AUTH challenge
+    private fun handleAuthChallenge(relayUrl: String, challenge: String) {
+        scope.launch {
+            try {
+                val authEvent = createEvent(NostrEvent(
+                    kind = NostrKind.AUTH,
+                    content = "",
+                    tags = listOf(listOf("relay", relayUrl), listOf("challenge", challenge)),
+                    pubkey = publicKeyHex,
+                    createdAt = System.currentTimeMillis() / 1000
+                )) ?: return@launch
+                val msg = JsonArray(listOf(
+                    JsonPrimitive("AUTH"),
+                    RELAY_JSON.encodeToJsonElement(authEvent)
+                )).toString()
+                connections[relayUrl]?.send(msg)
+                Log.d(TAG, "Sent AUTH response to $relayUrl")
+            } catch (e: Exception) {
+                Log.w(TAG, "AUTH response failed for $relayUrl: ${e.message}")
+            }
         }
     }
 
@@ -264,7 +298,7 @@ class NostrClient(
     /**
      * Publish a signed event and wait for relay acknowledgment.
      * Returns true if at least one relay accepted the event.
-     * Times out after [ackTimeoutMs] and falls back to optimistic true if no relay responds.
+     * Times out after [ackTimeoutMs] ms and returns true optimistically.
      */
     suspend fun publishEvent(event: NostrEvent, ackTimeoutMs: Long = 5_000): Boolean =
         withContext(Dispatchers.IO) {
@@ -273,10 +307,12 @@ class NostrClient(
                 return@withContext false
             }
 
+            // encodeDefaults=true guarantees kind, tags, content are all present in the JSON
             val msg = JsonArray(listOf(
                 JsonPrimitive("EVENT"),
                 RELAY_JSON.encodeToJsonElement(event)
             )).toString()
+            Log.d(TAG, "Publishing event kind=${event.kind} id=${event.id.take(8)}… to ${connections.size} relay(s)")
 
             val ackChannel = Channel<Boolean>(Channel.UNLIMITED)
             if (event.id.isNotEmpty()) publishAcks[event.id] = ackChannel
@@ -285,7 +321,7 @@ class NostrClient(
             if (sent == 0L) {
                 publishAcks.remove(event.id)
                 ackChannel.close()
-                Log.w(TAG, "publishEvent: send failed for ${event.id.take(8)}…")
+                Log.w(TAG, "publishEvent: WebSocket send failed for ${event.id.take(8)}…")
                 return@withContext false
             }
 
@@ -302,16 +338,17 @@ class NostrClient(
                 }
             } catch (e: TimeoutCancellationException) {
                 Log.d(TAG, "publishEvent: no OK within ${ackTimeoutMs}ms, assuming accepted")
-                true // Optimistic: relay likely accepted but slow to respond
+                true
             } finally {
                 publishAcks.remove(event.id)
                 ackChannel.close()
             }
         }
 
+    // NIP-01: Text note
     suspend fun publishNote(content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
         val event = createEvent(NostrEvent(
-            kind = 1,
+            kind = NostrKind.TEXT_NOTE,
             content = content,
             tags = tags,
             pubkey = publicKeyHex,
@@ -320,23 +357,41 @@ class NostrClient(
         return if (publishEvent(event)) event else null
     }
 
-    suspend fun publishReaction(eventId: String, emoji: String = "+"): Boolean {
+    // NIP-25: Reaction
+    suspend fun publishReaction(eventId: String, authorPubkey: String, emoji: String = "+"): Boolean {
         val event = createEvent(NostrEvent(
-            kind = 7,
+            kind = NostrKind.REACTION,
             content = emoji,
-            tags = listOf(listOf("e", eventId)),
+            tags = listOf(listOf("e", eventId), listOf("p", authorPubkey)),
             pubkey = publicKeyHex,
             createdAt = System.currentTimeMillis() / 1000
         )) ?: return false
         return publishEvent(event)
     }
 
-    suspend fun publishRepost(eventId: String, relayUrl: String = ""): Boolean {
+    // NIP-18: Repost
+    suspend fun publishRepost(eventId: String, authorPubkey: String, relayUrl: String = ""): Boolean {
         val event = createEvent(NostrEvent(
-            kind = 6,
+            kind = NostrKind.REPOST,
             content = "",
-            // NIP-18: ["e", event_id, relay_url] (3 elements)
-            tags = listOf(listOf("e", eventId, relayUrl)),
+            tags = listOf(
+                listOf("e", eventId, relayUrl),
+                listOf("p", authorPubkey)
+            ),
+            pubkey = publicKeyHex,
+            createdAt = System.currentTimeMillis() / 1000
+        )) ?: return false
+        return publishEvent(event)
+    }
+
+    // NIP-09: Event deletion
+    suspend fun publishDeletion(eventIds: List<String>, reason: String = ""): Boolean {
+        if (eventIds.isEmpty()) return false
+        val tags = eventIds.map { listOf("e", it) }
+        val event = createEvent(NostrEvent(
+            kind = NostrKind.DELETION,
+            content = reason,
+            tags = tags,
             pubkey = publicKeyHex,
             createdAt = System.currentTimeMillis() / 1000
         )) ?: return false
@@ -348,7 +403,7 @@ class NostrClient(
     suspend fun sendEncryptedDm(recipientPubkeyHex: String, content: String): Boolean {
         val encrypted = encryptNip04(recipientPubkeyHex, content) ?: return false
         val event = createEvent(NostrEvent(
-            kind = 4,
+            kind = NostrKind.ENCRYPTED_DM,
             content = encrypted,
             tags = listOf(listOf("p", recipientPubkeyHex)),
             pubkey = publicKeyHex,
@@ -414,7 +469,6 @@ class NostrClient(
     /**
      * NIP-01 canonical event serialization for ID computation.
      * Built manually to guarantee byte-exact output independent of JSON library behavior.
-     * See: https://github.com/nostr-protocol/nostr/blob/master/01.md
      */
     private fun computeEventId(event: NostrEvent): String {
         val sb = StringBuilder()
@@ -425,7 +479,6 @@ class NostrClient(
         sb.append(',')
         sb.append(event.kind)
         sb.append(',')
-        // Tags array
         sb.append('[')
         event.tags.forEachIndexed { i, tag ->
             if (i > 0) sb.append(',')
@@ -444,9 +497,8 @@ class NostrClient(
     }
 
     /**
-     * Encode a string as a JSON string literal, following NIP-01 requirements:
-     * - Escape control chars, backslash, and double-quote
-     * - Do NOT escape non-ASCII Unicode (keep UTF-8 as-is)
+     * Encode a string as a JSON string literal (NIP-01 compliant):
+     * escapes control chars, backslash, and double-quote; keeps Unicode as-is.
      */
     private fun jsonString(s: String): String {
         val sb = StringBuilder("\"")
@@ -458,7 +510,7 @@ class NostrClient(
                 '\r' -> sb.append("\\r")
                 '\t' -> sb.append("\\t")
                 in '\u0000'..'\u001F' -> sb.append("\\u%04x".format(ch.code))
-                else -> sb.append(ch)   // Unicode kept as-is (NIP-01)
+                else -> sb.append(ch)
             }
         }
         sb.append('"')

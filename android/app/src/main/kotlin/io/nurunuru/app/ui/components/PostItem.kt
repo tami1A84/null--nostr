@@ -8,8 +8,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.ChatBubble
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.*
@@ -41,10 +45,15 @@ fun PostItem(
     onRepost: () -> Unit,
     onReply: () -> Unit,
     onProfileClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    myPubkeyHex: String? = null,
+    onZap: () -> Unit = {},
+    onDelete: (() -> Unit)? = null
 ) {
     val nuruColors = LocalNuruColors.current
     val profile = post.profile
+    val isOwnPost = myPubkeyHex != null && post.event.pubkey == myPubkeyHex
+    var menuExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -66,7 +75,7 @@ fun PostItem(
             )
 
             Column(modifier = Modifier.weight(1f)) {
-                // Header row: name + time
+                // Header row: name + time + menu
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -81,19 +90,74 @@ fun PostItem(
                             maxLines = 1
                         )
                         if (profile?.nip05 != null) {
-                            Text(
-                                text = formatNip05(profile.nip05),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = nuruColors.lineGreen,
-                                maxLines = 1
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = formatNip05(profile.nip05),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = nuruColors.lineGreen,
+                                    maxLines = 1
+                                )
+                                if (profile.nip05Verified) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Verified,
+                                        contentDescription = "NIP-05認証済み",
+                                        tint = nuruColors.lineGreen,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
                         }
                     }
-                    Text(
-                        text = formatTimestamp(post.event.createdAt),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = nuruColors.textTertiary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = formatTimestamp(post.event.createdAt),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = nuruColors.textTertiary
+                        )
+                        if (isOwnPost && onDelete != null) {
+                            Box {
+                                IconButton(
+                                    onClick = { menuExpanded = true },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "メニュー",
+                                        tint = nuruColors.textTertiary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismissRequest = { menuExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFFF4444),
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Text("削除", color = Color(0xFFFF4444))
+                                            }
+                                        },
+                                        onClick = {
+                                            menuExpanded = false
+                                            onDelete()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -138,8 +202,13 @@ fun PostItem(
                         onClick = onLike,
                         tint = if (post.isLiked) Color(0xFFFF6B6B) else nuruColors.textTertiary
                     )
-                    // Spacer for layout balance
-                    Spacer(modifier = Modifier.width(8.dp))
+                    // Zap
+                    AnimatedActionButton(
+                        icon = Icons.Outlined.Bolt,
+                        count = post.zapCount,
+                        onClick = onZap,
+                        tint = if (post.isZapped) Color(0xFFFFD700) else nuruColors.textTertiary
+                    )
                 }
             }
         }

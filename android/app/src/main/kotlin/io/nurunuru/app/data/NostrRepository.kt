@@ -8,6 +8,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlin.math.pow
 
 private const val PROFILE_CACHE_MAX = 500
 private const val PROFILE_CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
@@ -15,6 +16,11 @@ private const val PROFILE_CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
 /**
  * High-level Nostr operations.
  * Uses NostrClient for all relay communication.
+ *
+ * Recommendation algorithm ported from web version (lib/recommendation.js):
+ *   Engagement weights: Zap=100, Repost=25, Like=5
+ *   Time decay: half-life 6 hours
+ *   Freshness boost: <1h → 1.5x, <6h → 1.2x
  */
 class NostrRepository(
     private val client: NostrClient,
@@ -30,7 +36,7 @@ class NostrRepository(
 
     // ─── Timeline ─────────────────────────────────────────────────────────────
 
-    /** Fetch global timeline (recent text notes). */
+    /** Fetch global timeline (recent text notes, scored by recommendation algorithm). */
     suspend fun fetchGlobalTimeline(limit: Int = 100): List<ScoredPost> {
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.TEXT_NOTE),
@@ -41,7 +47,7 @@ class NostrRepository(
         return enrichPosts(events)
     }
 
-    /** Fetch timeline for followed users. */
+    /** Fetch timeline for followed users, scored by recommendation algorithm. */
     suspend fun fetchFollowTimeline(pubkeyHex: String, limit: Int = 100): List<ScoredPost> {
         val followList = fetchFollowList(pubkeyHex)
         if (followList.isEmpty()) return fetchGlobalTimeline(limit)
@@ -114,7 +120,6 @@ class NostrRepository(
     private suspend fun putCachedProfile(pubkey: String, profile: UserProfile) =
         cacheMutex.withLock {
             if (profileCache.size >= PROFILE_CACHE_MAX) {
-                // Remove eldest entry (LRU order)
                 profileCache.entries.firstOrNull()?.let { profileCache.remove(it.key) }
             }
             profileCache[pubkey] = Pair(profile, System.currentTimeMillis())
@@ -164,8 +169,9 @@ class NostrRepository(
         return enrichPosts(events)
     }
 
-    // ─── Reactions ────────────────────────────────────────────────────────────
+    // ─── Reactions (NIP-25) ───────────────────────────────────────────────────
 
+    /** Returns map of eventId → reaction count. */
     suspend fun fetchReactions(eventIds: List<String>): Map<String, Int> {
         if (eventIds.isEmpty()) return emptyMap()
         val filter = NostrClient.Filter(
@@ -174,6 +180,34 @@ class NostrRepository(
             limit = 500
         )
         val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        return events
+            .groupBy { it.getTagValue("e") ?: "" }
+            .mapValues { it.value.size }
+            .filterKeys { it.isNotEmpty() }
+    }
+
+    private suspend fun fetchReactionCounts(eventIds: List<String>): Map<String, Int> {
+        if (eventIds.isEmpty()) return emptyMap()
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.REACTION),
+            tags = mapOf("e" to eventIds),
+            limit = 500
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 3_000)
+        return events
+            .groupBy { it.getTagValue("e") ?: "" }
+            .mapValues { it.value.size }
+            .filterKeys { it.isNotEmpty() }
+    }
+
+    private suspend fun fetchRepostCounts(eventIds: List<String>): Map<String, Int> {
+        if (eventIds.isEmpty()) return emptyMap()
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.REPOST),
+            tags = mapOf("e" to eventIds),
+            limit = 200
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 3_000)
         return events
             .groupBy { it.getTagValue("e") ?: "" }
             .mapValues { it.value.size }
@@ -216,7 +250,7 @@ class NostrRepository(
             DmConversation(
                 partnerPubkey = partnerKey,
                 partnerProfile = profiles[partnerKey],
-                lastMessage = "...", // decryption done in ViewModel
+                lastMessage = "...",
                 lastMessageTime = lastEvent.createdAt,
                 unreadCount = 0
             )
@@ -257,37 +291,101 @@ class NostrRepository(
 
     // ─── Actions ──────────────────────────────────────────────────────────────
 
-    suspend fun likePost(eventId: String): Boolean =
-        client.publishReaction(eventId, "+")
+    // NIP-25: Like (reaction "+")
+    suspend fun likePost(eventId: String, authorPubkey: String): Boolean =
+        client.publishReaction(eventId, authorPubkey, "+")
 
-    suspend fun repostPost(eventId: String): Boolean =
-        client.publishRepost(eventId)
+    // NIP-18: Repost
+    suspend fun repostPost(eventId: String, authorPubkey: String): Boolean =
+        client.publishRepost(eventId, authorPubkey)
 
+    // NIP-01: Publish text note
     suspend fun publishNote(content: String, replyToId: String? = null): NostrEvent? {
         val tags = mutableListOf<List<String>>()
-        if (replyToId != null) tags.add(listOf("e", replyToId, "", "reply"))
+        if (replyToId != null) {
+            // NIP-10: reply tag
+            tags.add(listOf("e", replyToId, "", "reply"))
+        }
         return client.publishNote(content, tags)
     }
 
+    // NIP-09: Delete event
+    suspend fun deleteEvent(eventId: String, reason: String = ""): Boolean =
+        client.publishDeletion(listOf(eventId), reason)
+
+    // NIP-04: Send DM
     suspend fun sendDm(recipientPubkeyHex: String, content: String): Boolean =
         client.sendEncryptedDm(recipientPubkeyHex, content)
 
+    // ─── Recommendation Algorithm (ported from web lib/recommendation.js) ─────
+
+    /**
+     * Score a post using the web version's algorithm:
+     *   - Engagement weights: Zap=100, Repost=25, Like=5
+     *   - Time decay: half-life 6 hours (2^(-age/6))
+     *   - Freshness boost: <1h → 1.5x, <6h → 1.2x
+     */
+    private fun computeScore(event: NostrEvent, likes: Int, reposts: Int, zapSats: Long): Double {
+        val now = System.currentTimeMillis() / 1000
+        val ageHours = (now - event.createdAt).toDouble() / 3600.0
+
+        // Time decay: half-life 6h
+        val timeFactor = 2.0.pow(-ageHours / 6.0)
+
+        // Freshness boost (from web version)
+        val freshnessBoost = when {
+            ageHours < 1.0 -> 1.5
+            ageHours < 6.0 -> 1.2
+            else -> 1.0
+        }
+
+        // Engagement weights (Zap=100, Repost=25, Like=5)
+        val zapScore = (zapSats / 1000.0) * 100.0  // zap sats → normalized
+        val engagementScore = zapScore + reposts * 25.0 + likes * 5.0
+
+        return (engagementScore + 1.0) * timeFactor * freshnessBoost
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
+    /**
+     * Enrich events with profiles, reaction/repost counts, and recommendation scores.
+     * Fetches profiles + reactions + reposts in parallel for speed.
+     */
     private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> {
-        // Deduplicate by event ID (same event broadcast by multiple relays)
         val textNotes = events
             .filter { it.kind == NostrKind.TEXT_NOTE }
             .distinctBy { it.id }
-            .sortedByDescending { it.createdAt }
         if (textNotes.isEmpty()) return emptyList()
 
-        val profiles = fetchProfiles(textNotes.map { it.pubkey }.distinct())
-        return textNotes.map { event ->
-            ScoredPost(
-                event = event,
-                profile = profiles[event.pubkey]
-            )
+        val eventIds = textNotes.map { it.id }
+
+        return coroutineScope {
+            val profilesDeferred = async {
+                fetchProfiles(textNotes.map { it.pubkey }.distinct())
+            }
+            val reactionsDeferred = async {
+                try { fetchReactionCounts(eventIds) } catch (_: Exception) { emptyMap() }
+            }
+            val repostsDeferred = async {
+                try { fetchRepostCounts(eventIds) } catch (_: Exception) { emptyMap() }
+            }
+
+            val profiles = profilesDeferred.await()
+            val reactionCounts = reactionsDeferred.await()
+            val repostCounts = repostsDeferred.await()
+
+            textNotes.map { event ->
+                val likes = reactionCounts[event.id] ?: 0
+                val reposts = repostCounts[event.id] ?: 0
+                ScoredPost(
+                    event = event,
+                    profile = profiles[event.pubkey],
+                    likeCount = likes,
+                    repostCount = reposts,
+                    score = computeScore(event, likes, reposts, 0L)
+                )
+            }.sortedByDescending { it.score }
         }
     }
 }

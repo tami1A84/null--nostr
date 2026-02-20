@@ -113,24 +113,23 @@ class TimelineViewModel(
     }
 
     fun likePost(eventId: String) {
-        // Prevent double-tap: skip if already in-flight for this event
         if (!pendingLikes.add(eventId)) return
         viewModelScope.launch {
             try {
-                val success = repository.likePost(eventId)
+                val post = _uiState.value.posts.find { it.event.id == eventId } ?: return@launch
+                val success = repository.likePost(eventId, post.event.pubkey)
                 if (success) {
                     _uiState.update { state ->
-                        state.copy(posts = state.posts.map { post ->
-                            if (post.event.id == eventId && !post.isLiked)
-                                post.copy(isLiked = true, likeCount = post.likeCount + 1)
-                            else post
+                        state.copy(posts = state.posts.map { p ->
+                            if (p.event.id == eventId && !p.isLiked)
+                                p.copy(isLiked = true, likeCount = p.likeCount + 1)
+                            else p
                         })
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // Silent: relay may still accept it next connection
             } finally {
                 pendingLikes.remove(eventId)
             }
@@ -138,27 +137,40 @@ class TimelineViewModel(
     }
 
     fun repostPost(eventId: String) {
-        // Prevent double-tap: skip if already in-flight for this event
         if (!pendingReposts.add(eventId)) return
         viewModelScope.launch {
             try {
-                val success = repository.repostPost(eventId)
+                val post = _uiState.value.posts.find { it.event.id == eventId } ?: return@launch
+                val success = repository.repostPost(eventId, post.event.pubkey)
                 if (success) {
                     _uiState.update { state ->
-                        state.copy(posts = state.posts.map { post ->
-                            if (post.event.id == eventId && !post.isReposted)
-                                post.copy(isReposted = true, repostCount = post.repostCount + 1)
-                            else post
+                        state.copy(posts = state.posts.map { p ->
+                            if (p.event.id == eventId && !p.isReposted)
+                                p.copy(isReposted = true, repostCount = p.repostCount + 1)
+                            else p
                         })
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // Silent
             } finally {
                 pendingReposts.remove(eventId)
             }
+        }
+    }
+
+    fun deletePost(eventId: String) {
+        viewModelScope.launch {
+            try {
+                val success = repository.deleteEvent(eventId)
+                if (success) {
+                    _uiState.update { state ->
+                        state.copy(posts = state.posts.filter { it.event.id != eventId })
+                    }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { }
         }
     }
 
