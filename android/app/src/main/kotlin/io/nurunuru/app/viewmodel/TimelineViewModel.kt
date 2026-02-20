@@ -35,6 +35,10 @@ class TimelineViewModel(
     private val _notification = MutableSharedFlow<String>(extraBufferCapacity = 5)
     val notification: SharedFlow<String> = _notification.asSharedFlow()
 
+    // NIP-57: emits BOLT-11 invoice for the UI to launch wallet
+    private val _zapInvoice = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val zapInvoice: SharedFlow<String> = _zapInvoice.asSharedFlow()
+
     // My own profile for optimistic post display
     private var myProfile: UserProfile? = null
 
@@ -185,6 +189,48 @@ class TimelineViewModel(
             } catch (_: Exception) {
             } finally {
                 pendingReposts.remove(eventId)
+            }
+        }
+    }
+
+    fun zapPost(eventId: String, sats: Long, comment: String = "") {
+        viewModelScope.launch {
+            try {
+                val post = _uiState.value.posts.find { it.event.id == eventId } ?: return@launch
+                val lud16 = post.profile?.lud16
+                if (lud16.isNullOrBlank()) {
+                    _notification.emit("このユーザーはZapに対応していません")
+                    return@launch
+                }
+                _notification.emit("Zapを処理中...")
+                val msats = sats * 1000L
+                val payInfo = repository.fetchLnurlPayInfo(lud16) ?: run {
+                    _notification.emit("LNURL情報の取得に失敗しました")
+                    return@launch
+                }
+                if (!payInfo.allowsNostr) {
+                    _notification.emit("このユーザーはNostr Zapに対応していません")
+                    return@launch
+                }
+                val zapRequest = repository.createZapRequest(
+                    recipientPubkeyHex = post.event.pubkey,
+                    eventId = eventId,
+                    msats = msats,
+                    comment = comment,
+                    relays = listOf("wss://yabu.me", "wss://relay.damus.io")
+                ) ?: run {
+                    _notification.emit("Zapリクエストの作成に失敗しました")
+                    return@launch
+                }
+                val invoice = repository.fetchZapInvoice(payInfo, msats, zapRequest) ?: run {
+                    _notification.emit("Lightning請求書の取得に失敗しました")
+                    return@launch
+                }
+                _zapInvoice.emit(invoice)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _notification.emit("Zapに失敗しました")
             }
         }
     }

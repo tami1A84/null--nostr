@@ -25,8 +25,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
+import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.ui.components.PostItem
 import io.nurunuru.app.ui.components.PostModal
+import io.nurunuru.app.ui.components.ZapBottomSheet
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.FeedType
@@ -45,9 +50,11 @@ fun TimelineScreen(
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
     val listState = rememberLazyListState()
+    val context = LocalContext.current
     var showPostModal by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
     var showSearch by remember { mutableStateOf(false) }
+    var zapTargetPost by remember { mutableStateOf<ScoredPost?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Collect one-shot notifications (post success/failure) and show Snackbar
@@ -62,6 +69,18 @@ fun TimelineScreen(
     LaunchedEffect(errorMessage) {
         if (errorMessage != null && uiState.posts.isNotEmpty()) {
             snackbarHostState.showSnackbar(errorMessage, duration = SnackbarDuration.Short)
+        }
+    }
+
+    // Collect Lightning invoice and launch wallet app
+    LaunchedEffect(Unit) {
+        viewModel.zapInvoice.collect { invoice ->
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("lightning:$invoice"))
+                context.startActivity(intent)
+            } catch (_: Exception) {
+                snackbarHostState.showSnackbar("Lightningウォレットが見つかりません", duration = SnackbarDuration.Short)
+            }
         }
     }
 
@@ -219,7 +238,7 @@ fun TimelineScreen(
                                     onReply = {},
                                     onProfileClick = onProfileClick,
                                     myPubkeyHex = myPubkeyHex.ifEmpty { null },
-                                    onZap = { /* フェーズ5で実装 */ },
+                                    onZap = { zapTargetPost = post },
                                     onDelete = { viewModel.deletePost(post.event.id) }
                                 )
                             }
@@ -248,6 +267,18 @@ fun TimelineScreen(
             onDismiss = { showPostModal = false },
             onPublish = { content ->
                 viewModel.publishNote(content)
+            }
+        )
+    }
+
+    // NIP-57 Zap bottom sheet
+    zapTargetPost?.let { post ->
+        ZapBottomSheet(
+            recipientName = post.profile?.displayedName ?: "ユーザー",
+            onDismiss = { zapTargetPost = null },
+            onZap = { sats ->
+                viewModel.zapPost(post.event.id, sats)
+                zapTargetPost = null
             }
         )
     }

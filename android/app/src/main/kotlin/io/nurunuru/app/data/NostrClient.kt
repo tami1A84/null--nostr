@@ -538,4 +538,17 @@ class NostrClient(
 
     private fun sha256(data: ByteArray): ByteArray =
         MessageDigest.getInstance("SHA-256").digest(data)
+
+    /**
+     * Build and sign an event without publishing it.
+     * Used by NostrRepository for NIP-57 zap request creation.
+     */
+    fun buildSignedEvent(kind: Int, content: String, tags: List<List<String>>): NostrEvent? =
+        createEvent(NostrEvent(
+            kind = kind,
+            content = content,
+            tags = tags,
+            pubkey = publicKeyHex,
+            createdAt = System.currentTimeMillis() / 1000
+        ))
 }

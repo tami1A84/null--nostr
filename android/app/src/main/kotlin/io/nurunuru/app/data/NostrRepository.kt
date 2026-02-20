@@ -7,6 +7,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
@@ -33,6 +34,8 @@ class NostrRepository(
     private val prefs: AppPreferences
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    // For serializing events to send to LNURL endpoints (all fields required)
+    private val eventJson = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
 
     // Lightweight OkHttp client for NIP-05 HTTPS verification (no WebSocket needed)
     private val httpClient = OkHttpClient.Builder()
@@ -380,6 +383,95 @@ class NostrRepository(
 
     suspend fun isFollowing(myPubkeyHex: String, targetPubkeyHex: String): Boolean =
         targetPubkeyHex in fetchFollowList(myPubkeyHex)
+
+    // ─── NIP-57 Zap ───────────────────────────────────────────────────────────
+
+    data class LnurlPayInfo(
+        val callback: String,
+        val minSendable: Long,
+        val maxSendable: Long,
+        val allowsNostr: Boolean,
+        val nostrPubkey: String?
+    )
+
+    /**
+     * Resolve lud16 (e.g. "alice@domain.com") to LNURL-pay info.
+     * Returns null if the endpoint doesn't support NIP-57 Zap.
+     */
+    suspend fun fetchLnurlPayInfo(lud16: String): LnurlPayInfo? = withContext(Dispatchers.IO) {
+        try {
+            val parts = lud16.split("@")
+            if (parts.size != 2) return@withContext null
+            val (local, domain) = parts
+            val url = "https://$domain/.well-known/lnurlp/$local"
+            val request = Request.Builder().url(url).build()
+            val body = httpClient.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                resp.body?.string() ?: return@withContext null
+            }
+            val obj = json.parseToJsonElement(body).jsonObject
+            LnurlPayInfo(
+                callback = obj["callback"]?.jsonPrimitive?.content ?: return@withContext null,
+                minSendable = obj["minSendable"]?.jsonPrimitive?.content?.toLongOrNull() ?: 1000L,
+                maxSendable = obj["maxSendable"]?.jsonPrimitive?.content?.toLongOrNull() ?: 10_000_000_000L,
+                allowsNostr = obj["allowsNostr"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false,
+                nostrPubkey = obj["nostrPubkey"]?.jsonPrimitive?.content
+            )
+        } catch (e: Exception) {
+            Log.d(REPO_TAG, "fetchLnurlPayInfo failed for $lud16: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Create a NIP-57 kind:9734 zap request event (signed but not published to relay).
+     * The event is sent to the LNURL server via HTTP to obtain a Lightning invoice.
+     */
+    fun createZapRequest(
+        recipientPubkeyHex: String,
+        eventId: String,
+        msats: Long,
+        comment: String,
+        relays: List<String>
+    ): NostrEvent? {
+        val tags = buildList {
+            add(listOf("p", recipientPubkeyHex))
+            add(listOf("e", eventId))
+            add(listOf("amount", msats.toString()))
+            if (relays.isNotEmpty()) add(listOf("relays") + relays.take(3))
+        }
+        return client.buildSignedEvent(
+            kind = NostrKind.ZAP_REQUEST,
+            content = comment,
+            tags = tags
+        )
+    }
+
+    /**
+     * Call the LNURL-pay callback to get a BOLT-11 invoice.
+     * Returns the invoice string ("lnbc...") or null on failure.
+     */
+    suspend fun fetchZapInvoice(
+        payInfo: LnurlPayInfo,
+        msats: Long,
+        zapRequest: NostrEvent
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val zapJson = eventJson.encodeToJsonElement(zapRequest).toString()
+            val encodedZap = java.net.URLEncoder.encode(zapJson, "UTF-8")
+            val url = "${payInfo.callback}?amount=$msats&nostr=$encodedZap"
+            val request = Request.Builder().url(url).build()
+            val body = httpClient.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                resp.body?.string() ?: return@withContext null
+            }
+            val obj = json.parseToJsonElement(body).jsonObject
+            obj["pr"]?.jsonPrimitive?.content
+        } catch (e: Exception) {
+            Log.d(REPO_TAG, "fetchZapInvoice failed: ${e.message}")
+            null
+        }
+    }
 
     // ─── Recommendation Algorithm (ported from web lib/recommendation.js) ─────
 
