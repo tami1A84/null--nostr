@@ -5,6 +5,7 @@ import io.nurunuru.app.data.NostrKeyUtils.hexToBytes
 import io.nurunuru.app.data.NostrKeyUtils.toHex
 import io.nurunuru.app.data.models.NostrEvent
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 import okhttp3.*
@@ -47,8 +48,8 @@ class NostrClient(
     private val reconnectJobs = ConcurrentHashMap<String, Job>()
     private val reconnectAttempts = ConcurrentHashMap<String, Int>()
 
-    // Track relay OK acknowledgments: eventId → list of (accepted, reason) deferreds per relay
-    private val publishAcks = ConcurrentHashMap<String, MutableList<CompletableDeferred<Boolean>>>()
+    // Track relay OK acknowledgments: eventId → Channel<Boolean> (true=accepted, false=rejected)
+    private val publishAcks = ConcurrentHashMap<String, Channel<Boolean>>()
 
     private val _events = MutableSharedFlow<NostrEvent>(extraBufferCapacity = 100)
     val events: SharedFlow<NostrEvent> = _events.asSharedFlow()
@@ -153,13 +154,7 @@ class NostrClient(
                     } else {
                         Log.d(TAG, "Event accepted by $relayUrl (${eventId.take(8)}…)")
                     }
-                    // Complete the first pending ack deferred for this event
-                    publishAcks[eventId]?.let { deferreds ->
-                        synchronized(deferreds) {
-                            val pending = deferreds.firstOrNull { !it.isCompleted }
-                            pending?.complete(accepted)
-                        }
-                    }
+                    publishAcks[eventId]?.trySend(accepted)
                 }
                 "NOTICE" -> {
                     Log.d(TAG, "NOTICE from $relayUrl: ${arr.getOrNull(1)}")
@@ -283,41 +278,34 @@ class NostrClient(
                 RELAY_JSON.encodeToJsonElement(event)
             )).toString()
 
-            // Register ack deferreds – one per connected relay
-            val ackDeferreds = connections.keys.map { CompletableDeferred<Boolean>() }
-            if (event.id.isNotEmpty()) {
-                publishAcks[event.id] = ackDeferreds.toMutableList()
-            }
+            val ackChannel = Channel<Boolean>(Channel.UNLIMITED)
+            if (event.id.isNotEmpty()) publishAcks[event.id] = ackChannel
 
             val sent = connections.values.sumOf { ws -> if (ws.send(msg)) 1L else 0L }
             if (sent == 0L) {
                 publishAcks.remove(event.id)
+                ackChannel.close()
                 Log.w(TAG, "publishEvent: send failed for ${event.id.take(8)}…")
                 return@withContext false
             }
 
-            // Wait until at least one relay accepts, or timeout
             return@withContext try {
                 withTimeout(ackTimeoutMs) {
-                    // Complete as soon as any relay accepts
-                    val accepted = CompletableDeferred<Boolean>()
-                    ackDeferreds.forEach { d ->
-                        scope.launch {
-                            if (d.await()) accepted.complete(true)
-                        }
+                    val relayCount = connections.size
+                    var received = 0
+                    while (received < relayCount) {
+                        val accepted = ackChannel.receive()
+                        received++
+                        if (accepted) return@withTimeout true
                     }
-                    // Also complete with false if all relays reject
-                    scope.launch {
-                        ackDeferreds.forEach { it.join() }
-                        if (!accepted.isCompleted) accepted.complete(false)
-                    }
-                    accepted.await()
+                    false // all relays rejected
                 }
             } catch (e: TimeoutCancellationException) {
                 Log.d(TAG, "publishEvent: no OK within ${ackTimeoutMs}ms, assuming accepted")
                 true // Optimistic: relay likely accepted but slow to respond
             } finally {
                 publishAcks.remove(event.id)
+                ackChannel.close()
             }
         }
 

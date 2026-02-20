@@ -1,12 +1,15 @@
 package io.nurunuru.app.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,6 +31,7 @@ import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.FeedType
 import io.nurunuru.app.viewmodel.TimelineViewModel
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -173,14 +177,30 @@ fun TimelineScreen(
                 }
                 else -> {
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                        items(displayPosts, key = { it.event.id }) { post ->
-                            PostItem(
-                                post = post,
-                                onLike = { viewModel.likePost(post.event.id) },
-                                onRepost = { viewModel.repostPost(post.event.id) },
-                                onReply = { /* TODO: open reply modal */ },
-                                onProfileClick = { /* TODO: navigate to profile */ }
-                            )
+                        itemsIndexed(displayPosts, key = { _, post -> post.event.id }) { index, post ->
+                            var visible by remember { mutableStateOf(false) }
+                            LaunchedEffect(post.event.id) {
+                                delay((index * 30L).coerceAtMost(150L))
+                                visible = true
+                            }
+                            AnimatedVisibility(
+                                visible = visible,
+                                enter = fadeIn() + slideInVertically(
+                                    initialOffsetY = { it / 4 },
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessMediumLow
+                                    )
+                                )
+                            ) {
+                                PostItem(
+                                    post = post,
+                                    onLike = { viewModel.likePost(post.event.id) },
+                                    onRepost = { viewModel.repostPost(post.event.id) },
+                                    onReply = { /* TODO: open reply modal */ },
+                                    onProfileClick = { /* TODO: navigate to profile */ }
+                                )
+                            }
                         }
                         item {
                             Spacer(modifier = Modifier.height(80.dp))

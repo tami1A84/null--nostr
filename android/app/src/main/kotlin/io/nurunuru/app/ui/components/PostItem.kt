@@ -1,5 +1,8 @@
 package io.nurunuru.app.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
@@ -22,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import coil.compose.AsyncImage
 import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.data.NostrKeyUtils
@@ -120,14 +125,14 @@ fun PostItem(
                         tint = nuruColors.textTertiary
                     )
                     // Repost
-                    ActionButton(
+                    AnimatedActionButton(
                         icon = Icons.Outlined.Repeat,
                         count = post.repostCount,
                         onClick = onRepost,
                         tint = if (post.isReposted) nuruColors.lineGreen else nuruColors.textTertiary
                     )
                     // Like
-                    ActionButton(
+                    AnimatedActionButton(
                         icon = if (post.isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
                         count = post.likeCount,
                         onClick = onLike,
@@ -230,6 +235,57 @@ private fun ActionButton(
             contentDescription = null,
             tint = tint,
             modifier = Modifier.size(18.dp)
+        )
+        if (count > 0) {
+            Text(
+                text = formatCount(count),
+                style = MaterialTheme.typography.bodySmall,
+                color = tint
+            )
+        }
+    }
+}
+
+@Composable
+private fun AnimatedActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    count: Int,
+    onClick: () -> Unit,
+    tint: Color
+) {
+    val scale = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.clickable {
+            onClick()
+            scope.launch {
+                scale.animateTo(
+                    targetValue = 1.35f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessHigh
+                    )
+                )
+                scale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+            }
+        }
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier
+                .size(18.dp)
+                .scale(scale.value)
         )
         if (count > 0) {
             Text(

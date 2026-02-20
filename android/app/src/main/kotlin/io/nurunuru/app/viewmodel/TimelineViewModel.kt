@@ -66,6 +66,8 @@ class TimelineViewModel(
     }
 
     fun refresh() {
+        // Cancel any in-flight loadTimeline to prevent it overwriting refreshed posts
+        loadJob?.cancel()
         // Avoid stacking multiple concurrent refreshes
         if (_uiState.value.isRefreshing) return
         viewModelScope.launch {
@@ -187,8 +189,8 @@ class TimelineViewModel(
 
     private suspend fun fetchForCurrentFeed(): List<ScoredPost> =
         when (_uiState.value.feedType) {
-            FeedType.GLOBAL -> repository.fetchGlobalTimeline(50)
-            FeedType.FOLLOWING -> repository.fetchFollowTimeline(pubkeyHex, 50)
+            FeedType.GLOBAL -> repository.fetchGlobalTimeline(100)
+            FeedType.FOLLOWING -> repository.fetchFollowTimeline(pubkeyHex, 100)
         }
 
     class Factory(

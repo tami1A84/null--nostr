@@ -31,18 +31,18 @@ class NostrRepository(
     // ─── Timeline ─────────────────────────────────────────────────────────────
 
     /** Fetch global timeline (recent text notes). */
-    suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
+    suspend fun fetchGlobalTimeline(limit: Int = 100): List<ScoredPost> {
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.TEXT_NOTE),
             limit = limit,
-            since = System.currentTimeMillis() / 1000 - 3600 // last hour
+            since = System.currentTimeMillis() / 1000 - 7200 // last 2 hours
         )
         val events = client.fetchEvents(filter, timeoutMs = 10_000)
         return enrichPosts(events)
     }
 
     /** Fetch timeline for followed users. */
-    suspend fun fetchFollowTimeline(pubkeyHex: String, limit: Int = 50): List<ScoredPost> {
+    suspend fun fetchFollowTimeline(pubkeyHex: String, limit: Int = 100): List<ScoredPost> {
         val followList = fetchFollowList(pubkeyHex)
         if (followList.isEmpty()) return fetchGlobalTimeline(limit)
 
