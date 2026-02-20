@@ -121,8 +121,11 @@ class TimelineViewModel(
 
     fun publishNote(content: String) {
         viewModelScope.launch {
-            repository.publishNote(content)
-            // Prepend optimistically
+            try {
+                repository.publishNote(content)
+            } catch (e: Exception) {
+                // Publishing failed silently; do not crash
+            }
             refresh()
         }
     }

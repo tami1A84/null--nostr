@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import io.nurunuru.app.ui.theme.LocalNuruColors
+import kotlinx.coroutines.launch
 
 private const val MAX_NOTE_LENGTH = 1000
 
@@ -33,16 +34,22 @@ fun PostModal(
     val focusRequester = remember { FocusRequester() }
     val remaining = MAX_NOTE_LENGTH - text.text.length
     val canPost = text.text.isNotBlank() && remaining >= 0
+    // Hoist sheetState so we can animate hide before removing from composition
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    fun dismissSheet() {
+        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+    }
 
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onDismiss, // swipe-down: framework already animating, just update state
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = sheetState
     ) {
         Column(
             modifier = Modifier
@@ -59,7 +66,7 @@ fun PostModal(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onDismiss) {
+                IconButton(onClick = { dismissSheet() }) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "閉じる",
@@ -70,7 +77,7 @@ fun PostModal(
                     onClick = {
                         if (canPost) {
                             onPublish(text.text)
-                            onDismiss()
+                            dismissSheet()
                         }
                     },
                     enabled = canPost,
