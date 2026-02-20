@@ -47,6 +47,22 @@ fun TimelineScreen(
     var showPostModal by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
     var showSearch by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Collect one-shot notifications (post success/failure) and show Snackbar
+    LaunchedEffect(Unit) {
+        viewModel.notification.collect { message ->
+            snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Short)
+        }
+    }
+
+    // Show loading/refresh errors as Snackbar when posts are already displayed
+    val errorMessage = uiState.error
+    LaunchedEffect(errorMessage) {
+        if (errorMessage != null && uiState.posts.isNotEmpty()) {
+            snackbarHostState.showSnackbar(errorMessage, duration = SnackbarDuration.Short)
+        }
+    }
 
     val pullRefreshState = rememberPullToRefreshState()
     if (pullRefreshState.isRefreshing) {
@@ -59,6 +75,7 @@ fun TimelineScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Column {
                 // Tab bar: Global / Following

@@ -199,19 +199,7 @@ Web 版と同様に「@username への返信」をポスト本文上部に表示
 
 ---
 
-### フェーズ 3 — 返信モーダル (Reply Modal)
-
-投稿に返信できるようにする。
-
-**実装**:
-- `TimelineScreen` / `HomeScreen`: `onReply` で選択ポストを State に保持
-- `PostModal` に `replyToEventId: String?` と `replyToAuthorPubkey: String?` 引数追加
-- `NostrRepository.publishNote()` で `replyToId` がある場合に NIP-10 タグ (e + p) を付与
-- 返信送信後に最新タイムラインを fetch してリプライカウントを更新
-
----
-
-### フェーズ 4 — プロフィール画面
+### フェーズ 3 — プロフィール画面
 
 アバタータップ → ユーザープロフィール画面に遷移する。
 
@@ -224,7 +212,7 @@ Web 版と同様に「@username への返信」をポスト本文上部に表示
 
 ---
 
-### フェーズ 5 — NIP-05 非同期検証
+### フェーズ 4 — NIP-05 非同期検証
 
 ぬるぬる識別子の ✓ バッジを正しく表示する。
 
@@ -236,7 +224,7 @@ Web 版と同様に「@username への返信」をポスト本文上部に表示
 
 ---
 
-### フェーズ 6 — NIP-57 Zap
+### フェーズ 5 — NIP-57 Zap
 
 ⚡ ボタンをタップして Lightning Zap を送る。
 
@@ -249,19 +237,7 @@ Web 版と同様に「@username への返信」をポスト本文上部に表示
 
 ---
 
-### フェーズ 7 — 通知タブ
-
-Web 版の「通知」画面に相当する機能。
-
-**実装**:
-- `BottomTab` に `NOTIFICATION` 追加（Icon: `Icons.Outlined.Notifications`）
-- `NotificationScreen.kt` 新規作成
-- `NotificationViewModel.kt` 新規作成: kind:7 (リアクション)、kind:9735 (Zap)、返信 (kind:1 with e-tag) を自分の pubkey 宛にサブスクライブ
-- `NotificationItem` コンポーネント（アクションタイプ別アイコン + 相手プロフィール + 元ポスト抜粋）
-
----
-
-### フェーズ 8 — デザイン調整・Web 版完全同期
+### フェーズ 6 — デザイン調整・Web 版完全同期
 
 - **PostItem**: ポストのメニュー (`...`) を自分以外のポストにも表示（ミュート/報告用）
 - **PostItem**: 長いコンテンツは「もっと見る」で展開

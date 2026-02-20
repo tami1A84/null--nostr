@@ -6,8 +6,8 @@ import androidx.lifecycle.viewModelScope
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.data.models.UserProfile
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 
 data class HomeUiState(
     val profile: UserProfile? = null,
@@ -21,11 +21,17 @@ data class HomeUiState(
 
 class HomeViewModel(
     private val repository: NostrRepository,
-    private val myPubkeyHex: String
+    val myPubkeyHex: String
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState(isLoading = true))
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    private val _notification = MutableSharedFlow<String>(extraBufferCapacity = 5)
+    val notification: SharedFlow<String> = _notification.asSharedFlow()
+
+    private val pendingLikes = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val pendingReposts = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     init {
         loadMyProfile()
@@ -75,6 +81,62 @@ class HomeViewModel(
             } catch (e: Exception) {
                 _uiState.update { it.copy(isRefreshing = false) }
             }
+        }
+    }
+
+    fun likePost(eventId: String) {
+        if (!pendingLikes.add(eventId)) return
+        viewModelScope.launch {
+            try {
+                val post = _uiState.value.posts.find { it.event.id == eventId } ?: return@launch
+                val success = repository.likePost(eventId, post.event.pubkey)
+                if (success) {
+                    _uiState.update { state ->
+                        state.copy(posts = state.posts.map { p ->
+                            if (p.event.id == eventId && !p.isLiked)
+                                p.copy(isLiked = true, likeCount = p.likeCount + 1)
+                            else p
+                        })
+                    }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { }
+            finally { pendingLikes.remove(eventId) }
+        }
+    }
+
+    fun repostPost(eventId: String) {
+        if (!pendingReposts.add(eventId)) return
+        viewModelScope.launch {
+            try {
+                val post = _uiState.value.posts.find { it.event.id == eventId } ?: return@launch
+                val success = repository.repostPost(eventId, post.event.pubkey)
+                if (success) {
+                    _uiState.update { state ->
+                        state.copy(posts = state.posts.map { p ->
+                            if (p.event.id == eventId && !p.isReposted)
+                                p.copy(isReposted = true, repostCount = p.repostCount + 1)
+                            else p
+                        })
+                    }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { }
+            finally { pendingReposts.remove(eventId) }
+        }
+    }
+
+    fun deletePost(eventId: String) {
+        viewModelScope.launch {
+            try {
+                val success = repository.deleteEvent(eventId)
+                if (success) {
+                    _uiState.update { state ->
+                        state.copy(posts = state.posts.filter { it.event.id != eventId })
+                    }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { }
         }
     }
 

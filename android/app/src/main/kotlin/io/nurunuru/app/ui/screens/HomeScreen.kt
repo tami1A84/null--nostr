@@ -11,6 +11,7 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +35,7 @@ fun HomeScreen(viewModel: HomeViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
     val profile = uiState.profile
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val pullRefreshState = rememberPullToRefreshState()
     if (pullRefreshState.isRefreshing) {
@@ -43,9 +45,20 @@ fun HomeScreen(viewModel: HomeViewModel) {
         if (!uiState.isRefreshing) pullRefreshState.endRefresh()
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.notification.collect { message ->
+            snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Short)
+        }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .padding(innerPadding)
             .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
         LazyColumn(
@@ -206,10 +219,12 @@ fun HomeScreen(viewModel: HomeViewModel) {
                 items(uiState.posts, key = { it.event.id }) { post ->
                     PostItem(
                         post = post,
-                        onLike = {},
-                        onRepost = {},
-                        onReply = {},
-                        onProfileClick = {}
+                        onLike = { viewModel.likePost(post.event.id) },
+                        onRepost = { viewModel.repostPost(post.event.id) },
+                        onReply = { /* フェーズ3で実装 */ },
+                        onProfileClick = { /* フェーズ4で実装 */ },
+                        myPubkeyHex = viewModel.myPubkeyHex,
+                        onDelete = { viewModel.deletePost(post.event.id) }
                     )
                 }
             }
@@ -222,6 +237,7 @@ fun HomeScreen(viewModel: HomeViewModel) {
             contentColor = LineGreen
         )
     }
+    } // Scaffold
 }
 
 @Composable

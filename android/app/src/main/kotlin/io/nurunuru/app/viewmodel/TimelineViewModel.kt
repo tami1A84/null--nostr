@@ -31,6 +31,10 @@ class TimelineViewModel(
     private val _uiState = MutableStateFlow(TimelineUiState(isLoading = true))
     val uiState: StateFlow<TimelineUiState> = _uiState.asStateFlow()
 
+    // One-shot Snackbar messages (success / error)
+    private val _notification = MutableSharedFlow<String>(extraBufferCapacity = 5)
+    val notification: SharedFlow<String> = _notification.asSharedFlow()
+
     // My own profile for optimistic post display
     private var myProfile: UserProfile? = null
 
@@ -177,24 +181,22 @@ class TimelineViewModel(
     fun publishNote(content: String) {
         viewModelScope.launch {
             try {
-                // publishNote now waits for relay OK acknowledgment (up to 5s)
                 val event = repository.publishNote(content)
                 if (event == null) {
-                    // Relay rejected the event or no relays connected
-                    _uiState.update { it.copy(error = "投稿がリレーに拒否されました。接続を確認してください。") }
+                    _notification.emit("投稿がリレーに拒否されました。接続を確認してください。")
                     return@launch
                 }
-                // Relay confirmed acceptance: show post optimistically
+                // Optimistic update: prepend own post immediately
                 _uiState.update { state ->
                     state.copy(posts = listOf(ScoredPost(event = event, profile = myProfile)) + state.posts)
                 }
-                // Brief safety margin then refresh (relay confirmed, so event should be queryable)
+                _notification.emit("投稿しました")
                 delay(500)
                 refresh()
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                _uiState.update { it.copy(error = "投稿に失敗しました") }
+                _notification.emit("投稿に失敗しました")
             }
         }
     }

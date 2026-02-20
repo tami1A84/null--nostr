@@ -155,9 +155,9 @@ class NostrClient(
                     val accepted = arr.getOrNull(2)?.jsonPrimitive?.booleanOrNull ?: true
                     val reason = arr.getOrNull(3)?.jsonPrimitive?.content ?: ""
                     if (!accepted) {
-                        Log.w(TAG, "Event rejected by $relayUrl (${eventId.take(8)}…): $reason")
+                        Log.e(TAG, "Event REJECTED by $relayUrl id=${eventId.take(8)}… reason=\"$reason\"")
                     } else {
-                        Log.d(TAG, "Event accepted by $relayUrl (${eventId.take(8)}…)")
+                        Log.i(TAG, "Event ACCEPTED by $relayUrl id=${eventId.take(8)}…")
                     }
                     publishAcks[eventId]?.trySend(accepted)
                 }
