@@ -45,7 +45,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "ミニアプリ & 設定",
+                        "設定",
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onBackground
                     )

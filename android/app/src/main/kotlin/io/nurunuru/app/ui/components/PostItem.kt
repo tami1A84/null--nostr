@@ -13,8 +13,10 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.ChatBubble
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -117,42 +119,58 @@ fun PostItem(
                             style = MaterialTheme.typography.bodySmall,
                             color = nuruColors.textTertiary
                         )
-                        if (isOwnPost && onDelete != null) {
-                            Box {
-                                IconButton(
-                                    onClick = { menuExpanded = true },
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.MoreVert,
-                                        contentDescription = "メニュー",
-                                        tint = nuruColors.textTertiary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                DropdownMenu(
-                                    expanded = menuExpanded,
-                                    onDismissRequest = { menuExpanded = false }
-                                ) {
+                        Box {
+                            IconButton(
+                                onClick = { menuExpanded = true },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "メニュー",
+                                    tint = nuruColors.textTertiary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false }
+                            ) {
+                                if (isOwnPost && onDelete != null) {
                                     DropdownMenuItem(
                                         text = {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFFFF4444),
-                                                    modifier = Modifier.size(18.dp)
-                                                )
+                                                Icon(Icons.Default.Delete, contentDescription = null,
+                                                    tint = Color(0xFFFF4444), modifier = Modifier.size(18.dp))
                                                 Text("削除", color = Color(0xFFFF4444))
                                             }
                                         },
-                                        onClick = {
-                                            menuExpanded = false
-                                            onDelete()
-                                        }
+                                        onClick = { menuExpanded = false; onDelete() }
+                                    )
+                                } else {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Icon(Icons.Outlined.Block, contentDescription = null,
+                                                    tint = nuruColors.textTertiary, modifier = Modifier.size(18.dp))
+                                                Text("ミュート")
+                                            }
+                                        },
+                                        onClick = { menuExpanded = false } // フェーズ6: ミュートは今後実装
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Icon(Icons.Outlined.Flag, contentDescription = null,
+                                                    tint = nuruColors.textTertiary, modifier = Modifier.size(18.dp))
+                                                Text("報告")
+                                            }
+                                        },
+                                        onClick = { menuExpanded = false } // フェーズ6: 報告は今後実装
                                     )
                                 }
                             }
@@ -232,11 +250,16 @@ fun PostItem(
     }
 }
 
+private const val CONTENT_COLLAPSE_LINES = 6
+
 @Composable
 private fun PostContent(content: String) {
     val nuruColors = LocalNuruColors.current
     val cleanContent = removeImageUrls(content).trim()
     if (cleanContent.isBlank()) return
+
+    var expanded by remember(content) { mutableStateOf(false) }
+    var overflows by remember(content) { mutableStateOf(false) }
 
     val annotated = buildAnnotatedString {
         val parts = cleanContent.split(Regex("(#\\w+|@\\w+|nostr:\\w+)"))
@@ -261,8 +284,26 @@ private fun PostContent(content: String) {
         text = annotated,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onBackground,
-        lineHeight = 22.sp
+        lineHeight = 22.sp,
+        maxLines = if (expanded) Int.MAX_VALUE else CONTENT_COLLAPSE_LINES,
+        overflow = if (expanded) androidx.compose.ui.text.style.TextOverflow.Visible
+                   else androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        onTextLayout = { layoutResult ->
+            if (!expanded) overflows = layoutResult.hasVisualOverflow
+        }
     )
+
+    if (overflows || expanded) {
+        Text(
+            text = if (expanded) "閉じる" else "もっと見る",
+            style = MaterialTheme.typography.bodySmall,
+            color = nuruColors.lineGreen,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier
+                .clickable { expanded = !expanded }
+                .padding(top = 2.dp)
+        )
+    }
 }
 
 @Composable

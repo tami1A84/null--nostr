@@ -40,10 +40,10 @@ enum class BottomTab(
         selectedIcon = Icons.Filled.DynamicFeed,
         unselectedIcon = Icons.Outlined.DynamicFeed
     ),
-    MINIAPP(
-        label = "ミニアプリ",
-        selectedIcon = Icons.Filled.Apps,
-        unselectedIcon = Icons.Outlined.Apps
+    SETTINGS(
+        label = "設定",
+        selectedIcon = Icons.Filled.Settings,
+        unselectedIcon = Icons.Outlined.Settings
     )
 }
 
@@ -115,7 +115,7 @@ fun MainScreen(
                                     BottomTab.TIMELINE -> timelineVM.refresh()
                                     BottomTab.TALK -> talkVM.loadConversations()
                                     BottomTab.HOME -> homeVM.refresh()
-                                    BottomTab.MINIAPP -> {}
+                                    BottomTab.SETTINGS -> {}
                                 }
                             }
                             activeTab = tab
@@ -162,7 +162,7 @@ fun MainScreen(
                     myPubkeyHex = pubkeyHex,
                     onProfileClick = onProfileClick
                 )
-                BottomTab.MINIAPP -> SettingsScreen(
+                BottomTab.SETTINGS -> SettingsScreen(
                     authViewModel = authViewModel,
                     prefs = app.prefs,
                     pubkeyHex = pubkeyHex,
