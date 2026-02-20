@@ -1,5 +1,6 @@
 package io.nurunuru.app.data
 
+import android.util.Log
 import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlinx.coroutines.*
@@ -8,6 +9,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 import kotlin.math.pow
 
 private const val PROFILE_CACHE_MAX = 500
@@ -22,11 +26,19 @@ private const val PROFILE_CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
  *   Time decay: half-life 6 hours
  *   Freshness boost: <1h → 1.5x, <6h → 1.2x
  */
+private const val REPO_TAG = "NostrRepository"
+
 class NostrRepository(
     private val client: NostrClient,
     private val prefs: AppPreferences
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    // Lightweight OkHttp client for NIP-05 HTTPS verification (no WebSocket needed)
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .build()
 
     // Thread-safe LRU profile cache: pubkey → (profile, fetchedAt)
     private val profileCache = LinkedHashMap<String, Pair<UserProfile, Long>>(
@@ -141,6 +153,41 @@ class NostrRepository(
             )
         } catch (e: Exception) {
             UserProfile(pubkey = event.pubkey)
+        }
+    }
+
+    /**
+     * NIP-05: Verify that <local>@<domain> maps to the given pubkey.
+     * Makes a direct HTTPS GET to https://<domain>/.well-known/nostr.json?name=<local>
+     * Returns updated UserProfile with nip05Verified = true on success.
+     */
+    suspend fun verifyNip05(profile: UserProfile): UserProfile = withContext(Dispatchers.IO) {
+        val nip05 = profile.nip05 ?: return@withContext profile
+        try {
+            val parts = nip05.split("@")
+            if (parts.size != 2) return@withContext profile
+            val localPart = parts[0].ifEmpty { "_" }
+            val domain = parts[1]
+            val url = "https://$domain/.well-known/nostr.json?name=$localPart"
+            val request = Request.Builder().url(url).build()
+            val responseBody = httpClient.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext profile
+                resp.body?.string() ?: return@withContext profile
+            }
+            val obj = json.parseToJsonElement(responseBody).jsonObject
+            val names = obj["names"]?.jsonObject ?: return@withContext profile
+            val mappedPubkey = names[localPart]?.jsonPrimitive?.content ?: return@withContext profile
+            val verified = mappedPubkey == profile.pubkey
+            if (verified) {
+                val updated = profile.copy(nip05Verified = true)
+                putCachedProfile(profile.pubkey, updated)
+                updated
+            } else {
+                profile
+            }
+        } catch (e: Exception) {
+            Log.d(REPO_TAG, "NIP-05 verify failed for ${profile.nip05}: ${e.message}")
+            profile
         }
     }
 

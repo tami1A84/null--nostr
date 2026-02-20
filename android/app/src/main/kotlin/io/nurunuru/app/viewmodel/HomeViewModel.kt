@@ -60,6 +60,15 @@ class HomeViewModel(
                         isFollowing = isFollowing
                     )
                 }
+                // NIP-05: verify asynchronously and update badge when done
+                if (profile?.nip05 != null && !profile.nip05Verified) {
+                    launch {
+                        val verified = repository.verifyNip05(profile)
+                        if (verified.nip05Verified) {
+                            _uiState.update { it.copy(profile = verified) }
+                        }
+                    }
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "プロフィールの読み込みに失敗しました", isLoading = false) }
             }

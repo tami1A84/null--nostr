@@ -61,11 +61,36 @@ class TimelineViewModel(
             try {
                 val posts = fetchForCurrentFeed()
                 _uiState.update { it.copy(posts = posts, isLoading = false) }
+                // NIP-05: verify badges in background after initial display
+                launch { verifyNip05ForPosts(posts) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "タイムラインの読み込みに失敗しました", isLoading = false) }
             }
+        }
+    }
+
+    /** Verify NIP-05 for post authors in background and update badges when done. */
+    private suspend fun verifyNip05ForPosts(posts: List<ScoredPost>) {
+        val uniqueProfiles = posts
+            .mapNotNull { it.profile }
+            .filter { it.nip05 != null && !it.nip05Verified }
+            .distinctBy { it.pubkey }
+            .take(20) // limit to avoid excessive HTTP requests
+        for (profile in uniqueProfiles) {
+            try {
+                val verified = repository.verifyNip05(profile)
+                if (verified.nip05Verified) {
+                    _uiState.update { state ->
+                        state.copy(posts = state.posts.map { post ->
+                            if (post.profile?.pubkey == profile.pubkey)
+                                post.copy(profile = verified)
+                            else post
+                        })
+                    }
+                }
+            } catch (_: Exception) { }
         }
     }
 
