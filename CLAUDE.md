@@ -148,5 +148,137 @@ val feed = client.getRecommendedFeedAsync(50u)
 
 ## ブランチ運用
 
-- 作業ブランチ: `claude/refactor-and-docs-zzwXG`
+- 作業ブランチ: `claude/fix-android-stability-EL3mv`
 - マージ先: `master`
+
+---
+
+## Android Kotlin 開発プラン (Web版との完全同期)
+
+> **目標**: `android/` の Kotlin/Compose アプリを Web 版 (nullnull.app) と機能・デザイン完全一致させる。
+> **ルール**: フェーズを順番に完結させてからコミット。一度に大きく変えない。
+
+---
+
+### フェーズ 0 — 投稿バグ修正 (最優先)
+
+**症状**: 「投稿する」を押してもノートがリレーに到達しない。
+**根本原因の仮説**:
+1. リレーがイベントを拒否しているが、エラーが画面に表示されない（ポストが1件以上ある場合、`uiState.error` が LazyColumn に隠れる）
+2. Schnorr 署名の純 Kotlin 実装 (`Secp256k1Impl`) が特定の秘密鍵でエラーになる可能性
+
+**作業手順**:
+1. **エラー表示を修正** — `TimelineScreen` に `Snackbar` を追加し、`uiState.error` を常に表示する
+2. **ログ強化** — `NostrClient.OK` ハンドラで拒否理由を `Log.e` 出力（既存は `Log.w`）
+3. **投稿 Toast** — 投稿成功/失敗を `Toast` または `Snackbar` でユーザーに通知
+4. **実機テスト** — Logcat で `NostrClient: Event rejected by ...` を確認し、拒否理由を特定
+5. 拒否理由に応じた修正 (例: `pow` 必要 → 未対応リレー除外、`bad sig` → Secp256k1Impl 修正)
+
+**完了条件**: 「投稿する」押下後にノートがタイムラインに表示される。
+
+---
+
+### フェーズ 1 — エラー/フィードバック UI
+
+全画面共通の UX 改善:
+- `TimelineScreen`: 投稿成功/失敗を `Snackbar` で通知（投稿リスト有無に関わらず表示）
+- `HomeScreen`: いいね/リポスト/返信のアクションを `HomeViewModel` に接続（現状 `{}` のまま）
+- `TimelineScreen` / `HomeScreen`: `uiState.error` を常に Snackbar で表示（既存のリスト内表示は廃止）
+
+---
+
+### フェーズ 2 — PostItem: 返信コンテキスト表示
+
+Web 版と同様に「@username への返信」をポスト本文上部に表示する。
+
+**実装**:
+- `ScoredPost` に `replyToProfile: UserProfile?` フィールド追加
+- `NostrRepository.enrichPosts()` で `e` タグ (`reply`) の親イベント作者プロフィールを取得
+- `PostItem` で `replyToProfile != null` 時に `"@displayName への返信"` を水色テキストで表示
+- NIP-10 準拠: `tags` の `["e", id, relay, "reply"]` を正しくパース
+
+---
+
+### フェーズ 3 — 返信モーダル (Reply Modal)
+
+投稿に返信できるようにする。
+
+**実装**:
+- `TimelineScreen` / `HomeScreen`: `onReply` で選択ポストを State に保持
+- `PostModal` に `replyToEventId: String?` と `replyToAuthorPubkey: String?` 引数追加
+- `NostrRepository.publishNote()` で `replyToId` がある場合に NIP-10 タグ (e + p) を付与
+- 返信送信後に最新タイムラインを fetch してリプライカウントを更新
+
+---
+
+### フェーズ 4 — プロフィール画面
+
+アバタータップ → ユーザープロフィール画面に遷移する。
+
+**実装**:
+- `ProfileScreen.kt` 新規作成（バナー、アバター、bio、フォロー/フォロワー数、投稿一覧）
+- `MainScreen` に `NavHost` または `profilePubkey` の State を追加してプロフィール表示を管理
+- `onProfileClick` コールバックを全 `PostItem` で接続
+- `ProfileViewModel.kt` 新規作成（プロフィール + 投稿フェッチ、フォロー/アンフォロー）
+- `NostrRepository` に `followUser()` / `unfollowUser()` 追加（kind:3 更新）
+
+---
+
+### フェーズ 5 — NIP-05 非同期検証
+
+ぬるぬる識別子の ✓ バッジを正しく表示する。
+
+**実装**:
+- `NostrRepository.verifyNip05()` 追加: `https://<domain>/.well-known/nostr.json?name=<local>` を OkHttp で GET し pubkey 一致確認
+- プロフィールキャッシュに `nip05Verified` フラグを保存 (TTL: 24h)
+- `/api/nip05` プロキシは Web 専用。Android では OkHttp で直接 HTTPS GET
+- `UserProfile.nip05Verified` は `parseProfile()` では常に false → `verifyNip05()` 呼出後に更新
+
+---
+
+### フェーズ 6 — NIP-57 Zap
+
+⚡ ボタンをタップして Lightning Zap を送る。
+
+**実装**:
+- `NostrRepository.fetchLnurlPay()` — `lud16` から LNURL-pay エンドポイントを解決
+- `NostrRepository.createZapRequest()` — kind:9734 イベント作成
+- `ZapBottomSheet` — sats 額入力シート（100, 500, 1000, カスタム）
+- `TimelineViewModel.zapPost()` — Zap フロー実行（失敗時は Snackbar 通知）
+- `onZap` を `TimelineScreen` / `HomeScreen` で接続
+
+---
+
+### フェーズ 7 — 通知タブ
+
+Web 版の「通知」画面に相当する機能。
+
+**実装**:
+- `BottomTab` に `NOTIFICATION` 追加（Icon: `Icons.Outlined.Notifications`）
+- `NotificationScreen.kt` 新規作成
+- `NotificationViewModel.kt` 新規作成: kind:7 (リアクション)、kind:9735 (Zap)、返信 (kind:1 with e-tag) を自分の pubkey 宛にサブスクライブ
+- `NotificationItem` コンポーネント（アクションタイプ別アイコン + 相手プロフィール + 元ポスト抜粋）
+
+---
+
+### フェーズ 8 — デザイン調整・Web 版完全同期
+
+- **PostItem**: ポストのメニュー (`...`) を自分以外のポストにも表示（ミュート/報告用）
+- **PostItem**: 長いコンテンツは「もっと見る」で展開
+- **HomeScreen**: フォロー/フォロワー数を実際に取得して表示 (`followersCount` フィールド追加)
+- **設定画面**: ミニアプリ → 設定 に改名し、プロフィール編集 (kind:0) を追加
+- **テーマ**: ダークモード / ライトモード 切り替え対応
+- **パフォーマンス**: `enrichPosts()` の fetchReactionCounts / fetchRepostCounts をページロード後に lazy fetch（初期表示を速くする）
+
+---
+
+### 実装ルール (Android Kotlin)
+
+1. **新しいファイルは作らない** → 既存ファイルの編集を優先する
+2. **ViewModelFactory は既存パターンに従う** → `ViewModelProvider.Factory` + `companion object`
+3. **コルーチン** → `viewModelScope.launch` のみ使う。UIスレッドをブロックしない
+4. **エラーハンドリング** → ユーザー向けメッセージは日本語。ログは `Log.e(TAG, ...)`
+5. **NIP準拠** → Web版 (`lib/nostr.js`) と同じ NIP 番号・タグ構造を使う
+6. **秘密鍵** → `AppPreferences.privateKeyHex` 以外に保存・渡さない
+7. **テスト** → 各フェーズ完了後に実機またはエミュレーターで動作確認してからコミット
+8. **コミット単位** → フェーズ単位でコミット。メッセージ: `feat(android): フェーズN - 機能名`
