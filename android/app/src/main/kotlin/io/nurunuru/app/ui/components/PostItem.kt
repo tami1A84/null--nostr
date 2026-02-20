@@ -156,7 +156,6 @@ private fun PostContent(content: String) {
     val annotated = buildAnnotatedString {
         val parts = cleanContent.split(Regex("(#\\w+|@\\w+|nostr:\\w+)"))
         val matches = Regex("(#\\w+|@\\w+|nostr:\\w+)").findAll(cleanContent).toList()
-        var idx = 0
         for (i in parts.indices) {
             append(parts[i])
             if (i < matches.size) {

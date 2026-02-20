@@ -3,10 +3,14 @@ package io.nurunuru.app.data
 import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+
+private const val PROFILE_CACHE_MAX = 500
+private const val PROFILE_CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
 
 /**
  * High-level Nostr operations.
@@ -16,8 +20,13 @@ class NostrRepository(
     private val client: NostrClient,
     private val prefs: AppPreferences
 ) {
-    private val profileCache = mutableMapOf<String, UserProfile>()
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+
+    // Thread-safe LRU profile cache: pubkey → (profile, fetchedAt)
+    private val profileCache = LinkedHashMap<String, Pair<UserProfile, Long>>(
+        PROFILE_CACHE_MAX, 0.75f, true // accessOrder=true for LRU
+    )
+    private val cacheMutex = Mutex()
 
     // ─── Timeline ─────────────────────────────────────────────────────────────
 
@@ -28,7 +37,7 @@ class NostrRepository(
             limit = limit,
             since = System.currentTimeMillis() / 1000 - 3600 // last hour
         )
-        val events = client.fetchEvents(filter, timeoutMs = 6_000)
+        val events = client.fetchEvents(filter, timeoutMs = 10_000)
         return enrichPosts(events)
     }
 
@@ -43,7 +52,7 @@ class NostrRepository(
             limit = limit,
             since = System.currentTimeMillis() / 1000 - 86400 // last 24h
         )
-        val events = client.fetchEvents(filter, timeoutMs = 6_000)
+        val events = client.fetchEvents(filter, timeoutMs = 10_000)
         return enrichPosts(events)
     }
 
@@ -54,42 +63,62 @@ class NostrRepository(
             search = query,
             limit = limit
         )
-        val events = client.fetchEvents(filter, timeoutMs = 6_000)
+        val events = client.fetchEvents(filter, timeoutMs = 8_000)
         return enrichPosts(events)
     }
 
     // ─── Profiles ─────────────────────────────────────────────────────────────
 
     suspend fun fetchProfile(pubkeyHex: String): UserProfile? {
-        profileCache[pubkeyHex]?.let { return it }
+        getCachedProfile(pubkeyHex)?.let { return it }
 
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.METADATA),
             authors = listOf(pubkeyHex),
             limit = 1
         )
-        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        val events = client.fetchEvents(filter, timeoutMs = 5_000)
         val event = events.maxByOrNull { it.createdAt } ?: return null
         val profile = parseProfile(event)
-        profileCache[pubkeyHex] = profile
+        putCachedProfile(pubkeyHex, profile)
         return profile
     }
 
     suspend fun fetchProfiles(pubkeys: List<String>): Map<String, UserProfile> {
-        val missing = pubkeys.filter { !profileCache.containsKey(it) }.distinct()
+        val missing = pubkeys.filter { getCachedProfile(it) == null }.distinct()
         if (missing.isNotEmpty()) {
             val filter = NostrClient.Filter(
                 kinds = listOf(NostrKind.METADATA),
                 authors = missing.take(100),
                 limit = missing.size
             )
-            val events = client.fetchEvents(filter, timeoutMs = 4_000)
+            val events = client.fetchEvents(filter, timeoutMs = 5_000)
             events.groupBy { it.pubkey }
                 .mapValues { (_, evts) -> evts.maxByOrNull { it.createdAt }!! }
-                .forEach { (pk, event) -> profileCache[pk] = parseProfile(event) }
+                .forEach { (pk, event) -> putCachedProfile(pk, parseProfile(event)) }
         }
-        return pubkeys.associateWith { profileCache[it] ?: UserProfile(pubkey = it) }
+        return pubkeys.associateWith { getCachedProfile(it) ?: UserProfile(pubkey = it) }
     }
+
+    private suspend fun getCachedProfile(pubkey: String): UserProfile? =
+        cacheMutex.withLock {
+            val entry = profileCache[pubkey] ?: return@withLock null
+            val (profile, fetchedAt) = entry
+            if (System.currentTimeMillis() - fetchedAt > PROFILE_CACHE_TTL_MS) {
+                profileCache.remove(pubkey)
+                return@withLock null
+            }
+            profile
+        }
+
+    private suspend fun putCachedProfile(pubkey: String, profile: UserProfile) =
+        cacheMutex.withLock {
+            if (profileCache.size >= PROFILE_CACHE_MAX) {
+                // Remove eldest entry (LRU order)
+                profileCache.entries.firstOrNull()?.let { profileCache.remove(it.key) }
+            }
+            profileCache[pubkey] = Pair(profile, System.currentTimeMillis())
+        }
 
     private fun parseProfile(event: NostrEvent): UserProfile {
         return try {
@@ -118,7 +147,7 @@ class NostrRepository(
             authors = listOf(pubkeyHex),
             limit = 1
         )
-        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        val events = client.fetchEvents(filter, timeoutMs = 5_000)
         val event = events.maxByOrNull { it.createdAt } ?: return emptyList()
         return event.getTagValues("p")
     }
@@ -131,7 +160,7 @@ class NostrRepository(
             authors = listOf(pubkeyHex),
             limit = limit
         )
-        val events = client.fetchEvents(filter, timeoutMs = 5_000)
+        val events = client.fetchEvents(filter, timeoutMs = 8_000)
         return enrichPosts(events)
     }
 
@@ -144,7 +173,7 @@ class NostrRepository(
             tags = mapOf("e" to eventIds),
             limit = 500
         )
-        val events = client.fetchEvents(filter, timeoutMs = 3_000)
+        val events = client.fetchEvents(filter, timeoutMs = 4_000)
         return events
             .groupBy { it.getTagValue("e") ?: "" }
             .mapValues { it.value.size }
@@ -154,25 +183,22 @@ class NostrRepository(
     // ─── DMs ─────────────────────────────────────────────────────────────────
 
     suspend fun fetchDmConversations(pubkeyHex: String): List<DmConversation> {
-        // Fetch received DMs
         val receivedFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.ENCRYPTED_DM),
             tags = mapOf("p" to listOf(pubkeyHex)),
             limit = 200
         )
-        // Fetch sent DMs
         val sentFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.ENCRYPTED_DM),
             authors = listOf(pubkeyHex),
             limit = 200
         )
         val allEvents = coroutineScope {
-            val received = async { client.fetchEvents(receivedFilter, 5_000) }
-            val sent = async { client.fetchEvents(sentFilter, 5_000) }
+            val received = async { client.fetchEvents(receivedFilter, 6_000) }
+            val sent = async { client.fetchEvents(sentFilter, 6_000) }
             received.await() + sent.await()
         }
 
-        // Group by conversation partner
         val conversations = mutableMapOf<String, MutableList<NostrEvent>>()
         for (event in allEvents) {
             val partner = if (event.pubkey == pubkeyHex) {
@@ -207,7 +233,7 @@ class NostrRepository(
             authors = listOf(myPubkeyHex, partnerPubkeyHex),
             limit = 100
         )
-        val events = client.fetchEvents(filter, 5_000)
+        val events = client.fetchEvents(filter, 6_000)
 
         return events
             .filter { event ->
@@ -249,7 +275,10 @@ class NostrRepository(
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> {
-        val textNotes = events.filter { it.kind == NostrKind.TEXT_NOTE }
+        // Deduplicate by event ID (same event broadcast by multiple relays)
+        val textNotes = events
+            .filter { it.kind == NostrKind.TEXT_NOTE }
+            .distinctBy { it.id }
             .sortedByDescending { it.createdAt }
         if (textNotes.isEmpty()) return emptyList()
 

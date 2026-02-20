@@ -78,9 +78,14 @@ fun MainScreen(
         factory = HomeViewModel.Factory(repository, pubkeyHex)
     )
 
-    // My profile for post modal avatar
+    // My profile for post modal avatar and optimistic post display
     val homeState by homeVM.uiState.collectAsState()
     val myProfile = homeState.profile
+
+    // Keep TimelineViewModel in sync with own profile for optimistic posts
+    LaunchedEffect(myProfile) {
+        timelineVM.setMyProfile(myProfile)
+    }
 
     // Disconnect on dispose
     DisposableEffect(nostrClient) {
