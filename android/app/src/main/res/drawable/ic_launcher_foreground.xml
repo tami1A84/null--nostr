@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher foreground: "ぬ" letter on transparent bg -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,30 L78,30 L78,78 L30,78 Z"
+        android:strokeColor="#00000000"
+        android:strokeWidth="0"/>
+    <!-- "ぬ" as simple N shape approximation -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M32,72 L32,36 L54,36 L54,72 M54,54 L76,36 L76,72"/>
+</vector>
