@@ -1,7 +1,6 @@
 package io.nurunuru.app.data
 
 import android.util.Log
-import fr.acinq.secp256k1.Secp256k1
 import io.nurunuru.app.data.NostrKeyUtils.hexToBytes
 import io.nurunuru.app.data.NostrKeyUtils.toHex
 import io.nurunuru.app.data.models.NostrEvent
@@ -257,9 +256,7 @@ class NostrClient(
         return try {
             val privKeyBytes = privateKeyHex.hexToBytes() ?: return null
             val pubKeyBytes = senderPubkeyHex.hexToBytes() ?: return null
-            // Prepend 02 to get compressed pubkey for ECDH
-            val compressedPub = byteArrayOf(0x02) + pubKeyBytes
-            val sharedSecret = Secp256k1.ecdh(privKeyBytes, compressedPub)
+            val sharedSecret = Secp256k1Impl.ecdhNip04(privKeyBytes, pubKeyBytes)
 
             val parts = encryptedContent.split("?iv=")
             if (parts.size != 2) return null
@@ -279,8 +276,7 @@ class NostrClient(
         return try {
             val privKeyBytes = privateKeyHex.hexToBytes() ?: return null
             val pubKeyBytes = recipientPubkeyHex.hexToBytes() ?: return null
-            val compressedPub = byteArrayOf(0x02) + pubKeyBytes
-            val sharedSecret = Secp256k1.ecdh(privKeyBytes, compressedPub)
+            val sharedSecret = Secp256k1Impl.ecdhNip04(privKeyBytes, pubKeyBytes)
 
             val iv = ByteArray(16).also { SecureRandom().nextBytes(it) }
             val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
@@ -326,7 +322,7 @@ class NostrClient(
 
     private fun signEvent(eventId: String, privKey: ByteArray): String {
         val msgBytes = eventId.hexToBytes()!!
-        val sig = Secp256k1.signSchnorr(msgBytes, privKey, null)
+        val sig = Secp256k1Impl.schnorrSign(msgBytes, privKey, null)
         return sig.toHex()
     }
 

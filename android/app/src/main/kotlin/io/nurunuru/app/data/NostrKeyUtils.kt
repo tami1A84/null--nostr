@@ -1,6 +1,5 @@
 package io.nurunuru.app.data
 
-import fr.acinq.secp256k1.Secp256k1
 
 /**
  * Utility functions for Nostr key operations.
@@ -110,9 +109,8 @@ object NostrKeyUtils {
     fun derivePublicKey(privateKeyHex: String): String? {
         return try {
             val privKeyBytes = privateKeyHex.hexToBytes() ?: return null
-            val pubKeyBytes = Secp256k1.pubkeyCreate(privKeyBytes)
-            // Extract x-only (32 bytes) from the 33-byte compressed key
-            pubKeyBytes.drop(1).toByteArray().toHex()
+            // Returns x-only 32-byte pubkey directly
+            Secp256k1Impl.pubkeyCreate(privKeyBytes).toHex()
         } catch (e: Exception) {
             null
         }
