@@ -349,8 +349,25 @@ class NostrRepository(
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     /**
-     * Enrich events with profiles, reaction/repost counts, and recommendation scores.
-     * Fetches profiles + reactions + reposts in parallel for speed.
+     * NIP-10: Extract the ID of the event this note is replying to.
+     * Checks for "reply" marker first (NIP-10 standard), then falls back to
+     * the last e-tag (deprecated positional convention).
+     */
+    private fun NostrEvent.getReplyToEventId(): String? {
+        // Look for explicit "reply" marker tag: ["e", id, relay, "reply"]
+        val replyTag = tags.firstOrNull { tag ->
+            tag.getOrNull(0) == "e" && tag.getOrNull(3) == "reply"
+        }
+        if (replyTag != null) return replyTag.getOrNull(1)
+
+        // Fallback: if there's exactly one e-tag with no marker, it's a reply
+        val eTags = tags.filter { it.getOrNull(0) == "e" }
+        return if (eTags.size == 1) eTags.first().getOrNull(1) else null
+    }
+
+    /**
+     * Enrich events with profiles, reaction/repost counts, reply context, and recommendation scores.
+     * Fetches profiles + reactions + reposts + reply context in parallel for speed.
      */
     private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> {
         val textNotes = events
@@ -359,6 +376,9 @@ class NostrRepository(
         if (textNotes.isEmpty()) return emptyList()
 
         val eventIds = textNotes.map { it.id }
+
+        // Collect parent event IDs for reply context
+        val replyParentIds = textNotes.mapNotNull { it.getReplyToEventId() }.distinct()
 
         return coroutineScope {
             val profilesDeferred = async {
@@ -370,20 +390,44 @@ class NostrRepository(
             val repostsDeferred = async {
                 try { fetchRepostCounts(eventIds) } catch (_: Exception) { emptyMap() }
             }
+            // Fetch parent events to get reply author pubkeys
+            val replyParentEventsDeferred = async {
+                if (replyParentIds.isEmpty()) return@async emptyMap<String, String>()
+                try {
+                    val filter = NostrClient.Filter(ids = replyParentIds, limit = replyParentIds.size)
+                    val parentEvents = client.fetchEvents(filter, timeoutMs = 3_000)
+                    parentEvents.associate { it.id to it.pubkey }
+                } catch (_: Exception) { emptyMap() }
+            }
 
             val profiles = profilesDeferred.await()
             val reactionCounts = reactionsDeferred.await()
             val repostCounts = repostsDeferred.await()
+            val replyParentPubkeys = replyParentEventsDeferred.await() // eventId → authorPubkey
+
+            // Fetch any reply-context profiles not already in the profiles map
+            val missingReplyPubkeys = replyParentPubkeys.values
+                .filter { it !in profiles }
+                .distinct()
+            val replyProfiles = if (missingReplyPubkeys.isNotEmpty()) {
+                try { fetchProfiles(missingReplyPubkeys) } catch (_: Exception) { emptyMap() }
+            } else emptyMap()
+            val allProfiles = profiles + replyProfiles
 
             textNotes.map { event ->
                 val likes = reactionCounts[event.id] ?: 0
                 val reposts = repostCounts[event.id] ?: 0
+                // Resolve reply context: find parent author profile
+                val replyToProfile = event.getReplyToEventId()?.let { parentId ->
+                    replyParentPubkeys[parentId]?.let { pubkey -> allProfiles[pubkey] }
+                }
                 ScoredPost(
                     event = event,
                     profile = profiles[event.pubkey],
                     likeCount = likes,
                     repostCount = reposts,
-                    score = computeScore(event, likes, reposts, 0L)
+                    score = computeScore(event, likes, reposts, 0L),
+                    replyToProfile = replyToProfile
                 )
             }.sortedByDescending { it.score }
         }

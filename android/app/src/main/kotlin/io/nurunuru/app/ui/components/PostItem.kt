@@ -162,6 +162,17 @@ fun PostItem(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
+                // Reply context: "@username への返信" (NIP-10)
+                if (post.replyToProfile != null) {
+                    Text(
+                        text = "@${post.replyToProfile.displayedName} への返信",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = nuruColors.lineGreen,
+                        maxLines = 1,
+                        modifier = Modifier.padding(bottom = 2.dp)
+                    )
+                }
+
                 // Content
                 PostContent(content = post.event.content)
 

@@ -53,7 +53,9 @@ data class ScoredPost(
     val isLiked: Boolean = false,
     val isReposted: Boolean = false,
     val isZapped: Boolean = false,
-    val quotedPost: ScoredPost? = null
+    val quotedPost: ScoredPost? = null,
+    // NIP-10: profile of the author this post is replying to (null if not a reply)
+    val replyToProfile: UserProfile? = null
 )
 
 data class DmConversation(
