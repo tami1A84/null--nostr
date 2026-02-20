@@ -384,6 +384,19 @@ class NostrClient(
         return publishEvent(event)
     }
 
+    // NIP-02: Contact list (follow list) update
+    suspend fun publishContactList(followPubkeys: List<String>): Boolean {
+        val tags = followPubkeys.map { listOf("p", it) }
+        val event = createEvent(NostrEvent(
+            kind = NostrKind.CONTACT_LIST,
+            content = "",
+            tags = tags,
+            pubkey = publicKeyHex,
+            createdAt = System.currentTimeMillis() / 1000
+        )) ?: return false
+        return publishEvent(event)
+    }
+
     // NIP-09: Event deletion
     suspend fun publishDeletion(eventIds: List<String>, reason: String = ""): Boolean {
         if (eventIds.isEmpty()) return false

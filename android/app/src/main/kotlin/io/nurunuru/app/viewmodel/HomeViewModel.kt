@@ -16,7 +16,8 @@ data class HomeUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val error: String? = null,
-    val viewingPubkey: String? = null // null = own profile
+    val viewingPubkey: String? = null, // null = own profile
+    val isFollowing: Boolean = false   // only meaningful when viewingPubkey != null
 )
 
 class HomeViewModel(
@@ -42,18 +43,21 @@ class HomeViewModel(
     }
 
     fun loadProfile(pubkeyHex: String) {
+        val isViewingOther = pubkeyHex != myPubkeyHex
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null, viewingPubkey = pubkeyHex.takeIf { it != myPubkeyHex }) }
+            _uiState.update { it.copy(isLoading = true, error = null, viewingPubkey = if (isViewingOther) pubkeyHex else null) }
             try {
                 val profile = repository.fetchProfile(pubkeyHex)
                 val posts = repository.fetchUserNotes(pubkeyHex, 30)
                 val followList = repository.fetchFollowList(pubkeyHex)
+                val isFollowing = if (isViewingOther) repository.isFollowing(myPubkeyHex, pubkeyHex) else false
                 _uiState.update {
                     it.copy(
                         profile = profile,
                         posts = posts,
                         followCount = followList.size,
-                        isLoading = false
+                        isLoading = false,
+                        isFollowing = isFollowing
                     )
                 }
             } catch (e: Exception) {
@@ -62,20 +66,53 @@ class HomeViewModel(
         }
     }
 
+    fun resetToMyProfile() {
+        loadProfile(myPubkeyHex)
+    }
+
+    fun followUser(targetPubkeyHex: String) {
+        viewModelScope.launch {
+            try {
+                val success = repository.followUser(myPubkeyHex, targetPubkeyHex)
+                if (success) {
+                    _uiState.update { it.copy(isFollowing = true) }
+                    _notification.emit("フォローしました")
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _notification.emit("フォローに失敗しました") }
+        }
+    }
+
+    fun unfollowUser(targetPubkeyHex: String) {
+        viewModelScope.launch {
+            try {
+                val success = repository.unfollowUser(myPubkeyHex, targetPubkeyHex)
+                if (success) {
+                    _uiState.update { it.copy(isFollowing = false) }
+                    _notification.emit("フォロー解除しました")
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _notification.emit("フォロー解除に失敗しました") }
+        }
+    }
+
     fun refresh() {
         val targetPubkey = _uiState.value.viewingPubkey ?: myPubkeyHex
+        val isViewingOther = targetPubkey != myPubkeyHex
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true) }
             try {
                 val profile = repository.fetchProfile(targetPubkey)
                 val posts = repository.fetchUserNotes(targetPubkey, 30)
                 val followList = repository.fetchFollowList(targetPubkey)
+                val isFollowing = if (isViewingOther) repository.isFollowing(myPubkeyHex, targetPubkey) else false
                 _uiState.update {
                     it.copy(
                         profile = profile,
                         posts = posts,
                         followCount = followList.size,
-                        isRefreshing = false
+                        isRefreshing = false,
+                        isFollowing = isFollowing
                     )
                 }
             } catch (e: Exception) {

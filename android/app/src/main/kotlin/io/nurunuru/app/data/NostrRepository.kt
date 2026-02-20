@@ -317,6 +317,23 @@ class NostrRepository(
     suspend fun sendDm(recipientPubkeyHex: String, content: String): Boolean =
         client.sendEncryptedDm(recipientPubkeyHex, content)
 
+    // NIP-02: Follow / Unfollow
+    suspend fun followUser(myPubkeyHex: String, targetPubkeyHex: String): Boolean {
+        val current = fetchFollowList(myPubkeyHex).toMutableList()
+        if (targetPubkeyHex in current) return true
+        current.add(targetPubkeyHex)
+        return client.publishContactList(current)
+    }
+
+    suspend fun unfollowUser(myPubkeyHex: String, targetPubkeyHex: String): Boolean {
+        val current = fetchFollowList(myPubkeyHex).toMutableList()
+        current.remove(targetPubkeyHex)
+        return client.publishContactList(current)
+    }
+
+    suspend fun isFollowing(myPubkeyHex: String, targetPubkeyHex: String): Boolean =
+        targetPubkeyHex in fetchFollowList(myPubkeyHex)
+
     // ─── Recommendation Algorithm (ported from web lib/recommendation.js) ─────
 
     /**

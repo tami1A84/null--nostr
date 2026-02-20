@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
@@ -31,7 +32,10 @@ import io.nurunuru.app.viewmodel.HomeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel) {
+fun HomeScreen(
+    viewModel: HomeViewModel,
+    onBack: (() -> Unit)? = null
+) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
     val profile = uiState.profile
@@ -51,9 +55,34 @@ fun HomeScreen(viewModel: HomeViewModel) {
         }
     }
 
+    val isViewingOther = uiState.viewingPubkey != null
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            if (isViewingOther && onBack != null) {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = uiState.profile?.displayedName ?: "プロフィール",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            viewModel.resetToMyProfile()
+                            onBack()
+                        }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "戻る")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
+                )
+            }
+        }
     ) { innerPadding ->
     Box(
         modifier = Modifier
@@ -205,6 +234,25 @@ fun HomeScreen(viewModel: HomeViewModel) {
                         }
                     }
 
+                    // Follow / Unfollow button (only when viewing another user's profile)
+                    if (isViewingOther && uiState.viewingPubkey != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                if (uiState.isFollowing) viewModel.unfollowUser(uiState.viewingPubkey)
+                                else viewModel.followUser(uiState.viewingPubkey)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (uiState.isFollowing)
+                                    MaterialTheme.colorScheme.outline
+                                else LineGreen
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (uiState.isFollowing) "フォロー中" else "フォローする")
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
                     HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
                 }
@@ -221,8 +269,8 @@ fun HomeScreen(viewModel: HomeViewModel) {
                         post = post,
                         onLike = { viewModel.likePost(post.event.id) },
                         onRepost = { viewModel.repostPost(post.event.id) },
-                        onReply = { /* フェーズ3で実装 */ },
-                        onProfileClick = { /* フェーズ4で実装 */ },
+                        onReply = {},
+                        onProfileClick = { pubkey -> viewModel.loadProfile(pubkey) },
                         myPubkeyHex = viewModel.myPubkeyHex,
                         onDelete = { viewModel.deletePost(post.event.id) }
                     )

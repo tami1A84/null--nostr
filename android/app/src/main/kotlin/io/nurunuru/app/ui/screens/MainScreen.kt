@@ -78,6 +78,12 @@ fun MainScreen(
         factory = HomeViewModel.Factory(repository, pubkeyHex)
     )
 
+    // Profile tap: load the tapped user in HomeViewModel and switch to HOME tab
+    val onProfileClick: (String) -> Unit = { targetPubkey ->
+        homeVM.loadProfile(targetPubkey)
+        activeTab = BottomTab.HOME
+    }
+
     // My profile for post modal avatar and optimistic post display
     val homeState by homeVM.uiState.collectAsState()
     val myProfile = homeState.profile
@@ -142,13 +148,19 @@ fun MainScreen(
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             when (activeTab) {
-                BottomTab.HOME -> HomeScreen(viewModel = homeVM)
+                BottomTab.HOME -> HomeScreen(
+                    viewModel = homeVM,
+                    onBack = if (homeState.viewingPubkey != null) {
+                        { activeTab = BottomTab.TIMELINE }
+                    } else null
+                )
                 BottomTab.TALK -> TalkScreen(viewModel = talkVM)
                 BottomTab.TIMELINE -> TimelineScreen(
                     viewModel = timelineVM,
                     myPictureUrl = myProfile?.picture,
                     myDisplayName = myProfile?.displayedName ?: "",
-                    myPubkeyHex = pubkeyHex
+                    myPubkeyHex = pubkeyHex,
+                    onProfileClick = onProfileClick
                 )
                 BottomTab.MINIAPP -> SettingsScreen(
                     authViewModel = authViewModel,
