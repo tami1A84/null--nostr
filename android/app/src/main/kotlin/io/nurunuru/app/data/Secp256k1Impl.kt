@@ -28,9 +28,10 @@ internal object Secp256k1Impl {
         return if (P.x == Q.x) {
             if (P.y != Q.y || P.y == BigInteger.ZERO) null // point at infinity
             else { // doubling
+                val two = BigInteger.valueOf(2)
                 val lam = BigInteger.valueOf(3).multiply(P.x.pow(2))
-                    .multiply(BigInteger.TWO.multiply(P.y).modInverse(this.P)).mod(this.P)
-                val x3 = lam.pow(2).subtract(BigInteger.TWO.multiply(P.x)).mod(this.P)
+                    .multiply(two.multiply(P.y).modInverse(this.P)).mod(this.P)
+                val x3 = lam.pow(2).subtract(two.multiply(P.x)).mod(this.P)
                 val y3 = lam.multiply(P.x.subtract(x3)).subtract(P.y).mod(this.P)
                 ECPoint(x3, y3)
             }
