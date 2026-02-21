@@ -46,6 +46,12 @@ expect fun schnorrSign(msg: ByteArray, privKey: ByteArray, aux: ByteArray?): Byt
  */
 expect fun pubkeyCreate(privKey: ByteArray): ByteArray
 
+/** AES-CBC encrypt [plaintext] with [key] and [iv]. */
+expect fun aesEncryptCbc(key: ByteArray, iv: ByteArray, plaintext: ByteArray): ByteArray
+
+/** AES-CBC decrypt [ciphertext] with [key] and [iv]. */
+expect fun aesDecryptCbc(key: ByteArray, iv: ByteArray, ciphertext: ByteArray): ByteArray
+
 // ─── Hex utilities (pure Kotlin, no platform dependencies) ────────────────────
 
 fun ByteArray.toHex(): String = buildString {

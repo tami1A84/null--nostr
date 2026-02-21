@@ -8,7 +8,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.outlined.ChatBubble
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,7 +34,6 @@ fun PostItem(
     post: ScoredPost,
     onLike: () -> Unit,
     onRepost: () -> Unit,
-    onReply: () -> Unit,
     onProfileClick: (String) -> Unit,
     onZap: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -114,13 +112,6 @@ fun PostItem(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Reply
-                    ActionButton(
-                        icon = Icons.Outlined.ChatBubble,
-                        count = post.replyCount,
-                        onClick = onReply,
-                        tint = nuruColors.textTertiary
-                    )
                     // Repost
                     ActionButton(
                         icon = Icons.Outlined.Repeat,

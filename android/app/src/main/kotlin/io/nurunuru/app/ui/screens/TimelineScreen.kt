@@ -178,7 +178,6 @@ fun TimelineScreen(
                                 post = post,
                                 onLike = { viewModel.likePost(post.event.id) },
                                 onRepost = { viewModel.repostPost(post.event.id) },
-                                onReply = { /* TODO: open reply modal */ },
                                 onProfileClick = { /* TODO: navigate to profile */ }
                             )
                         }

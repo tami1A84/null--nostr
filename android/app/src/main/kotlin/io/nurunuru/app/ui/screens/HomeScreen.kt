@@ -208,7 +208,6 @@ fun HomeScreen(viewModel: HomeViewModel) {
                         post = post,
                         onLike = {},
                         onRepost = {},
-                        onReply = {},
                         onProfileClick = {}
                     )
                 }

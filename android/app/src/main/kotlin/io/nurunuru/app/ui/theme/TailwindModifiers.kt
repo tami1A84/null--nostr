@@ -1,4 +1,4 @@
-package io.nurunuru.shared.ui
+package io.nurunuru.app.ui.theme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -113,13 +113,6 @@ fun Modifier.nuruBorder(
     shape: Shape = RoundedCornerShape(12.dp)
 ): Modifier = border(width, color, shape)
 
-/** Divider-style bottom border (replaces HorizontalDivider for specific rows) */
-fun Modifier.borderBottom(color: Color, width: Dp = 0.5.dp): Modifier =
-    border(
-        width = width,
-        color = Color.Transparent
-    ) // Use HorizontalDivider instead; kept for completeness
-
 // ─── Surface + bg utilities ───────────────────────────────────────────────────
 
 /**
@@ -142,53 +135,23 @@ fun Modifier.nuruCardElevated(): Modifier =
         .background(MaterialTheme.colorScheme.surfaceVariant)
 
 // ─── Typography scale tokens ──────────────────────────────────────────────────
-//
-// Mirrors Tailwind text-xs / text-sm / text-base / text-lg / text-xl naming.
-// Usage: Text(text, style = NuruTextStyle.bodySmall)
-//
-// These are simple aliases to MaterialTheme typography — access via
-// MaterialTheme.typography in Compose composables.
 
-/**
- * Named typography aliases for inline documentation.
- *
- * | Tailwind      | Material 3 equivalent        | Size  |
- * |---------------|------------------------------|-------|
- * | text-xs       | labelSmall                   | 11sp  |
- * | text-sm       | bodySmall / labelMedium      | 12sp  |
- * | text-base     | bodyMedium                   | 14sp  |
- * | text-lg       | bodyLarge                    | 16sp  |
- * | text-xl       | titleMedium                  | 16sp  |
- * | text-2xl      | titleLarge                   | 22sp  |
- * | text-3xl      | headlineMedium               | 28sp  |
- */
 object NuruTextStyle {
-    // Accessed via MaterialTheme.typography in @Composable context
-    const val LABEL_SMALL   = "labelSmall"    // text-xs
-    const val BODY_SMALL    = "bodySmall"     // text-sm
-    const val BODY_MEDIUM   = "bodyMedium"    // text-base (default)
-    const val BODY_LARGE    = "bodyLarge"     // text-lg
-    const val TITLE_SMALL   = "titleSmall"    // text-xl
-    const val TITLE_MEDIUM  = "titleMedium"   // text-xl bold
-    const val TITLE_LARGE   = "titleLarge"    // text-2xl
-    const val HEADLINE_SMALL = "headlineSmall"// text-3xl
+    const val LABEL_SMALL    = "labelSmall"    // text-xs
+    const val BODY_SMALL     = "bodySmall"     // text-sm
+    const val BODY_MEDIUM    = "bodyMedium"    // text-base (default)
+    const val BODY_LARGE     = "bodyLarge"     // text-lg
+    const val TITLE_SMALL    = "titleSmall"    // text-xl
+    const val TITLE_MEDIUM   = "titleMedium"   // text-xl bold
+    const val TITLE_LARGE    = "titleLarge"    // text-2xl
+    const val HEADLINE_SMALL = "headlineSmall" // text-3xl
 }
 
 // ─── Animation constants ──────────────────────────────────────────────────────
 
-/**
- * Duration constants that mirror framer-motion's default timing values.
- * Used with `animateFloatAsState`, `updateTransition`, etc.
- *
- * | framer-motion default | Compose equivalent |
- * |-----------------------|--------------------|
- * | duration: 0.2         | FAST = 200ms       |
- * | duration: 0.3         | NORMAL = 300ms     |
- * | duration: 0.5         | SLOW = 500ms       |
- */
 object NuruAnimDuration {
     const val FAST   = 200
     const val NORMAL = 300
     const val SLOW   = 500
-    const val SPRING = 350  // Spring-based interactions (scroll snap, card dismiss)
+    const val SPRING = 350
 }
