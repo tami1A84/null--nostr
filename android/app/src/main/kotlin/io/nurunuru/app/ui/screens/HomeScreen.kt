@@ -21,7 +21,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.ui.components.PostItem
 import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.LineGreen
@@ -111,10 +110,9 @@ fun HomeScreen(viewModel: HomeViewModel) {
                                 .background(nuruColors.bgTertiary, RoundedCornerShape(4.dp))
                         )
                     } else {
+                        val displayPk = uiState.profile?.pubkey?.take(8)?.let { "$it..." } ?: ""
                         Text(
-                            text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(
-                                uiState.profile?.pubkey ?: ""
-                            ),
+                            text = profile?.displayedName ?: displayPk,
                             fontWeight = FontWeight.Bold,
                             fontSize = 20.sp,
                             color = MaterialTheme.colorScheme.onBackground

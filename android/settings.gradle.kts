@@ -17,7 +17,6 @@ dependencyResolutionManagement {
 rootProject.name = "nurunuru-android"
 include(":app")
 
-// Uncomment after building Rust FFI bindings:
-//   cd ../rust-engine/nurunuru-ffi/bindgen && make android-all && make kotlin
-// include(":nurunuru-ffi")
-// project(":nurunuru-ffi").projectDir = file("../rust-engine/nurunuru-ffi/android")
+// Enabled Rust FFI bindings:
+include(":nurunuru-ffi")
+project(":nurunuru-ffi").projectDir = file("../rust-engine/nurunuru-ffi/android")

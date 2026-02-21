@@ -160,6 +160,47 @@ impl NuruNuruClient {
             .collect())
     }
 
+    /// Fetch recent notes from a specific user.
+    pub fn fetch_user_notes(
+        &self,
+        pubkey_hex: String,
+        limit: u32,
+    ) -> Result<Vec<FfiScoredPost>, NuruNuruFfiError> {
+        let pk = nostr::PublicKey::from_hex(&pubkey_hex)
+            .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+        let events = self
+            .runtime
+            .block_on(self.engine.fetch_timeline(Some(&[pk]), None, limit as usize))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(events
+            .into_iter()
+            .map(|e| FfiScoredPost {
+                event_id: e.id.to_hex(),
+                pubkey: e.pubkey.to_hex(),
+                score: 0.0,
+                created_at: e.created_at.as_secs(),
+            })
+            .collect())
+    }
+
+    /// Fetch all DM conversations.
+    pub fn fetch_dm_conversations(&self) -> Result<Vec<FfiDmConversation>, NuruNuruFfiError> {
+        // FIXME: Implement conversation grouping logic in engine or here
+        Ok(vec![])
+    }
+
+    /// Fetch messages in a conversation.
+    pub fn fetch_dm_messages(
+        &self,
+        partner_pubkey_hex: String,
+        limit: u32,
+    ) -> Result<Vec<FfiDmMessage>, NuruNuruFfiError> {
+        let _pk = nostr::PublicKey::from_hex(&partner_pubkey_hex)
+            .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+        // FIXME: Implementation requires querying gift wraps and unwrapping
+        Ok(vec![])
+    }
+
     /// Mark a post as "not interested".
     pub fn mark_not_interested(&self, event_id: String, author_pubkey: String) {
         self.runtime
@@ -184,6 +225,93 @@ impl NuruNuruClient {
     /// Format a timestamp in Japanese relative format.
     pub fn format_timestamp(&self, timestamp: u64) -> String {
         format_timestamp_ja(timestamp)
+    }
+
+    /// Zap a user's post.
+    pub fn zap(
+        &self,
+        event_id_hex: String,
+        author_pubkey_hex: String,
+        amount_sats: u64,
+        message: Option<String>,
+    ) -> Result<(), NuruNuruFfiError> {
+        let eid = nostr::EventId::from_hex(&event_id_hex)
+            .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+        let pk = nostr::PublicKey::from_hex(&author_pubkey_hex)
+            .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+        self.runtime
+            .block_on(self.engine.zap(eid, pk, amount_sats, message.as_deref()))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))
+    }
+
+    /// Fetch earned badges for a user.
+    pub fn fetch_badges(&self, pubkey_hex: String) -> Result<Vec<FfiBadgeAward>, NuruNuruFfiError> {
+        let pk = nostr::PublicKey::from_hex(&pubkey_hex)
+            .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+        let awards = self
+            .runtime
+            .block_on(self.engine.fetch_badges(pk))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(awards
+            .into_iter()
+            .map(|a| FfiBadgeAward {
+                badge_id: a.badge_id,
+                award_event_id: a.award_event_id,
+                award_pubkey: a.award_pubkey,
+            })
+            .collect())
+    }
+
+    /// Create a Birdwatch label for an event.
+    pub fn birdwatch_post(
+        &self,
+        event_id_hex: String,
+        author_pubkey_hex: String,
+        context_type: String,
+        content: String,
+    ) -> Result<String, NuruNuruFfiError> {
+        let eid = nostr::EventId::from_hex(&event_id_hex)
+            .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+        let pk = nostr::PublicKey::from_hex(&author_pubkey_hex)
+            .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+        let id = self
+            .runtime
+            .block_on(self.engine.birdwatch_post(eid, pk, &context_type, &content))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(id.to_hex())
+    }
+
+    /// Verify NIP-05 identifier.
+    pub fn verify_nip05(&self, nip05: String, pubkey_hex: String) -> Result<bool, NuruNuruFfiError> {
+        let pk = nostr::PublicKey::from_hex(&pubkey_hex)
+            .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+        self.runtime
+            .block_on(self.engine.verify_nip05(&nip05, pk))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))
+    }
+
+    /// Request to vanish (IRREVERSIBLE).
+    pub fn request_vanish(&self, reason: Option<String>) -> Result<String, NuruNuruFfiError> {
+        let id = self
+            .runtime
+            .block_on(self.engine.request_vanish(reason.as_deref()))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(id.to_hex())
+    }
+
+    /// Delete an event.
+    pub fn delete_event(
+        &self,
+        event_id_hex: String,
+        reason: Option<String>,
+    ) -> Result<String, NuruNuruFfiError> {
+        let eid = nostr::EventId::from_hex(&event_id_hex)
+            .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+        let id = self
+            .runtime
+            .block_on(self.engine.delete_event(eid, reason.as_deref()))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(id.to_hex())
     }
 }
 
@@ -212,6 +340,28 @@ pub struct FfiScoredPost {
 pub struct FfiConnectionStats {
     pub connected_relays: u32,
     pub total_relays: u32,
+}
+
+#[derive(uniffi::Record)]
+pub struct FfiBadgeAward {
+    pub badge_id: String,
+    pub award_event_id: String,
+    pub award_pubkey: String,
+}
+
+#[derive(uniffi::Record)]
+pub struct FfiDmMessage {
+    pub event_id: String,
+    pub sender_pubkey: String,
+    pub content: String,
+    pub created_at: u64,
+}
+
+#[derive(uniffi::Record)]
+pub struct FfiDmConversation {
+    pub partner_pubkey: String,
+    pub last_message: String,
+    pub last_message_at: u64,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]

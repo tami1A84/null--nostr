@@ -42,6 +42,28 @@ dictionary FfiScoredPost {
     u64 created_at;
 };
 
+/// NIP-58 Badge Award.
+dictionary FfiBadgeAward {
+    string badge_id;
+    string award_event_id;
+    string award_pubkey;
+};
+
+/// Encrypted DM message.
+dictionary FfiDmMessage {
+    string event_id;
+    string sender_pubkey;
+    string content;
+    u64 created_at;
+};
+
+/// DM Conversation summary.
+dictionary FfiDmConversation {
+    string partner_pubkey;
+    string last_message;
+    u64 last_message_at;
+};
+
 /// Relay pool connection statistics.
 dictionary FfiConnectionStats {
     u32 connected_relays;
@@ -129,6 +151,20 @@ interface NuruNuruClient {
     [Throws=NuruNuruFfiError]
     sequence<FfiScoredPost> get_recommended_feed(u32 limit);
 
+    /// Fetch recent notes from a specific user.
+    [Throws=NuruNuruFfiError]
+    sequence<FfiScoredPost> fetch_user_notes(string pubkey_hex, u32 limit);
+
+    // ─── Direct Messages (NIP-17) ───────────────────────────────
+
+    /// Fetch all DM conversations.
+    [Throws=NuruNuruFfiError]
+    sequence<FfiDmConversation> fetch_dm_conversations();
+
+    /// Fetch messages in a conversation.
+    [Throws=NuruNuruFfiError]
+    sequence<FfiDmMessage> fetch_dm_messages(string partner_pubkey_hex, u32 limit);
+
     // ── Personalization ────────────────────────────────────────
 
     /// Mark a post as "not interested" (lowers author's score).
@@ -146,4 +182,38 @@ interface NuruNuruClient {
     /// Format a Unix timestamp as a Japanese relative string
     /// (e.g. "たった今", "3分", "2時間", "5日", "3月14日").
     string format_timestamp(u64 timestamp);
+
+    // ─── Zaps (NIP-57) ─────────────────────────────────────────
+
+    /// Zap a user's post.
+    [Throws=NuruNuruFfiError]
+    void zap(string event_id_hex, string author_pubkey_hex, u64 amount_sats, string? message);
+
+    // ─── Badges (NIP-58) ───────────────────────────────────────
+
+    /// Fetch earned badges for a user.
+    [Throws=NuruNuruFfiError]
+    sequence<FfiBadgeAward> fetch_badges(string pubkey_hex);
+
+    // ─── Birdwatch (NIP-32) ────────────────────────────────────
+
+    /// Create a Birdwatch label for an event.
+    [Throws=NuruNuruFfiError]
+    string birdwatch_post(string event_id_hex, string author_pubkey_hex, string context_type, string content);
+
+    // ─── Verification ──────────────────────────────────────────
+
+    /// Verify NIP-05 identifier.
+    [Throws=NuruNuruFfiError]
+    boolean verify_nip05(string nip05, string pubkey_hex);
+
+    // ─── Deletion ──────────────────────────────────────────────
+
+    /// Request to vanish (IRREVERSIBLE).
+    [Throws=NuruNuruFfiError]
+    string request_vanish(string? reason);
+
+    /// Delete an event.
+    [Throws=NuruNuruFfiError]
+    string delete_event(string event_id_hex, string? reason);
 };

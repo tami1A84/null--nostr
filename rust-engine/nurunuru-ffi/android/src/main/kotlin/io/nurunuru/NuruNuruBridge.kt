@@ -60,6 +60,18 @@ suspend fun NuruNuruClient.fetchProfileAsync(pubkeyHex: String): FfiUserProfile?
 suspend fun NuruNuruClient.getRecommendedFeedAsync(limit: UInt): List<FfiScoredPost> =
     withContext(Dispatchers.IO) { getRecommendedFeed(limit = limit) }
 
+/** Fetch recent notes from a specific user. */
+suspend fun NuruNuruClient.fetchUserNotesAsync(pubkeyHex: String, limit: UInt): List<FfiScoredPost> =
+    withContext(Dispatchers.IO) { fetchUserNotes(pubkeyHex = pubkeyHex, limit = limit) }
+
+/** Fetch all DM conversations. */
+suspend fun NuruNuruClient.fetchDmConversationsAsync(): List<FfiDmConversation> =
+    withContext(Dispatchers.IO) { fetchDmConversations() }
+
+/** Fetch messages in a conversation. */
+suspend fun NuruNuruClient.fetchDmMessagesAsync(partnerPubkeyHex: String, limit: UInt): List<FfiDmMessage> =
+    withContext(Dispatchers.IO) { fetchDmMessages(partnerPubkeyHex = partnerPubkeyHex, limit = limit) }
+
 /** Publish a text note (kind 1). Returns the event ID hex. */
 suspend fun NuruNuruClient.publishNoteAsync(content: String): String =
     withContext(Dispatchers.IO) { publishNote(content = content) }
@@ -83,3 +95,27 @@ suspend fun NuruNuruClient.unfollowUserAsync(targetPubkeyHex: String) =
 /** Full-text search (NIP-50). Returns matching event ID hex strings. */
 suspend fun NuruNuruClient.searchAsync(query: String, limit: UInt): List<String> =
     withContext(Dispatchers.IO) { search(query = query, limit = limit) }
+
+/** Zap a user's post (NIP-57). */
+suspend fun NuruNuruClient.zapAsync(eventIdHex: String, authorPubkeyHex: String, amountSats: ULong, message: String? = null) =
+    withContext(Dispatchers.IO) { zap(eventIdHex = eventIdHex, authorPubkeyHex = authorPubkeyHex, amountSats = amountSats, message = message) }
+
+/** Fetch earned badges for a user (NIP-58). */
+suspend fun NuruNuruClient.fetchBadgesAsync(pubkeyHex: String): List<FfiBadgeAward> =
+    withContext(Dispatchers.IO) { fetchBadges(pubkeyHex = pubkeyHex) }
+
+/** Create a Birdwatch label for an event (NIP-32). */
+suspend fun NuruNuruClient.birdwatchPostAsync(eventIdHex: String, authorPubkeyHex: String, contextType: String, content: String): String =
+    withContext(Dispatchers.IO) { birdwatchPost(eventIdHex = eventIdHex, authorPubkeyHex = authorPubkeyHex, contextType = contextType, content = content) }
+
+/** Verify NIP-05 identifier. */
+suspend fun NuruNuruClient.verifyNip05Async(nip05: String, pubkeyHex: String): Boolean =
+    withContext(Dispatchers.IO) { verifyNip05(nip05 = nip05, pubkeyHex = pubkeyHex) }
+
+/** Request to vanish (NIP-62). IRREVERSIBLE. */
+suspend fun NuruNuruClient.requestVanishAsync(reason: String? = null): String =
+    withContext(Dispatchers.IO) { requestVanish(reason = reason) }
+
+/** Delete an event (NIP-09). */
+suspend fun NuruNuruClient.deleteEventAsync(eventIdHex: String, reason: String? = null): String =
+    withContext(Dispatchers.IO) { deleteEvent(eventIdHex = eventIdHex, reason = reason) }

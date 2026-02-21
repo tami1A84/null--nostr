@@ -3,13 +3,13 @@ package io.nurunuru.app.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import rust.nostr.sdk.Keys
 
 sealed class AuthState {
     object Checking : AuthState()
@@ -45,21 +45,17 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             _authState.value = AuthState.Checking
 
-            val privKeyHex = NostrKeyUtils.parsePrivateKey(nsecOrHex)
-            if (privKeyHex == null) {
-                _authState.value = AuthState.Error("秘密鍵の形式が正しくありません（nsec1... または64桁の16進数）")
-                return@launch
-            }
+            try {
+                val keys = Keys.parse(nsecOrHex)
+                val privKeyHex = keys.secretKey().toHex()
+                val pubKeyHex = keys.publicKey().toHex()
 
-            val pubKeyHex = NostrKeyUtils.derivePublicKey(privKeyHex)
-            if (pubKeyHex == null) {
-                _authState.value = AuthState.Error("公開鍵の導出に失敗しました")
-                return@launch
+                prefs.privateKeyHex = privKeyHex
+                prefs.publicKeyHex = pubKeyHex
+                _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex)
+            } catch (e: Exception) {
+                _authState.value = AuthState.Error("ログインに失敗しました: ${e.message}")
             }
-
-            prefs.privateKeyHex = privKeyHex
-            prefs.publicKeyHex = pubKeyHex
-            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex)
         }
     }
 

@@ -75,12 +75,40 @@ pub struct EngagementHistory {
 }
 
 /// Scored post for feed ordering
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoredPost {
     pub event_id: String,
     pub pubkey: String,
     pub score: f64,
     pub created_at: u64,
+}
+
+/// NIP-58 Badge Definition (kind 30009)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BadgeDefinition {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub image: String,
+    pub thumbnails: Vec<String>,
+}
+
+/// NIP-58 Badge Award (kind 8)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BadgeAward {
+    pub badge_id: String,
+    pub award_event_id: String,
+    pub award_pubkey: String,
+}
+
+/// NIP-32 Birdwatch Label (kind 1985)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BirdwatchLabel {
+    pub event_id: String,
+    pub author: String,
+    pub context_type: String,
+    pub content: String,
+    pub timestamp: u64,
 }
 
 /// Timeline fetch result

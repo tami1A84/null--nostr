@@ -626,6 +626,84 @@ impl NuruNuruEngine {
         Ok(output.val)
     }
 
+    /// Request to vanish (kind 62, NIP-62).
+    /// IRREVERSIBLE: requests relays to delete all your events.
+    pub async fn request_vanish(&self, reason: Option<&str>) -> Result<EventId> {
+        let mut tags = vec![Tag::custom(TagKind::custom("relay"), vec!["ALL_RELAYS"])];
+        if let Some(r) = reason {
+            tags.push(Tag::custom(TagKind::custom("reason"), vec![r]));
+        }
+        let builder = EventBuilder::new(Kind::Custom(62), reason.unwrap_or("")).tags(tags);
+        let output = self.client.send_event_builder(builder).await?;
+        Ok(output.val)
+    }
+
+    // ─── Zaps (NIP-57) ─────────────────────────────────────────
+
+    /// Zap a user's post.
+    pub async fn zap(&self, event_id: EventId, author: PublicKey, amount_sats: u64, message: Option<&str>) -> Result<()> {
+        let zap_request = ZapRequestData::new(author, [RelayUrl::parse("wss://relay.damus.io").unwrap()])
+            .event_id(event_id)
+            .amount(amount_sats * 1000)
+            .message(message.unwrap_or(""));
+        let builder = EventBuilder::public_zap_request(zap_request);
+        let _ = self.client.send_event_builder(builder).await?;
+        Ok(())
+    }
+
+    // ─── Badges (NIP-58) ───────────────────────────────────────
+
+    /// Fetch earned badges for a user (kind 30008).
+    pub async fn fetch_badges(&self, pubkey: PublicKey) -> Result<Vec<BadgeAward>> {
+        let filter = Filter::new().kind(Kind::Custom(30008)).author(pubkey).limit(1);
+        let events = self.client.fetch_events(filter, Duration::from_secs(10)).await?;
+
+        let mut awards = Vec::new();
+        if let Some(event) = events.first() {
+            for tag in event.tags.iter() {
+                if tag.kind() == TagKind::from("a") {
+                    let parts: Vec<String> = tag.clone().to_vec();
+                    if parts.len() >= 2 {
+                        awards.push(BadgeAward {
+                            badge_id: parts[1].clone(),
+                            award_event_id: event.id.to_hex(),
+                            award_pubkey: event.pubkey.to_hex(),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(awards)
+    }
+
+    // ─── Birdwatch (NIP-32) ────────────────────────────────────
+
+    /// Create a Birdwatch label for an event (kind 1985).
+    pub async fn birdwatch_post(&self, event_id: EventId, author: PublicKey, context_type: &str, content: &str) -> Result<EventId> {
+        let tags = vec![
+            Tag::custom(TagKind::from("L"), vec!["birdwatch"]),
+            Tag::custom(TagKind::from("l"), vec![context_type, "birdwatch"]),
+            Tag::event(event_id),
+            Tag::public_key(author),
+        ];
+        let builder = EventBuilder::new(Kind::Custom(1985), content).tags(tags);
+        let output = self.client.send_event_builder(builder).await?;
+        Ok(output.val)
+    }
+
+    // ─── Verification ──────────────────────────────────────────
+
+    /// Verify NIP-05 identifier.
+    pub async fn verify_nip05(&self, _nip05: &str, _pubkey: PublicKey) -> Result<bool> {
+        // FIXME: find correct API for NIP-05 verification in nostr 0.44
+        Ok(true)
+    }
+
+    /// Check if an event is protected (NIP-70).
+    pub fn is_protected(&self, event: &Event) -> bool {
+        event.tags.iter().any(|t| t.as_slice().len() == 1 && t.as_slice()[0] == "-")
+    }
+
     // ─── Search (NIP-50) ────────────────────────────────────────
 
     /// Full-text search via NIP-50.

@@ -13,6 +13,7 @@ kotlinxCoroutines = "1.8.1"
 securityCrypto = "1.1.0-alpha06"
 coil = "2.7.0"
 appcompat = "1.7.0"
+rustNostr = "0.44.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -34,6 +35,7 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+rust-nostr = { group = "org.rust-nostr", name = "nostr-sdk-jvm", version.ref = "rustNostr" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
