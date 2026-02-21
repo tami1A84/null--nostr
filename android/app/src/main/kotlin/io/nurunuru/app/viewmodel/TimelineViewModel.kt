@@ -119,16 +119,20 @@ class TimelineViewModel(
         }
     }
 
-    fun publishNote(content: String) {
+    fun publishNote(content: String, replyToId: String? = null) {
         viewModelScope.launch {
             try {
-                repository.publishNote(content)
+                repository.publishNote(content, replyToId = replyToId)
             } catch (e: Exception) {
                 // Publishing failed silently; do not crash
             }
             refresh()
         }
     }
+
+    /** Used by ZapModal to fetch a BOLT11 invoice via LNURL-pay. */
+    suspend fun fetchLightningInvoice(lud16: String, amountSats: Long, comment: String): String? =
+        repository.fetchLightningInvoice(lud16, amountSats, comment)
 
     class Factory(
         private val repository: NostrRepository,

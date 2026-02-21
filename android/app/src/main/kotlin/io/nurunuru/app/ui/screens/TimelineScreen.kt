@@ -22,8 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.ui.components.PostItem
 import io.nurunuru.app.ui.components.PostModal
+import io.nurunuru.app.ui.components.ZapModal
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.FeedType
@@ -34,20 +36,22 @@ import io.nurunuru.app.viewmodel.TimelineViewModel
 fun TimelineScreen(
     viewModel: TimelineViewModel,
     myPictureUrl: String?,
-    myDisplayName: String
+    myDisplayName: String,
+    onProfileClick: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
     val listState = rememberLazyListState()
+
     var showPostModal by remember { mutableStateOf(false) }
+    var replyToPost by remember { mutableStateOf<ScoredPost?>(null) }
+    var zapPost by remember { mutableStateOf<ScoredPost?>(null) }
     var searchText by remember { mutableStateOf("") }
     var showSearch by remember { mutableStateOf(false) }
 
     val pullRefreshState = rememberPullToRefreshState()
     if (pullRefreshState.isRefreshing) {
-        LaunchedEffect(Unit) {
-            viewModel.refresh()
-        }
+        LaunchedEffect(Unit) { viewModel.refresh() }
     }
     LaunchedEffect(uiState.isRefreshing) {
         if (!uiState.isRefreshing) pullRefreshState.endRefresh()
@@ -127,7 +131,10 @@ fun TimelineScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showPostModal = true },
+                onClick = {
+                    replyToPost = null
+                    showPostModal = true
+                },
                 containerColor = LineGreen,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ) {
@@ -178,8 +185,12 @@ fun TimelineScreen(
                                 post = post,
                                 onLike = { viewModel.likePost(post.event.id) },
                                 onRepost = { viewModel.repostPost(post.event.id) },
-                                onReply = { /* TODO: open reply modal */ },
-                                onProfileClick = { /* TODO: navigate to profile */ }
+                                onReply = {
+                                    replyToPost = post
+                                    showPostModal = true
+                                },
+                                onZap = { zapPost = post },
+                                onProfileClick = onProfileClick
                             )
                         }
                         item {
@@ -198,14 +209,30 @@ fun TimelineScreen(
         }
     }
 
-    // Post composition modal
+    // Post composition / reply modal
     if (showPostModal) {
         PostModal(
             pictureUrl = myPictureUrl,
             displayName = myDisplayName,
-            onDismiss = { showPostModal = false },
+            replyToContent = replyToPost?.event?.content?.take(80),
+            onDismiss = {
+                showPostModal = false
+                replyToPost = null
+            },
             onPublish = { content ->
-                viewModel.publishNote(content)
+                viewModel.publishNote(content, replyToId = replyToPost?.event?.id)
+                replyToPost = null
+            }
+        )
+    }
+
+    // Zap modal
+    if (zapPost != null) {
+        ZapModal(
+            post = zapPost!!,
+            onDismiss = { zapPost = null },
+            onFetchInvoice = { lud16, amountSats, comment ->
+                viewModel.fetchLightningInvoice(lud16, amountSats, comment)
             }
         )
     }

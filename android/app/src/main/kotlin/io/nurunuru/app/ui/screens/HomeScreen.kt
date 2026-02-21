@@ -30,7 +30,10 @@ import io.nurunuru.app.viewmodel.HomeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel) {
+fun HomeScreen(
+    viewModel: HomeViewModel,
+    onProfileClick: (String) -> Unit = {}
+) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
     val profile = uiState.profile
@@ -209,7 +212,7 @@ fun HomeScreen(viewModel: HomeViewModel) {
                         onLike = {},
                         onRepost = {},
                         onReply = {},
-                        onProfileClick = {}
+                        onProfileClick = onProfileClick
                     )
                 }
             }

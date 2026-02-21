@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.outlined.ChatBubble
+import androidx.compose.material.icons.outlined.ElectricBolt
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +37,7 @@ fun PostItem(
     onRepost: () -> Unit,
     onReply: () -> Unit,
     onProfileClick: (String) -> Unit,
+    onZap: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val nuruColors = LocalNuruColors.current
@@ -96,6 +98,15 @@ fun PostItem(
                 // Content
                 PostContent(content = post.event.content)
 
+                // Quoted post (embedded preview)
+                if (post.quotedPost != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    QuotedPostCard(
+                        post = post.quotedPost,
+                        onProfileClick = onProfileClick
+                    )
+                }
+
                 // Images
                 extractImages(post.event.content).let { images ->
                     if (images.isNotEmpty()) {
@@ -133,13 +144,22 @@ fun PostItem(
                         onClick = onLike,
                         tint = if (post.isLiked) Color(0xFFFF6B6B) else nuruColors.textTertiary
                     )
-                    // Spacer for layout balance
-                    Spacer(modifier = Modifier.width(8.dp))
+                    // Zap (shown only when callback is provided)
+                    if (onZap != null) {
+                        ActionButton(
+                            icon = Icons.Outlined.ElectricBolt,
+                            count = 0,
+                            onClick = onZap,
+                            tint = if (post.profile?.lud16 != null) Color(0xFFF59E0B)
+                                   else nuruColors.textTertiary
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
                 }
             }
         }
 
-        // Divider
         HorizontalDivider(
             color = nuruColors.border,
             thickness = 0.5.dp
@@ -156,7 +176,6 @@ private fun PostContent(content: String) {
     val annotated = buildAnnotatedString {
         val parts = cleanContent.split(Regex("(#\\w+|@\\w+|nostr:\\w+)"))
         val matches = Regex("(#\\w+|@\\w+|nostr:\\w+)").findAll(cleanContent).toList()
-        var idx = 0
         for (i in parts.indices) {
             append(parts[i])
             if (i < matches.size) {
@@ -198,7 +217,7 @@ private fun ImageGrid(images: List<String>) {
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                images.take(4).forEachIndexed { index, url ->
+                images.take(4).forEach { url ->
                     AsyncImage(
                         model = url,
                         contentDescription = null,
@@ -263,10 +282,7 @@ private fun formatTimestamp(unixSec: Long): String {
         diff < 3600 -> "${diff / 60}分"
         diff < 86400 -> "${diff / 3600}時間"
         diff < 86400 * 7 -> "${diff / 86400}日"
-        else -> {
-            val sdf = SimpleDateFormat("M/d", Locale.JAPAN)
-            sdf.format(Date(unixSec * 1000))
-        }
+        else -> SimpleDateFormat("M/d", Locale.JAPAN).format(Date(unixSec * 1000))
     }
 }
 

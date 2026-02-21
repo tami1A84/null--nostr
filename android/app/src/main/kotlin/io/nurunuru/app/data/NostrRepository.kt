@@ -1,5 +1,6 @@
 package io.nurunuru.app.data
 
+import android.net.Uri
 import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlinx.coroutines.*
@@ -7,6 +8,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 
 /**
  * High-level Nostr operations.
@@ -18,6 +22,10 @@ class NostrRepository(
 ) {
     private val profileCache = mutableMapOf<String, UserProfile>()
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .build()
 
     // ─── Timeline ─────────────────────────────────────────────────────────────
 
@@ -245,6 +253,78 @@ class NostrRepository(
 
     suspend fun sendDm(recipientPubkeyHex: String, content: String): Boolean =
         client.sendEncryptedDm(recipientPubkeyHex, content)
+
+    // ─── Follow Management ────────────────────────────────────────────────────
+
+    suspend fun isFollowing(targetPubkey: String, myPubkey: String): Boolean {
+        return fetchFollowList(myPubkey).contains(targetPubkey)
+    }
+
+    suspend fun followUser(targetPubkey: String, myPubkey: String): Boolean {
+        val followList = fetchFollowList(myPubkey).toMutableList()
+        if (followList.contains(targetPubkey)) return true
+        followList.add(targetPubkey)
+        return client.publishContactList(followList)
+    }
+
+    suspend fun unfollowUser(targetPubkey: String, myPubkey: String): Boolean {
+        val followList = fetchFollowList(myPubkey).toMutableList()
+        if (!followList.contains(targetPubkey)) return true
+        followList.remove(targetPubkey)
+        return client.publishContactList(followList)
+    }
+
+    // ─── Lightning / Zap ─────────────────────────────────────────────────────
+
+    /**
+     * Fetch a BOLT11 Lightning invoice via LNURL-pay.
+     * @param lud16 Lightning address (e.g. user@domain.com)
+     * @param amountSats Amount in satoshis
+     * @param comment Optional comment (up to 100 chars)
+     * @return BOLT11 invoice string or null on failure
+     */
+    suspend fun fetchLightningInvoice(
+        lud16: String,
+        amountSats: Long,
+        comment: String = ""
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val parts = lud16.split("@")
+            if (parts.size != 2) return@withContext null
+            val username = parts[0]
+            val domain = parts[1]
+
+            // Step 1: LNURL-pay metadata
+            val metadataUrl = "https://$domain/.well-known/lnurlp/$username"
+            val metadataBody = httpGet(metadataUrl) ?: return@withContext null
+            val metadata = json.parseToJsonElement(metadataBody).jsonObject
+            val callback = metadata["callback"]?.jsonPrimitive?.content ?: return@withContext null
+
+            // Step 2: Request invoice (amount in millisatoshis)
+            val amountMsats = amountSats * 1000L
+            val invoiceUrlBuilder = Uri.parse(callback).buildUpon()
+                .appendQueryParameter("amount", amountMsats.toString())
+            if (comment.isNotBlank()) {
+                invoiceUrlBuilder.appendQueryParameter("comment", comment.take(100))
+            }
+            val invoiceBody = httpGet(invoiceUrlBuilder.build().toString()) ?: return@withContext null
+            val invoiceJson = json.parseToJsonElement(invoiceBody).jsonObject
+            invoiceJson["pr"]?.jsonPrimitive?.content
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun httpGet(url: String): String? {
+        return try {
+            val request = Request.Builder().url(url).build()
+            httpClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) response.body?.string() else null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 

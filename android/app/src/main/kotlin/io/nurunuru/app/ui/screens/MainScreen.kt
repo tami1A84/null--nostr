@@ -1,5 +1,8 @@
 package io.nurunuru.app.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -57,6 +60,9 @@ fun MainScreen(
     val nuruColors = LocalNuruColors.current
     var activeTab by remember { mutableStateOf(BottomTab.TIMELINE) }
 
+    // Profile overlay state – null = hidden, non-null = showing that pubkey's profile
+    var profileOverlayPubkey by remember { mutableStateOf<String?>(null) }
+
     // Create shared NostrClient and Repository
     val nostrClient = remember {
         NostrClient(
@@ -77,78 +83,117 @@ fun MainScreen(
     val homeVM: HomeViewModel = viewModel(
         factory = HomeViewModel.Factory(repository, pubkeyHex)
     )
+    val profileVM: ProfileViewModel = viewModel(
+        factory = ProfileViewModel.Factory(repository, pubkeyHex)
+    )
 
     // My profile for post modal avatar
     val homeState by homeVM.uiState.collectAsState()
     val myProfile = homeState.profile
+
+    // Profile click handler shared across all screens
+    val onProfileClick: (String) -> Unit = { clickedPubkey ->
+        profileOverlayPubkey = clickedPubkey
+    }
 
     // Disconnect on dispose
     DisposableEffect(nostrClient) {
         onDispose { nostrClient.disconnect() }
     }
 
-    Scaffold(
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp
-            ) {
-                BottomTab.entries.forEach { tab ->
-                    val isSelected = activeTab == tab
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = {
-                            if (activeTab == tab) {
-                                // Tap same tab = refresh
-                                when (tab) {
-                                    BottomTab.TIMELINE -> timelineVM.refresh()
-                                    BottomTab.TALK -> talkVM.loadConversations()
-                                    BottomTab.HOME -> homeVM.refresh()
-                                    BottomTab.MINIAPP -> {}
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Main scaffold with bottom nav
+        Scaffold(
+            bottomBar = {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp
+                ) {
+                    BottomTab.entries.forEach { tab ->
+                        val isSelected = activeTab == tab
+                        NavigationBarItem(
+                            selected = isSelected,
+                            onClick = {
+                                if (activeTab == tab) {
+                                    when (tab) {
+                                        BottomTab.TIMELINE -> timelineVM.refresh()
+                                        BottomTab.TALK -> talkVM.loadConversations()
+                                        BottomTab.HOME -> homeVM.refresh()
+                                        BottomTab.MINIAPP -> {}
+                                    }
                                 }
-                            }
-                            activeTab = tab
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                contentDescription = tab.label
+                                activeTab = tab
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
+                                    contentDescription = tab.label
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = tab.label,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = LineGreen,
+                                selectedTextColor = LineGreen,
+                                unselectedIconColor = nuruColors.textTertiary,
+                                unselectedTextColor = nuruColors.textTertiary,
+                                indicatorColor = LineGreen.copy(alpha = 0.12f)
                             )
-                        },
-                        label = {
-                            Text(
-                                text = tab.label,
-                                fontSize = 10.sp,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = LineGreen,
-                            selectedTextColor = LineGreen,
-                            unselectedIconColor = nuruColors.textTertiary,
-                            unselectedTextColor = nuruColors.textTertiary,
-                            indicatorColor = LineGreen.copy(alpha = 0.12f)
                         )
+                    }
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.background
+        ) { paddingValues ->
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                when (activeTab) {
+                    BottomTab.HOME -> HomeScreen(
+                        viewModel = homeVM,
+                        onProfileClick = onProfileClick
+                    )
+                    BottomTab.TALK -> TalkScreen(viewModel = talkVM)
+                    BottomTab.TIMELINE -> TimelineScreen(
+                        viewModel = timelineVM,
+                        myPictureUrl = myProfile?.picture,
+                        myDisplayName = myProfile?.displayedName ?: "",
+                        onProfileClick = onProfileClick
+                    )
+                    BottomTab.MINIAPP -> SettingsScreen(
+                        authViewModel = authViewModel,
+                        prefs = app.prefs,
+                        pubkeyHex = pubkeyHex,
+                        pictureUrl = myProfile?.picture
                     )
                 }
             }
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            when (activeTab) {
-                BottomTab.HOME -> HomeScreen(viewModel = homeVM)
-                BottomTab.TALK -> TalkScreen(viewModel = talkVM)
-                BottomTab.TIMELINE -> TimelineScreen(
-                    viewModel = timelineVM,
-                    myPictureUrl = myProfile?.picture,
-                    myDisplayName = myProfile?.displayedName ?: ""
-                )
-                BottomTab.MINIAPP -> SettingsScreen(
-                    authViewModel = authViewModel,
-                    prefs = app.prefs,
-                    pubkeyHex = pubkeyHex,
-                    pictureUrl = myProfile?.picture
+        }
+
+        // Profile overlay – slides in from right like a native screen push
+        AnimatedVisibility(
+            visible = profileOverlayPubkey != null,
+            enter = slideInHorizontally(initialOffsetX = { it }),
+            exit = slideOutHorizontally(targetOffsetX = { it })
+        ) {
+            profileOverlayPubkey?.let { targetPubkey ->
+                UserProfileScreen(
+                    pubkeyHex = targetPubkey,
+                    myPubkeyHex = pubkeyHex,
+                    viewModel = profileVM,
+                    onBack = { profileOverlayPubkey = null },
+                    onProfileClick = { newPubkey ->
+                        // Allow navigating to another profile from within a profile
+                        profileOverlayPubkey = newPubkey
+                    },
+                    onStartDm = { partnerPubkey ->
+                        profileOverlayPubkey = null
+                        activeTab = BottomTab.TALK
+                        talkVM.openConversation(partnerPubkey)
+                    }
                 )
             }
         }
