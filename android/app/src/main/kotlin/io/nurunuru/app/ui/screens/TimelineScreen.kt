@@ -163,7 +163,7 @@ fun TimelineScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Text(uiState.error!!, color = nuruColors.textTertiary)
+                            Text(uiState.error ?: "", color = nuruColors.textTertiary)
                             Button(
                                 onClick = { viewModel.loadTimeline() },
                                 colors = ButtonDefaults.buttonColors(containerColor = LineGreen)
@@ -227,9 +227,9 @@ fun TimelineScreen(
     }
 
     // Zap modal
-    if (zapPost != null) {
+    zapPost?.let { post ->
         ZapModal(
-            post = zapPost!!,
+            post = post,
             onDismiss = { zapPost = null },
             onFetchInvoice = { lud16, amountSats, comment ->
                 viewModel.fetchLightningInvoice(lud16, amountSats, comment)

@@ -93,7 +93,7 @@ class NostrRepository(
             )
             val events = client.fetchEvents(filter, timeoutMs = 4_000)
             events.groupBy { it.pubkey }
-                .mapValues { (_, evts) -> evts.maxByOrNull { it.createdAt }!! }
+                .mapValues { (_, evts) -> evts.maxBy { it.createdAt } }
                 .forEach { (pk, event) -> profileCache[pk] = parseProfile(event) }
         }
         return pubkeys.associateWith { profileCache[it] ?: UserProfile(pubkey = it) }
@@ -194,7 +194,7 @@ class NostrRepository(
         val profiles = fetchProfiles(conversations.keys.toList())
 
         return conversations.map { (partnerKey, events) ->
-            val lastEvent = events.maxByOrNull { it.createdAt }!!
+            val lastEvent = events.maxBy { it.createdAt }
             DmConversation(
                 partnerPubkey = partnerKey,
                 partnerProfile = profiles[partnerKey],

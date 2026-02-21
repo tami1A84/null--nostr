@@ -32,10 +32,11 @@ import java.util.*
 fun TalkScreen(viewModel: TalkViewModel) {
     val uiState by viewModel.uiState.collectAsState()
 
-    if (uiState.activeConversation != null) {
+    val activeConversation = uiState.activeConversation
+    if (activeConversation != null) {
         ConversationScreen(
             viewModel = viewModel,
-            partnerPubkey = uiState.activeConversation!!,
+            partnerPubkey = activeConversation,
             messages = uiState.messages,
             isLoading = uiState.messagesLoading,
             isSending = uiState.sendingMessage

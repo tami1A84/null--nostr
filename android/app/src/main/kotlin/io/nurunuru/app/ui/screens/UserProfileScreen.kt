@@ -123,9 +123,9 @@ fun UserProfileScreen(
                         .height(140.dp)
                         .background(nuruColors.bgTertiary)
                 ) {
-                    if (uiState.profile?.banner != null) {
+                    uiState.profile?.banner?.let { bannerUrl ->
                         AsyncImage(
-                            model = uiState.profile!!.banner,
+                            model = bannerUrl,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
@@ -199,9 +199,9 @@ fun UserProfileScreen(
     }
 
     // Zap modal
-    if (zapTargetPost != null) {
+    zapTargetPost?.let { post ->
         ZapModal(
-            post = zapTargetPost!!,
+            post = post,
             onDismiss = { zapTargetPost = null },
             onFetchInvoice = { lud16, amountSats, comment ->
                 viewModel.fetchZapInvoiceSync(lud16, amountSats, comment)

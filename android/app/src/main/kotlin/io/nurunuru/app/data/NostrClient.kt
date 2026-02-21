@@ -181,7 +181,9 @@ class NostrClient(
                 onEvent = { event -> synchronized(results) { results.add(event) } },
                 onEose = {
                     unsubscribe(subId)
-                    if (!deferred.isCompleted) deferred.complete(results.toList())
+                    if (!deferred.isCompleted) {
+                        deferred.complete(synchronized(results) { results.toList() })
+                    }
                 }
             )
 
@@ -189,7 +191,7 @@ class NostrClient(
                 withTimeout(timeoutMs) { deferred.await() }
             } catch (e: TimeoutCancellationException) {
                 unsubscribe(subId)
-                results.toList()
+                synchronized(results) { results.toList() }
             }
         }
 
@@ -334,7 +336,8 @@ class NostrClient(
     }
 
     private fun signEvent(eventId: String, privKey: ByteArray): String {
-        val msgBytes = eventId.hexToBytes()!!
+        val msgBytes = eventId.hexToBytes()
+            ?: throw IllegalArgumentException("Invalid event ID hex: $eventId")
         val sig = Secp256k1Impl.schnorrSign(msgBytes, privKey, null)
         return sig.toHex()
     }

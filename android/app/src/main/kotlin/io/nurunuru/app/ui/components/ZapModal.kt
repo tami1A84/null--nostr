@@ -112,18 +112,20 @@ fun ZapModal(
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
-            } else if (invoice != null) {
-                // Show invoice to copy
-                InvoiceCopiedSection(
-                    invoice = invoice!!,
-                    amountSats = effectiveAmount,
-                    onCopy = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("invoice", invoice))
-                    },
-                    onDismiss = { dismissSheet() }
-                )
             } else {
+                val currentInvoice = invoice
+                if (currentInvoice != null) {
+                    // Show invoice to copy
+                    InvoiceCopiedSection(
+                        invoice = currentInvoice,
+                        amountSats = effectiveAmount,
+                        onCopy = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("invoice", currentInvoice))
+                        },
+                        onDismiss = { dismissSheet() }
+                    )
+                } else {
                 // Amount presets
                 Text(
                     text = "金額 (sats)",
@@ -187,9 +189,9 @@ fun ZapModal(
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                if (errorMsg != null) {
+                errorMsg?.let { err ->
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(errorMsg!!, color = MaterialTheme.colorScheme.error,
+                    Text(err, color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall)
                 }
 
@@ -229,7 +231,8 @@ fun ZapModal(
                         )
                     }
                 }
-            }
+                } // end else (no invoice yet)
+            } // end else (has lud16)
 
             Spacer(modifier = Modifier.height(16.dp))
         }
