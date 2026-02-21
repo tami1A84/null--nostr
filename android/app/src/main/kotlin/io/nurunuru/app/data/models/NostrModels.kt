@@ -46,6 +46,7 @@ data class ScoredPost(
     val likeCount: Int = 0,
     val repostCount: Int = 0,
     val replyCount: Int = 0,
+    val zapCount: Int = 0,        // NIP-57 Zap receipts (mirrors web ScoredPost)
     val isLiked: Boolean = false,
     val isReposted: Boolean = false,
     val quotedPost: ScoredPost? = null

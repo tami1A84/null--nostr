@@ -16,6 +16,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "nurunuru-android"
 include(":app")
+include(":shared")
 
 // Uncomment after building Rust FFI bindings:
 //   cd ../rust-engine/nurunuru-ffi/bindgen && make android-all && make kotlin

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.outlined.ChatBubble
@@ -36,6 +37,7 @@ fun PostItem(
     onRepost: () -> Unit,
     onReply: () -> Unit,
     onProfileClick: (String) -> Unit,
+    onZap: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val nuruColors = LocalNuruColors.current
@@ -133,8 +135,13 @@ fun PostItem(
                         onClick = onLike,
                         tint = if (post.isLiked) Color(0xFFFF6B6B) else nuruColors.textTertiary
                     )
-                    // Spacer for layout balance
-                    Spacer(modifier = Modifier.width(8.dp))
+                    // Zap (NIP-57) – mirrors web version engagement row
+                    ActionButton(
+                        icon = Icons.Filled.Bolt,
+                        count = post.zapCount,
+                        onClick = onZap,
+                        tint = if (post.zapCount > 0) nuruColors.zapColor else nuruColors.textTertiary
+                    )
                 }
             }
         }

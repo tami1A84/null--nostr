@@ -63,6 +63,8 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
+    implementation(project(":shared"))
+
     // Uncomment after building Rust FFI:
     // implementation(project(":nurunuru-ffi"))
 }
