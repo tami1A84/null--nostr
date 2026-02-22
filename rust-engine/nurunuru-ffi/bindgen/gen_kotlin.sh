@@ -20,11 +20,11 @@ cd "$CRATE_DIR"
 echo "==> Building nurunuru-ffi for host (for bindgen introspection)..."
 cargo build --release
 
-# Use host .so / .dylib for bindgen introspection
+# Use host .so / .dylib for bindgen introspection (workspace-aware)
 if [[ "$(uname)" == "Darwin" ]]; then
-    LIB="target/release/libnurunuru_ffi.dylib"
+    LIB="../target/release/libnurunuru_ffi.dylib"
 else
-    LIB="target/release/libnurunuru_ffi.so"
+    LIB="../target/release/libnurunuru_ffi.so"
 fi
 
 echo "==> Generating Kotlin bindings from $LIB ..."

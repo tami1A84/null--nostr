@@ -65,14 +65,14 @@ android-arm64:
 	@echo "==> Building for Android ARM64 (aarch64-linux-android)..."
 	cd $(CRATE_DIR) && cargo ndk -t aarch64-linux-android build --release
 	mkdir -p $(CRATE_DIR)/android/libs/arm64-v8a
-	cp $(CRATE_DIR)/target/aarch64-linux-android/release/libnurunuru_ffi.so \
+	cp $(CRATE_DIR)/../target/aarch64-linux-android/release/libnurunuru_ffi.so \
 	   $(CRATE_DIR)/android/libs/arm64-v8a/
 
 android-x86_64:
 	@echo "==> Building for Android x86_64 (x86_64-linux-android)..."
 	cd $(CRATE_DIR) && cargo ndk -t x86_64-linux-android build --release
 	mkdir -p $(CRATE_DIR)/android/libs/x86_64
-	cp $(CRATE_DIR)/target/x86_64-linux-android/release/libnurunuru_ffi.so \
+	cp $(CRATE_DIR)/../target/x86_64-linux-android/release/libnurunuru_ffi.so \
 	   $(CRATE_DIR)/android/libs/x86_64/
 
 android-all: android-arm64 android-x86_64
