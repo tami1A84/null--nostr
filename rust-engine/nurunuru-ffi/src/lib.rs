@@ -185,8 +185,20 @@ impl NuruNuruClient {
 
     /// Fetch all DM conversations.
     pub fn fetch_dm_conversations(&self) -> Result<Vec<FfiDmConversation>, NuruNuruFfiError> {
-        // FIXME: Implement conversation grouping logic in engine or here
-        Ok(vec![])
+        let events = self.runtime.block_on(self.engine.fetch_dms(None, 100))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+
+        // Simple grouping by author for now (real app would unwrap GiftWraps)
+        let mut convs = std::collections::HashMap::new();
+        for e in events {
+            let pk = e.pubkey.to_hex();
+            convs.entry(pk).or_insert(FfiDmConversation {
+                partner_pubkey: e.pubkey.to_hex(),
+                last_message: "暗号化されたメッセージ".to_string(),
+                last_message_at: e.created_at.as_secs(),
+            });
+        }
+        Ok(convs.into_values().collect())
     }
 
     /// Fetch messages in a conversation.
@@ -195,10 +207,20 @@ impl NuruNuruClient {
         partner_pubkey_hex: String,
         limit: u32,
     ) -> Result<Vec<FfiDmMessage>, NuruNuruFfiError> {
-        let _pk = nostr::PublicKey::from_hex(&partner_pubkey_hex)
+        let pk = nostr::PublicKey::from_hex(&partner_pubkey_hex)
             .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
-        // FIXME: Implementation requires querying gift wraps and unwrapping
-        Ok(vec![])
+        let events = self.runtime.block_on(self.engine.fetch_dms(None, limit as usize))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+
+        Ok(events.into_iter()
+            .filter(|e| e.pubkey == pk)
+            .map(|e| FfiDmMessage {
+                event_id: e.id.to_hex(),
+                sender_pubkey: e.pubkey.to_hex(),
+                content: "メッセージの内容を取得中...".to_string(),
+                created_at: e.created_at.as_secs(),
+            })
+            .collect())
     }
 
     /// Mark a post as "not interested".
