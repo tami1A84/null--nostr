@@ -57,13 +57,13 @@ describe('Store', () => {
       })
 
       it('should support different login methods', () => {
-        const methods: Array<'nip07' | 'nosskey' | 'amber' | 'bunker' | 'nsec' | 'nsec-app'> = [
+        const methods: Array<'nip07' | 'nosskey' | 'amber' | 'bunker' | 'nsec' | 'nostr-connect'> = [
           'nip07',
           'nosskey',
           'amber',
           'bunker',
           'nsec',
-          'nsec-app',
+          'nostr-connect',
         ]
 
         for (const method of methods) {

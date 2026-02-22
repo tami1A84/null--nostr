@@ -33,7 +33,7 @@ export type SignerType =
   | 'amber'
   | 'bunker'
   | 'memory'
-  | 'nsec-app'
+  | 'nostr-connect'
 
 /**
  * Features that signers may support

@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaced nostr-login library with custom login modal
 - New login modal with clear method selection:
   - NIP-07 Browser Extensions (Alby, nos2x)
-  - Nostr Connect / NIP-46 (nsec.app)
+  - Nostr Connect / NIP-46
   - Read-only mode (npub input)
   - Local key (nsec input)
 - Improved login method display in settings (shows specific method)
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed direct NIP-07 browser extension login (now handled via nostr-login)
 - Removed Amber/NIP-55 Android-specific login
 - nostr-login now handles all alternative login methods:
-  - nsec.app (NIP-46 remote signing)
+  - Nostr Connect (NIP-46 remote signing)
   - Browser extensions (Alby, nos2x, Nostash)
   - Local nsec key input
   - Read-only mode (npub)

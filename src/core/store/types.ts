@@ -17,7 +17,7 @@ export type LoginMethod =
   | 'amber'
   | 'bunker'
   | 'nsec'
-  | 'nsec-app'
+  | 'nostr-connect'
 
 /**
  * Authentication state
