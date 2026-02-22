@@ -75,6 +75,8 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
 
   // Refs
   const initialLoadDone = useRef(false)
+  const profilesRef = useRef(profiles)
+  profilesRef.current = profiles
   const globalScrollRef = useRef(0)
   const followingScrollRef = useRef(0)
 
@@ -117,15 +119,19 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
     }
   }, [pubkey])
 
-  // Quick initial load
-  const loadTimelineQuick = useCallback(async () => {
+  // Recommended timeline load (global timeline)
+  const loadRecommendedTimeline = useCallback(async () => {
     setLoading(true)
     setLoadError(false)
 
     try {
       const { fetchEvents, getReadRelays, fetchProfilesBatch, getAllCachedProfiles } = await import('@/lib/nostr')
+      const { getRecommendedPosts, fetchEngagementData, fetchFollowListsBatch, extract2ndDegreeNetwork } = await import('@/lib/recommendation')
+      const { fetchEventsWithOutboxModel } = await import('@/lib/outbox')
+      const { NOSTR_KINDS } = await import('@/lib/constants')
+
       const readRelays = getReadRelays()
-      const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 300
+      const threeHoursAgo = Math.floor(Date.now() / 1000) - 10800 // 3 hours for candidate posts
 
       // Load cached profiles
       const cachedProfiles = getAllCachedProfiles() as Record<string, Profile>
@@ -133,28 +139,102 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
         setProfiles(cachedProfiles)
       }
 
-      // Fetch quick load
-      let notes: any[] = await fetchEvents(
-        { kinds: [1], since: fiveMinutesAgo, limit: 20 },
-        readRelays
-      )
+      // Step 1: Fetch base notes and reposts
+      const [notes, reposts] = await Promise.all([
+        fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 150 }, readRelays),
+        fetchEvents({ kinds: [6], since: threeHoursAgo, limit: 50 }, readRelays)
+      ])
 
-      if (notes.length === 0) {
-        const oneHourAgo = Math.floor(Date.now() / 1000) - 3600
-        notes = await fetchEvents(
-          { kinds: [1], since: oneHourAgo, limit: 30 },
-          readRelays
-        )
-        if (notes.length === 0) {
-          setLoadError(true)
+      // Parse reposts
+      const repostData: any[] = []
+      reposts.forEach((repost: any) => {
+        try {
+          if (repost.content) {
+            const originalEvent = JSON.parse(repost.content)
+            repostData.push({
+              ...originalEvent,
+              _repostedBy: repost.pubkey,
+              _repostTime: repost.created_at,
+              _isRepost: true,
+              _repostId: repost.id
+            })
+          }
+        } catch (e) {
+          // Skip invalid
+        }
+      })
+
+      let allPosts = [...notes, ...repostData]
+
+      // Step 2: Build 2nd-degree network and fetch their posts
+      let secondDegreeFollows = new Set<string>()
+      if (followList.length > 0) {
+        try {
+          const sampleFollows = followList.slice(0, 30)
+          const followsOfFollows = await fetchFollowListsBatch(sampleFollows, readRelays)
+          secondDegreeFollows = extract2ndDegreeNetwork(followList, followsOfFollows)
+
+          if (secondDegreeFollows.size > 0) {
+            const secondDegreeArray = Array.from(secondDegreeFollows).slice(0, 50)
+            const secondDegreePosts = await fetchEventsWithOutboxModel(
+              { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 100 },
+              secondDegreeArray,
+              { timeout: 10000 }
+            )
+            allPosts = [...allPosts, ...secondDegreePosts]
+          }
+        } catch (e) {
+          console.warn('Failed to fetch 2nd-degree network:', e)
         }
       }
 
-      const sortedPosts = notes.sort((a: any, b: any) => b.created_at - a.created_at) as Post[]
-      setGlobalPosts(sortedPosts)
+      // Deduplicate posts
+      const postMap = new Map()
+      allPosts.forEach(p => {
+        if (!postMap.has(p.id)) {
+          postMap.set(p.id, p)
+        }
+      })
+      allPosts = Array.from(postMap.values())
 
-      // Fetch profiles
-      const authors = new Set(sortedPosts.map((p: any) => p.pubkey))
+      // Step 3: Fetch engagement data for scoring
+      const eventIds = allPosts.slice(0, 100).map(p => p.id)
+      let engagements = {}
+      if (eventIds.length > 0) {
+        try {
+          engagements = await fetchEngagementData(eventIds, readRelays)
+        } catch (e) {
+          console.warn('Failed to fetch engagement data:', e)
+        }
+      }
+
+      // Step 4: Apply recommendation algorithm
+      const followSet = new Set(followList)
+      const recommendedPosts = getRecommendedPosts(allPosts, {
+        followList: followSet,
+        secondDegreeFollows,
+        mutedPubkeys,
+        engagements,
+        profiles: profilesRef.current,
+        userGeohash: typeof window !== 'undefined' ? localStorage.getItem('user_geohash') : null
+      }, 100)
+
+      // Fallback to time-sorted if no recommendations
+      const finalPosts = recommendedPosts.length > 0 ? recommendedPosts : allPosts.sort((a, b) => {
+        const timeA = a._repostTime || a.created_at
+        const timeB = b._repostTime || b.created_at
+        return timeB - timeA
+      })
+
+      setGlobalPosts(finalPosts as Post[])
+
+      // Step 5: Fetch profiles for the timeline
+      const authors = new Set<string>()
+      allPosts.forEach(p => {
+        authors.add(p.pubkey)
+        if (p._repostedBy) authors.add(p._repostedBy)
+      })
+
       if (authors.size > 0) {
         const profileMap = await fetchProfilesBatch(Array.from(authors)) as Record<string, Profile>
         setProfiles(prev => ({ ...prev, ...profileMap }))
@@ -163,12 +243,12 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
       setLoading(false)
       initialLoadDone.current = true
     } catch (e) {
-      console.error('Failed to quick load timeline:', e)
+      console.error('Failed to load recommended timeline:', e)
       setLoadError(true)
       setLoading(false)
       initialLoadDone.current = true
     }
-  }, [])
+  }, [followList, mutedPubkeys])
 
   // Load following timeline
   const loadFollowingTimeline = useCallback(async () => {
@@ -210,9 +290,9 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
     if (timelineMode === 'following') {
       await loadFollowingTimeline()
     } else {
-      await loadTimelineQuick()
+      await loadRecommendedTimeline()
     }
-  }, [timelineMode, loadFollowingTimeline, loadTimelineQuick])
+  }, [timelineMode, loadFollowingTimeline, loadRecommendedTimeline])
 
   // Mode change handler with scroll position preservation
   const handleModeChange = useCallback((newMode: TimelineMode, scrollContainerRef?: React.RefObject<HTMLElement>) => {
@@ -359,8 +439,8 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
 
   // Effects
   useEffect(() => {
-    loadTimelineQuick()
-  }, [loadTimelineQuick])
+    loadRecommendedTimeline()
+  }, [loadRecommendedTimeline])
 
   useEffect(() => {
     if (pubkey) {
