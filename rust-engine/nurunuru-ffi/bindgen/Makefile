@@ -61,6 +61,7 @@ kotlin:
 	@bash $(BINDGEN_DIR)/gen_kotlin.sh
 
 android-arm64:
+	@command -v cargo-ndk >/dev/null 2>&1 || { echo >&2 "Error: 'cargo-ndk' is not installed. Please run: cargo install cargo-ndk"; exit 1; }
 	@echo "==> Building for Android ARM64 (aarch64-linux-android)..."
 	cd $(CRATE_DIR) && cargo ndk -t aarch64-linux-android build --release
 	mkdir -p $(CRATE_DIR)/android/libs/arm64-v8a
