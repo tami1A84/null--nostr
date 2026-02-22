@@ -67,6 +67,9 @@ export type LoginMethod =
   | 'readOnly'
   | 'local'
   | 'connect'
+  | 'bunker'
+  | 'nostr-connect'
+  | 'nostr-login'
   | 'amber'
 
 /**

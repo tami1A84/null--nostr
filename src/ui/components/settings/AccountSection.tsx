@@ -68,10 +68,18 @@ function getLoginMethodInfo(method: LoginMethod | null) {
         description: 'ブラウザに秘密鍵を保存'
       }
     case 'connect':
+    case 'bunker':
+    case 'nostr-connect':
       return {
         icon: <ConnectIcon className="w-5 h-5 text-white" />,
         title: 'Nostr Connectでログイン中',
         description: 'Nostr Connect / リモート署名'
+      }
+    case 'nostr-login':
+      return {
+        icon: <ConnectIcon className="w-5 h-5 text-white" />,
+        title: 'Nostrログインでログイン中',
+        description: '拡張機能 / Nostr Connect / 読み取り専用'
       }
     case 'amber':
       return {

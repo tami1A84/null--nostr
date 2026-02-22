@@ -69,16 +69,16 @@ const nextConfig = {
               key: 'Content-Security-Policy',
               value: [
                 "default-src 'self'",
-                // Scripts: self + inline (Next.js requires unsafe-inline for hydration)
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+                // Scripts: self + inline + nostr-login from unpkg
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com",
                 // Styles: self + inline (Tailwind uses inline styles)
                 "style-src 'self' 'unsafe-inline'",
                 // Images: self + https (profile pictures from any HTTPS source)
                 "img-src 'self' data: blob: https:",
                 // Fonts: self
                 "font-src 'self' data:",
-                // Connect: self + wss (Nostr relay WebSockets) + HTTPS APIs
-                "connect-src 'self' wss: https:",
+                // Connect: self + wss (Nostr relay WebSockets) + HTTPS APIs + nostr-login
+                "connect-src 'self' wss: https: https://unpkg.com https://nostr-login.pages.dev https://*.nostr-login.pages.dev",
                 // Workers: self (Service Worker)
                 "worker-src 'self' blob:",
                 // Manifest
