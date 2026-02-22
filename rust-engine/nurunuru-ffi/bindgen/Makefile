@@ -11,8 +11,8 @@
 #   make android-all    — compile all Android ABI targets
 #   make clean          — remove all generated output
 
-CRATE_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
-BINDGEN_DIR := $(CRATE_DIR)/bindgen
+BINDGEN_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+CRATE_DIR := $(shell dirname $(BINDGEN_DIR))
 IOS_DIR := $(CRATE_DIR)/ios
 
 .PHONY: swift kotlin ios-device ios-sim xcframework android-arm64 android-x86_64 android-all clean
@@ -62,14 +62,14 @@ kotlin:
 
 android-arm64:
 	@echo "==> Building for Android ARM64 (aarch64-linux-android)..."
-	cd $(CRATE_DIR) && cargo build --release --target aarch64-linux-android
+	cd $(CRATE_DIR) && cargo ndk -t aarch64-linux-android build --release
 	mkdir -p $(CRATE_DIR)/android/libs/arm64-v8a
 	cp $(CRATE_DIR)/target/aarch64-linux-android/release/libnurunuru_ffi.so \
 	   $(CRATE_DIR)/android/libs/arm64-v8a/
 
 android-x86_64:
 	@echo "==> Building for Android x86_64 (x86_64-linux-android)..."
-	cd $(CRATE_DIR) && cargo build --release --target x86_64-linux-android
+	cd $(CRATE_DIR) && cargo ndk -t x86_64-linux-android build --release
 	mkdir -p $(CRATE_DIR)/android/libs/x86_64
 	cp $(CRATE_DIR)/target/x86_64-linux-android/release/libnurunuru_ffi.so \
 	   $(CRATE_DIR)/android/libs/x86_64/
