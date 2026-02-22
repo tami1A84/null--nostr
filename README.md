@@ -180,6 +180,7 @@ Score = Engagement × Social × Author × Geohash × Modifier × TimeDecay
 | アクション | 重み |
 |----------|------|
 | Zap | 100 |
+| カスタムリアクション | 60 |
 | Quote | 35 |
 | Reply | 30 |
 | Repost | 25 |
