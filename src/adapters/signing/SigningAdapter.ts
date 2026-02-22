@@ -34,6 +34,7 @@ export type SignerType =
   | 'bunker'
   | 'memory'
   | 'nostr-connect'
+  | 'nostr-login'
 
 /**
  * Features that signers may support
