@@ -38,6 +38,15 @@ android {
         }
     }
 
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
     sourceSets["main"].apply {
         // Generated Kotlin UniFFI bindings (produced by `make kotlin`)
         kotlin.srcDir("../bindgen/kotlin-out")
