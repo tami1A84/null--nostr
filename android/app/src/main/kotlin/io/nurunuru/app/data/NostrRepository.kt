@@ -1,16 +1,9 @@
 package io.nurunuru.app.data
 
-import io.nurunuru.NuruNuruClient
+import io.nurunuru.*
+import uniffi.nurunuru.*
 import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
-import io.nurunuru.connectAsync
-import io.nurunuru.fetchFollowListAsync
-import io.nurunuru.fetchProfileAsync
-import io.nurunuru.getRecommendedFeedAsync
-import io.nurunuru.loginAsync
-import io.nurunuru.publishNoteAsync
-import io.nurunuru.searchAsync
-import io.nurunuru.zapAsync
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import rust.nostr.sdk.*
@@ -30,14 +23,15 @@ class NostrRepository(
     suspend fun fetchRecommendedTimeline(limit: Int = 50): List<ScoredPost> = withContext(Dispatchers.IO) {
         val scoredPosts = client.getRecommendedFeedAsync(limit.toUInt())
 
+        // Pre-fetch profiles to avoid suspend calls in map
+        fetchProfiles(scoredPosts.map { it.pubkey })
+
         // Enrich with profiles and full event details
-        scoredPosts.map { sp ->
-            val profile = fetchProfile(sp.pubkey)
-            // Note: In a real app, we'd fetch full event content from nostrdb via FFI or SDK
+        scoredPosts.map { sp: FfiScoredPost ->
             ScoredPost(
                 event = NostrEvent(id = sp.eventId, pubkey = sp.pubkey, createdAt = sp.createdAt.toLong()),
                 score = sp.score,
-                profile = profile
+                profile = profileCache[sp.pubkey]
             )
         }
     }
@@ -84,10 +78,14 @@ class NostrRepository(
     /** Fetch recent notes for a user. */
     suspend fun fetchUserNotes(pubkeyHex: String, limit: Int = 30): List<ScoredPost> = withContext(Dispatchers.IO) {
         val scoredPosts = client.fetchUserNotesAsync(pubkeyHex, limit.toUInt())
-        scoredPosts.map { sp ->
+
+        // Pre-fetch profiles
+        fetchProfiles(scoredPosts.map { it.pubkey })
+
+        scoredPosts.map { sp: FfiScoredPost ->
             ScoredPost(
                 event = NostrEvent(id = sp.eventId, pubkey = sp.pubkey, createdAt = sp.createdAt.toLong()),
-                profile = fetchProfile(sp.pubkey)
+                profile = profileCache[sp.pubkey]
             )
         }
     }
@@ -127,11 +125,14 @@ class NostrRepository(
 
     suspend fun fetchDmConversations(pubkeyHex: String): List<DmConversation> = withContext(Dispatchers.IO) {
         val convs = client.fetchDmConversationsAsync()
-        val profiles = fetchProfiles(convs.map { it.partnerPubkey })
-        convs.map { c ->
+
+        // Pre-fetch profiles
+        val profilesMap = fetchProfiles(convs.map { it.partnerPubkey })
+
+        convs.map { c: FfiDmConversation ->
             DmConversation(
                 partnerPubkey = c.partnerPubkey,
-                partnerProfile = profiles[c.partnerPubkey],
+                partnerProfile = profilesMap[c.partnerPubkey],
                 lastMessage = c.lastMessage,
                 lastMessageTime = c.lastMessageAt.toLong()
             )
@@ -140,7 +141,7 @@ class NostrRepository(
 
     suspend fun fetchDmMessages(myPubkeyHex: String, partnerPubkeyHex: String): List<DmMessage> = withContext(Dispatchers.IO) {
         val msgs = client.fetchDmMessagesAsync(partnerPubkeyHex, 100u)
-        msgs.map { m ->
+        msgs.map { m: FfiDmMessage ->
             DmMessage(
                 event = NostrEvent(id = m.eventId, pubkey = m.senderPubkey, createdAt = m.createdAt.toLong()),
                 content = m.content,

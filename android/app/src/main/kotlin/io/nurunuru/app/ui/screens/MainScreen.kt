@@ -12,16 +12,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.nurunuru.NuruNuruBridge
-import io.nurunuru.NuruNuruClient
+import kotlinx.coroutines.launch
+import io.nurunuru.*
+import uniffi.nurunuru.*
 import io.nurunuru.app.NuruNuruApp
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.prefs.AppPreferences
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.*
-import io.nurunuru.connectAsync
-import io.nurunuru.disconnectAsync
 
 enum class BottomTab(
     val label: String,
@@ -88,9 +87,10 @@ fun MainScreen(
     val myProfile = homeState.profile
 
     // Disconnect on dispose
+    val scope = rememberCoroutineScope()
     DisposableEffect(nuruClient) {
         onDispose {
-            kotlinx.coroutines.GlobalScope.launch {
+            scope.launch {
                 nuruClient.disconnectAsync()
             }
         }

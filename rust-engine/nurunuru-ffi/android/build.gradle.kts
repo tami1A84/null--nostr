@@ -63,7 +63,7 @@ android {
 
 dependencies {
     // JNA runtime — required by the UniFFI-generated Kotlin bindings
-    implementation("net.java.dev.jna:jna:5.14.0@aar")
+    implementation("net.java.dev.jna:jna:5.15.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
 
     // Coroutines for async bridging

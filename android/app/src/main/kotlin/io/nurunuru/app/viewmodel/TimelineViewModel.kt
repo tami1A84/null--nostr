@@ -38,7 +38,7 @@ class TimelineViewModel(
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 val posts = when (_uiState.value.feedType) {
-                    FeedType.GLOBAL -> repository.fetchGlobalTimeline(50)
+                    FeedType.GLOBAL -> repository.fetchRecommendedTimeline(50)
                     FeedType.FOLLOWING -> repository.fetchFollowTimeline(pubkeyHex, 50)
                 }
                 _uiState.update { it.copy(posts = posts, isLoading = false) }
@@ -53,7 +53,7 @@ class TimelineViewModel(
             _uiState.update { it.copy(isRefreshing = true, error = null) }
             try {
                 val posts = when (_uiState.value.feedType) {
-                    FeedType.GLOBAL -> repository.fetchGlobalTimeline(50)
+                    FeedType.GLOBAL -> repository.fetchRecommendedTimeline(50)
                     FeedType.FOLLOWING -> repository.fetchFollowTimeline(pubkeyHex, 50)
                 }
                 _uiState.update { it.copy(posts = posts, isRefreshing = false) }

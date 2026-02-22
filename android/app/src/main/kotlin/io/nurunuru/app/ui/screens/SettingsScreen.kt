@@ -16,13 +16,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.models.DEFAULT_RELAYS
 import io.nurunuru.app.data.prefs.AppPreferences
 import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.AuthViewModel
+import rust.nostr.sdk.PublicKey
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,7 +38,9 @@ fun SettingsScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showNpub by remember { mutableStateOf(false) }
 
-    val npub = remember(pubkeyHex) { NostrKeyUtils.encodeNpub(pubkeyHex) ?: pubkeyHex }
+    val npub = remember(pubkeyHex) {
+        try { PublicKey.parse(pubkeyHex).toBech32() } catch (e: Exception) { pubkeyHex }
+    }
 
     Scaffold(
         topBar = {

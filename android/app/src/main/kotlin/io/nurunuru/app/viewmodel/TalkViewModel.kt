@@ -64,11 +64,9 @@ class TalkViewModel(
         _uiState.update { it.copy(sendingMessage = true) }
         viewModelScope.launch {
             try {
-                val success = repository.sendDm(recipientPubkey, content)
-                if (success) {
-                    // Reload messages
-                    openConversation(recipientPubkey)
-                }
+                repository.sendDm(recipientPubkey, content)
+                // Reload messages
+                openConversation(recipientPubkey)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "送信に失敗しました") }
             } finally {
