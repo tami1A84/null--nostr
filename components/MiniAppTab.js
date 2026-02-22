@@ -1225,7 +1225,8 @@ export default function MiniAppTab({ pubkey, onLogout }) {
                  getLoginMethod() === 'extension' ? '拡張機能でログイン中' :
                  getLoginMethod() === 'readOnly' ? '読み取り専用モード' :
                  getLoginMethod() === 'local' ? 'ローカルキーでログイン中' :
-                 getLoginMethod() === 'connect' ? 'Nostr Connectでログイン中' :
+                 (getLoginMethod() === 'connect' || getLoginMethod() === 'nostr-connect' || getLoginMethod() === 'bunker') ? 'Nostr Connectでログイン中' :
+                 getLoginMethod() === 'nostr-login' ? 'Nostrログインでログイン中' :
                  'ログイン中'}
               </p>
               <p className="text-xs text-[var(--text-tertiary)]">
@@ -1233,7 +1234,8 @@ export default function MiniAppTab({ pubkey, onLogout }) {
                  getLoginMethod() === 'extension' ? 'Alby / nos2x' :
                  getLoginMethod() === 'readOnly' ? '投稿・署名はできません' :
                  getLoginMethod() === 'local' ? 'ブラウザに秘密鍵を保存' :
-                 getLoginMethod() === 'connect' || getLoginMethod() === 'nostr-login' ? 'Nostr Connect / 拡張機能' :
+                 (getLoginMethod() === 'connect' || getLoginMethod() === 'nostr-connect' || getLoginMethod() === 'bunker') ? 'Nostr Connect / リモート署名' :
+                 getLoginMethod() === 'nostr-login' ? '拡張機能 / Nostr Connect / 読み取り専用' :
                  ''}
               </p>
             </div>

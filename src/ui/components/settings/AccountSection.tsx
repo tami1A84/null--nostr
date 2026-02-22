@@ -69,6 +69,7 @@ function getLoginMethodInfo(method: LoginMethod | null) {
       }
     case 'connect':
     case 'bunker':
+    case 'nostr-connect':
       return {
         icon: <ConnectIcon className="w-5 h-5 text-white" />,
         title: 'Nostr Connectでログイン中',
