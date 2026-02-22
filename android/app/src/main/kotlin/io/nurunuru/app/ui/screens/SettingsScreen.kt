@@ -20,9 +20,9 @@ import io.nurunuru.app.data.models.DEFAULT_RELAYS
 import io.nurunuru.app.data.prefs.AppPreferences
 import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.LineGreen
+import io.nurunuru.app.data.EngineManager
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.AuthViewModel
-import rust.nostr.sdk.PublicKey
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,9 +37,10 @@ fun SettingsScreen(
     var newRelayInput by remember { mutableStateOf("") }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showNpub by remember { mutableStateOf(false) }
+    var npub by remember { mutableStateOf(pubkeyHex) }
 
-    val npub = remember(pubkeyHex) {
-        try { PublicKey.parse(pubkeyHex).toBech32() } catch (e: Exception) { pubkeyHex }
+    LaunchedEffect(pubkeyHex) {
+        npub = EngineManager.pubkeyToNpub(pubkeyHex)
     }
 
     Scaffold(

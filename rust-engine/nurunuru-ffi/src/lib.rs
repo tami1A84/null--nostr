@@ -15,6 +15,33 @@ use nurunuru_core::NuruNuruEngine;
 
 uniffi::setup_scaffolding!();
 
+/// Parse keys. Workaround for nostr-sdk-jvm missing Android binaries.
+#[uniffi::export]
+pub fn parse_keys(input: String) -> Result<FfiParsedKeys, NuruNuruFfiError> {
+    let keys = nostr::Keys::parse(input)
+        .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+    Ok(FfiParsedKeys {
+        secret_key_hex: keys.secret_key().to_hex(),
+        public_key_hex: keys.public_key().to_hex(),
+    })
+}
+
+/// Convert a pubkey hex to npub bech32.
+#[uniffi::export]
+pub fn pubkey_to_npub(pubkey_hex: String) -> Result<String, NuruNuruFfiError> {
+    let pk = nostr::PublicKey::from_hex(&pubkey_hex)
+        .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+    Ok(pk.to_bech32().map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?)
+}
+
+/// Convert an npub bech32 to pubkey hex.
+#[uniffi::export]
+pub fn npub_to_hex(npub: String) -> Result<String, NuruNuruFfiError> {
+    let pk = nostr::PublicKey::from_bech32(&npub)
+        .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+    Ok(pk.to_hex())
+}
+
 /// FFI-safe wrapper around the engine.
 /// Holds a Tokio runtime for async bridging.
 #[derive(uniffi::Object)]
@@ -338,6 +365,12 @@ impl NuruNuruClient {
 }
 
 // ─── FFI-safe types ────────────────────────────────────────────
+
+#[derive(uniffi::Record)]
+pub struct FfiParsedKeys {
+    pub secret_key_hex: String,
+    pub public_key_hex: String,
+}
 
 #[derive(uniffi::Record)]
 pub struct FfiUserProfile {

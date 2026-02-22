@@ -7,7 +7,6 @@ import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import rust.nostr.sdk.*
 
 private const val TAG = "NuruNuru-Repo"
 

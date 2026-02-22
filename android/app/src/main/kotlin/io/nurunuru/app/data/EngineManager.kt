@@ -32,6 +32,29 @@ object EngineManager {
     }
 
     /**
+     * Parse keys safely. Workaround for nostr-sdk-jvm missing Android binaries.
+     */
+    suspend fun parseKeys(input: String): uniffi.nurunuru.FfiParsedKeys? = withContext(Dispatchers.IO) {
+        try {
+            uniffi.nurunuru.parseKeys(input)
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to parse keys via Rust", e)
+            null
+        }
+    }
+
+    /**
+     * Convert pubkey hex to npub.
+     */
+    suspend fun pubkeyToNpub(pubkeyHex: String): String = withContext(Dispatchers.IO) {
+        try {
+            uniffi.nurunuru.pubkeyToNpub(pubkeyHex)
+        } catch (e: Throwable) {
+            pubkeyHex
+        }
+    }
+
+    /**
      * Initialize the Rust engine with the given secret key.
      * Runs on a background thread.
      */

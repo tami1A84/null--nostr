@@ -63,7 +63,6 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
-    // Rust-Nostr and custom FFI
-    implementation(libs.rust.nostr)
+    // Custom Rust FFI (contains embedded nostr-sdk)
     implementation(project(":nurunuru-ffi"))
 }

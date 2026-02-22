@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import rust.nostr.sdk.Keys
 
 private const val TAG = "NuruNuru-Auth"
 
@@ -62,9 +61,17 @@ class AuthViewModel(private val application: Application) : AndroidViewModel(app
 
             try {
                 Log.d(TAG, "Attempting login with provided key")
-                val keys = Keys.parse(nsecOrHex)
-                val privKeyHex = keys.secretKey().toHex()
-                val pubKeyHex = keys.publicKey().toHex()
+
+                // Use Rust engine to parse keys because nostr-sdk-jvm crashes on Android
+                val parsedKeys = EngineManager.parseKeys(nsecOrHex)
+
+                if (parsedKeys == null) {
+                    _authState.value = AuthState.Error("秘密鍵の解析に失敗しました。正しい形式か確認してください。")
+                    return@launch
+                }
+
+                val privKeyHex = parsedKeys.secretKeyHex
+                val pubKeyHex = parsedKeys.publicKeyHex
 
                 val success = EngineManager.init(application, privKeyHex)
                 if (success) {
@@ -76,7 +83,7 @@ class AuthViewModel(private val application: Application) : AndroidViewModel(app
                     Log.e(TAG, "Engine init failed during login")
                     _authState.value = AuthState.Error("エンジンの初期化に失敗しました")
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Log.e(TAG, "Login failed", e)
                 _authState.value = AuthState.Error("ログインに失敗しました: ${e.message}")
             }

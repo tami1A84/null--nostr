@@ -10,7 +10,20 @@
 //     --library target/release/libnurunuru_ffi.dylib \
 //     --language swift --out-dir bindgen/swift-out/
 
-namespace nurunuru {};
+namespace nurunuru {
+    /// Parse a Nostr secret key (hex or nsec) and return (hex, pubkey_hex).
+    /// Used as a workaround for nostr-sdk-jvm missing Android ARM64 binaries.
+    [Throws=NuruNuruFfiError]
+    FfiParsedKeys parse_keys(string input);
+
+    /// Convert a pubkey hex to npub bech32.
+    [Throws=NuruNuruFfiError]
+    string pubkey_to_npub(string pubkey_hex);
+
+    /// Convert an npub bech32 to pubkey hex.
+    [Throws=NuruNuruFfiError]
+    string npub_to_hex(string npub);
+};
 
 // ─── Error type ────────────────────────────────────────────────
 
@@ -22,6 +35,12 @@ enum NuruNuruFfiError {
 };
 
 // ─── Value types (records) ─────────────────────────────────────
+
+/// Result of parse_keys.
+dictionary FfiParsedKeys {
+    string secret_key_hex;
+    string public_key_hex;
+};
 
 /// Parsed user profile (NIP-01 kind 0 metadata).
 dictionary FfiUserProfile {

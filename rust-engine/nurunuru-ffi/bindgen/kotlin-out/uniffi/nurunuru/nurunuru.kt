@@ -764,6 +764,12 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is
 // rather `InterfaceTooLargeException`, caused by too many methods
@@ -779,7 +785,13 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 // when the library is loaded.
 internal interface IntegrityCheckingUniffiLib : Library {
     // Integrity check functions only
-    fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_birdwatch_post(
+    fun uniffi_nurunuru_ffi_checksum_func_npub_to_hex(
+): Short
+fun uniffi_nurunuru_ffi_checksum_func_parse_keys(
+): Short
+fun uniffi_nurunuru_ffi_checksum_func_pubkey_to_npub(
+): Short
+fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_birdwatch_post(
 ): Short
 fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_connect(
 ): Short
@@ -932,6 +944,12 @@ fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_verify_nip05(`ptr`: Pointer,`ni
 ): Byte
 fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_zap(`ptr`: Pointer,`eventIdHex`: RustBuffer.ByValue,`authorPubkeyHex`: RustBuffer.ByValue,`amountSats`: Long,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
+fun uniffi_nurunuru_ffi_fn_func_npub_to_hex(`npub`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+fun uniffi_nurunuru_ffi_fn_func_parse_keys(`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+fun uniffi_nurunuru_ffi_fn_func_pubkey_to_npub(`pubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 fun ffi_nurunuru_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 fun ffi_nurunuru_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -1058,6 +1076,15 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if (lib.uniffi_nurunuru_ffi_checksum_func_npub_to_hex() != 20005.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_nurunuru_ffi_checksum_func_parse_keys() != 20160.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_nurunuru_ffi_checksum_func_pubkey_to_npub() != 11266.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_birdwatch_post() != 21370.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -2342,6 +2369,41 @@ public object FfiConverterTypeFfiDmMessage: FfiConverterRustBuffer<FfiDmMessage>
 
 
 /**
+ * Result of parse_keys.
+ */
+data class FfiParsedKeys (
+    var `secretKeyHex`: kotlin.String,
+    var `publicKeyHex`: kotlin.String
+) {
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiParsedKeys: FfiConverterRustBuffer<FfiParsedKeys> {
+    override fun read(buf: ByteBuffer): FfiParsedKeys {
+        return FfiParsedKeys(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiParsedKeys) = (
+            FfiConverterString.allocationSize(value.`secretKeyHex`) +
+            FfiConverterString.allocationSize(value.`publicKeyHex`)
+    )
+
+    override fun write(value: FfiParsedKeys, buf: ByteBuffer) {
+            FfiConverterString.write(value.`secretKeyHex`, buf)
+            FfiConverterString.write(value.`publicKeyHex`, buf)
+    }
+}
+
+
+
+/**
  * Scored post entry from the recommendation engine.
  */
 data class FfiScoredPost (
@@ -2696,3 +2758,41 @@ public object FfiConverterSequenceTypeFfiScoredPost: FfiConverterRustBuffer<List
         }
     }
 }
+        /**
+         * Convert an npub bech32 to pubkey hex.
+         */
+    @Throws(NuruNuruFfiException::class) fun `npubToHex`(`npub`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_func_npub_to_hex(
+        FfiConverterString.lower(`npub`),_status)
+}
+    )
+    }
+
+
+        /**
+         * Parse a Nostr secret key (hex or nsec) and return (hex, pubkey_hex).
+         * Used as a workaround for nostr-sdk-jvm missing Android ARM64 binaries.
+         */
+    @Throws(NuruNuruFfiException::class) fun `parseKeys`(`input`: kotlin.String): FfiParsedKeys {
+            return FfiConverterTypeFfiParsedKeys.lift(
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_func_parse_keys(
+        FfiConverterString.lower(`input`),_status)
+}
+    )
+    }
+
+
+        /**
+         * Convert a pubkey hex to npub bech32.
+         */
+    @Throws(NuruNuruFfiException::class) fun `pubkeyToNpub`(`pubkeyHex`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_func_pubkey_to_npub(
+        FfiConverterString.lower(`pubkeyHex`),_status)
+}
+    )
+    }
