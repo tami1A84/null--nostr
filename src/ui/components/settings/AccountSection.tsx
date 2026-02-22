@@ -71,7 +71,7 @@ function getLoginMethodInfo(method: LoginMethod | null) {
       return {
         icon: <ConnectIcon className="w-5 h-5 text-white" />,
         title: 'Nostr Connectでログイン中',
-        description: 'nsec.app / リモート署名'
+        description: 'Nostr Connect / リモート署名'
       }
     case 'amber':
       return {

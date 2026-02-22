@@ -86,8 +86,8 @@ const nextConfig = {
                 // Block object/embed/base
                 "object-src 'none'",
                 "base-uri 'self'",
-                // Block frames (no mini-app iframes in this PWA)
-                "frame-src 'none'",
+                // Allow nostr-login iframes
+                "frame-src 'self' https://nostr-login.pages.dev https://*.nostr-login.pages.dev",
                 "frame-ancestors 'none'",
               ].join('; '),
             },

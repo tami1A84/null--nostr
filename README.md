@@ -94,7 +94,7 @@ Face ID / Touch ID / Windows Hello を使って、パスワード不要で安全
 | Method | Description |
 |--------|-------------|
 | Browser Extension | Alby / nos2x など（NIP-07） |
-| Nostr Connect | nsec.app などのリモート署名（NIP-46） |
+| Nostr Connect | リモート署名（NIP-46） |
 | Read-only | npub入力（署名不可） |
 | Local Key | nsec直接入力（ブラウザに保存） |
 
@@ -141,7 +141,7 @@ npm run dev
 | NIP-32 | Labeling（Birdwatchコンテキスト追加・評価） |
 | NIP-42 | Client Authentication（リレー認証） |
 | NIP-44 | Encrypted Payloads |
-| NIP-46 | Nostr Connect（nsec.app等リモート署名） |
+| NIP-46 | Nostr Connect（リモート署名） |
 | NIP-50 | Search Capability（[searchnos](https://github.com/darashi/searchnos)使用） |
 | NIP-51 | Mute List |
 | NIP-56 | Reporting（通報機能） |

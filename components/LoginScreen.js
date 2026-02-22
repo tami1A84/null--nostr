@@ -86,49 +86,29 @@ export default function LoginScreen({ onLogin }) {
     init()
   }, [])
 
-  // Initialize nostr-login via CDN when needed
+  // Initialize nostr-login when needed
   useEffect(() => {
     const shouldInit = showNostrLoginOption || (!checking && !nosskeySupported)
     
     if (!shouldInit || nostrLoginInitialized.current) return
     
-    const initNostrLogin = () => {
+    const initNostrLogin = async () => {
       nostrLoginInitialized.current = true
       
-      console.log('Loading nostr-login from CDN...')
+      console.log('Initializing nostr-login...')
       
-      // Check if script already loaded
-      if (document.querySelector('script[src*="nostr-login"]')) {
-        console.log('nostr-login script already exists')
-        setupNostrLogin()
-        return
-      }
-      
-      // Load nostr-login from CDN
-      const script = document.createElement('script')
-      script.src = 'https://unpkg.com/nostr-login@latest/dist/unpkg.js'
-      script.async = true
-      // Set options via data attributes
-      script.dataset.darkMode = 'true'
-      script.dataset.title = 'ぬるぬる'
-      script.dataset.description = 'Nostrクライアント'
-      script.dataset.perms = 'sign_event:1,sign_event:4,sign_event:7,sign_event:9735,nip04_encrypt,nip04_decrypt,nip44_encrypt,nip44_decrypt'
-      script.dataset.methods = 'extension,connect,readOnly,local'
-      script.dataset.noBanner = 'true'
-      
-      script.onload = () => {
-        console.log('nostr-login script loaded')
-        setupNostrLogin()
-      }
-      script.onerror = (e) => {
-        console.error('Failed to load nostr-login script:', e)
-        setNostrLoginError(true)
-      }
-      document.head.appendChild(script)
-    }
-    
-    const setupNostrLogin = () => {
       try {
+        const { init } = await import('nostr-login')
+
+        await init({
+          darkMode: true,
+          title: 'ぬるぬる',
+          description: 'Nostrクライアント',
+          perms: 'sign_event:1,sign_event:4,sign_event:7,sign_event:9735,nip04_encrypt,nip04_decrypt,nip44_encrypt,nip44_decrypt',
+          methods: ['extension', 'connect', 'readOnly', 'local'],
+          noBanner: true
+        })
+
         // Listen for login events
         document.addEventListener('nlAuth', (e) => {
           console.log('nlAuth event:', e.detail)
@@ -153,14 +133,14 @@ export default function LoginScreen({ onLogin }) {
     initNostrLogin()
   }, [showNostrLoginOption, checking, nosskeySupported, onLogin])
 
-  // Launch nostr-login via event
-  const handleNostrLoginLaunch = () => {
+  // Launch nostr-login
+  const handleNostrLoginLaunch = async () => {
     if (!nostrLoginReady) return
     console.log('Launching nostr-login')
     
     try {
-      // Use nlLaunch event to open the modal
-      document.dispatchEvent(new CustomEvent('nlLaunch', { detail: 'welcome' }))
+      const { launch } = await import('nostr-login')
+      await launch('welcome')
     } catch (e) {
       console.error('Failed to launch nostr-login:', e)
       setError('ログイン画面を開けませんでした')
@@ -502,7 +482,7 @@ export default function LoginScreen({ onLogin }) {
                       </button>
                     )}
                     <p className="text-center text-xs text-[var(--text-tertiary)]">
-                      拡張機能 / nsec.app / 読み取り専用
+                      拡張機能 / Nostr Connect / 読み取り専用
                     </p>
                   </div>
                 )}
@@ -548,7 +528,7 @@ export default function LoginScreen({ onLogin }) {
                 </button>
               )}
               <p className="text-center text-xs text-[var(--text-tertiary)]">
-                拡張機能 / nsec.app / 読み取り専用
+                拡張機能 / Nostr Connect / 読み取り専用
               </p>
               
               {error && (

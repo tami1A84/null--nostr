@@ -1233,7 +1233,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
                  getLoginMethod() === 'extension' ? 'Alby / nos2x' :
                  getLoginMethod() === 'readOnly' ? '投稿・署名はできません' :
                  getLoginMethod() === 'local' ? 'ブラウザに秘密鍵を保存' :
-                 getLoginMethod() === 'connect' ? 'nsec.app / リモート署名' :
+                 getLoginMethod() === 'connect' || getLoginMethod() === 'nostr-login' ? 'Nostr Connect / 拡張機能' :
                  ''}
               </p>
             </div>
