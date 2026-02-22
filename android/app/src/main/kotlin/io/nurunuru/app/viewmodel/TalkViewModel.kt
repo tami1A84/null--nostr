@@ -3,7 +3,6 @@ package io.nurunuru.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import io.nurunuru.app.data.NostrClient
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.DmConversation
 import io.nurunuru.app.data.models.DmMessage
@@ -22,7 +21,6 @@ data class TalkUiState(
 
 class TalkViewModel(
     private val repository: NostrRepository,
-    private val nostrClient: NostrClient,
     private val myPubkeyHex: String
 ) : ViewModel() {
 
@@ -49,12 +47,10 @@ class TalkViewModel(
         _uiState.update { it.copy(activeConversation = partnerPubkey, messagesLoading = true) }
         viewModelScope.launch {
             try {
+                // In NIP-17, decryption is handled by the Rust engine/sdk
                 val messages = repository.fetchDmMessages(
                     myPubkeyHex = myPubkeyHex,
-                    partnerPubkeyHex = partnerPubkey,
-                    decryptFn = { counterparty, encrypted ->
-                        nostrClient.decryptNip04(counterparty, encrypted)
-                    }
+                    partnerPubkeyHex = partnerPubkey
                 )
                 _uiState.update { it.copy(messages = messages, messagesLoading = false) }
             } catch (e: Exception) {
@@ -91,11 +87,10 @@ class TalkViewModel(
 
     class Factory(
         private val repository: NostrRepository,
-        private val nostrClient: NostrClient,
         private val myPubkeyHex: String
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
-            TalkViewModel(repository, nostrClient, myPubkeyHex) as T
+            TalkViewModel(repository, myPubkeyHex) as T
     }
 }

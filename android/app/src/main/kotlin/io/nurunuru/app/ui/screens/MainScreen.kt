@@ -12,13 +12,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.nurunuru.NuruNuruBridge
+import io.nurunuru.NuruNuruClient
 import io.nurunuru.app.NuruNuruApp
-import io.nurunuru.app.data.NostrClient
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.prefs.AppPreferences
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.*
+import io.nurunuru.connectAsync
+import io.nurunuru.disconnectAsync
 
 enum class BottomTab(
     val label: String,
@@ -57,22 +60,24 @@ fun MainScreen(
     val nuruColors = LocalNuruColors.current
     var activeTab by remember { mutableStateOf(BottomTab.TIMELINE) }
 
-    // Create shared NostrClient and Repository
-    val nostrClient = remember {
-        NostrClient(
-            relays = app.prefs.relays.toList(),
-            privateKeyHex = privateKeyHex,
-            publicKeyHex = pubkeyHex
-        ).also { it.connect() }
+    // Create shared NuruNuruClient and Repository
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val nuruClient = remember {
+        NuruNuruBridge.create(context, privateKeyHex)
     }
-    val repository = remember { NostrRepository(nostrClient, app.prefs) }
+    val repository = remember { NostrRepository(nuruClient, app.prefs) }
+
+    // Connect on start
+    LaunchedEffect(nuruClient) {
+        nuruClient.connectAsync()
+    }
 
     // ViewModels
     val timelineVM: TimelineViewModel = viewModel(
         factory = TimelineViewModel.Factory(repository, pubkeyHex)
     )
     val talkVM: TalkViewModel = viewModel(
-        factory = TalkViewModel.Factory(repository, nostrClient, pubkeyHex)
+        factory = TalkViewModel.Factory(repository, pubkeyHex)
     )
     val homeVM: HomeViewModel = viewModel(
         factory = HomeViewModel.Factory(repository, pubkeyHex)
@@ -83,8 +88,12 @@ fun MainScreen(
     val myProfile = homeState.profile
 
     // Disconnect on dispose
-    DisposableEffect(nostrClient) {
-        onDispose { nostrClient.disconnect() }
+    DisposableEffect(nuruClient) {
+        onDispose {
+            kotlinx.coroutines.GlobalScope.launch {
+                nuruClient.disconnectAsync()
+            }
+        }
     }
 
     Scaffold(

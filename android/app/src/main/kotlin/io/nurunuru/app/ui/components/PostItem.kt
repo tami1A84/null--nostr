@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.outlined.ChatBubble
 import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.ElectricBolt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import io.nurunuru.app.data.models.ScoredPost
-import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import java.text.SimpleDateFormat
 import java.util.*
@@ -35,6 +35,7 @@ fun PostItem(
     onLike: () -> Unit,
     onRepost: () -> Unit,
     onReply: () -> Unit,
+    onZap: () -> Unit = {},
     onProfileClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -69,7 +70,7 @@ fun PostItem(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(post.event.pubkey),
+                            text = profile?.displayedName ?: (post.event.pubkey.take(8) + "..."),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onBackground,
@@ -133,8 +134,15 @@ fun PostItem(
                         onClick = onLike,
                         tint = if (post.isLiked) Color(0xFFFF6B6B) else nuruColors.textTertiary
                     )
+                    // Zap
+                    ActionButton(
+                        icon = Icons.Outlined.ElectricBolt,
+                        count = 0,
+                        onClick = onZap,
+                        tint = Color(0xFFFFB74D)
+                    )
                     // Spacer for layout balance
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
             }
         }

@@ -20,7 +20,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.nurunuru.app.data.models.DmConversation
 import io.nurunuru.app.data.models.DmMessage
-import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -137,8 +136,9 @@ private fun ConversationItem(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                val displayPk = conversation.partnerPubkey.take(8) + "..."
                 Text(
-                    text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(conversation.partnerPubkey),
+                    text = profile?.displayedName ?: displayPk,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground
@@ -180,8 +180,9 @@ private fun ConversationScreen(
         topBar = {
             TopAppBar(
                 title = {
+                    val displayPk = partnerPubkey.take(8) + "..."
                     Text(
-                        NostrKeyUtils.shortenPubkey(partnerPubkey),
+                        displayPk,
                         fontWeight = FontWeight.SemiBold
                     )
                 },

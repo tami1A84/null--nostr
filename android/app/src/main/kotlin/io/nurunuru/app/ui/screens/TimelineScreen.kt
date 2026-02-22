@@ -1,9 +1,6 @@
 package io.nurunuru.app.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -56,29 +53,10 @@ fun TimelineScreen(
     Scaffold(
         topBar = {
             Column {
-                // Tab bar: Global / Following
+                // Header with Logo
                 TopAppBar(
                     title = {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            FilterChip(
-                                selected = uiState.feedType == FeedType.GLOBAL,
-                                onClick = { viewModel.switchFeed(FeedType.GLOBAL) },
-                                label = { Text("グローバル") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LineGreen,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                                )
-                            )
-                            FilterChip(
-                                selected = uiState.feedType == FeedType.FOLLOWING,
-                                onClick = { viewModel.switchFeed(FeedType.FOLLOWING) },
-                                label = { Text("フォロー中") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LineGreen,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                                )
-                            )
-                        }
+                        Text("ぬるぬる", fontWeight = FontWeight.Bold)
                     },
                     actions = {
                         IconButton(onClick = {
@@ -99,6 +77,31 @@ fun TimelineScreen(
                         containerColor = MaterialTheme.colorScheme.background
                     )
                 )
+
+                // Tab bar: Recommended / Following
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = uiState.feedType == FeedType.GLOBAL,
+                        onClick = { viewModel.switchFeed(FeedType.GLOBAL) },
+                        label = { Text("おすすめ") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LineGreen,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    )
+                    FilterChip(
+                        selected = uiState.feedType == FeedType.FOLLOWING,
+                        onClick = { viewModel.switchFeed(FeedType.FOLLOWING) },
+                        label = { Text("フォロー中") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LineGreen,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    )
+                }
 
                 // Search bar
                 AnimatedVisibility(visible = showSearch) {

@@ -30,6 +30,7 @@ pub mod filters;
 pub mod recommendation;
 pub mod relay;
 pub mod types;
+pub mod validation;
 
 pub use config::NuruNuruConfig;
 pub use engine::NuruNuruEngine;
