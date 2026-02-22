@@ -1,5 +1,6 @@
 package io.nurunuru.app.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -7,6 +8,8 @@ import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.ScoredPost
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+
+private const val TAG = "NuruNuru-Timeline"
 
 enum class FeedType { GLOBAL, FOLLOWING }
 
@@ -35,14 +38,17 @@ class TimelineViewModel(
 
     fun loadTimeline() {
         viewModelScope.launch {
+            Log.d(TAG, "Loading timeline for type: ${_uiState.value.feedType}")
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 val posts = when (_uiState.value.feedType) {
                     FeedType.GLOBAL -> repository.fetchRecommendedTimeline(50)
                     FeedType.FOLLOWING -> repository.fetchFollowTimeline(pubkeyHex, 50)
                 }
+                Log.d(TAG, "Timeline loaded with ${posts.size} posts")
                 _uiState.update { it.copy(posts = posts, isLoading = false) }
             } catch (e: Exception) {
+                Log.e(TAG, "Error loading timeline", e)
                 _uiState.update { it.copy(error = "タイムラインの読み込みに失敗しました", isLoading = false) }
             }
         }

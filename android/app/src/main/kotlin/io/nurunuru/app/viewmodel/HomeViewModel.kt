@@ -1,5 +1,6 @@
 package io.nurunuru.app.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -8,6 +9,8 @@ import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.data.models.UserProfile
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+
+private const val TAG = "NuruNuru-Home"
 
 data class HomeUiState(
     val profile: UserProfile? = null,
@@ -37,11 +40,13 @@ class HomeViewModel(
 
     fun loadProfile(pubkeyHex: String) {
         viewModelScope.launch {
+            Log.d(TAG, "Loading profile for $pubkeyHex")
             _uiState.update { it.copy(isLoading = true, error = null, viewingPubkey = pubkeyHex.takeIf { it != myPubkeyHex }) }
             try {
                 val profile = repository.fetchProfile(pubkeyHex)
                 val posts = repository.fetchUserNotes(pubkeyHex, 30)
                 val followList = repository.fetchFollowList(pubkeyHex)
+                Log.d(TAG, "Profile loaded: ${profile?.displayName}, posts: ${posts.size}")
                 _uiState.update {
                     it.copy(
                         profile = profile,
@@ -51,6 +56,7 @@ class HomeViewModel(
                     )
                 }
             } catch (e: Exception) {
+                Log.e(TAG, "Error loading profile", e)
                 _uiState.update { it.copy(error = "プロフィールの読み込みに失敗しました", isLoading = false) }
             }
         }

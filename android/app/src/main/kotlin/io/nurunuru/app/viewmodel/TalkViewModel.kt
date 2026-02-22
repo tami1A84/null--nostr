@@ -1,5 +1,6 @@
 package io.nurunuru.app.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -8,6 +9,8 @@ import io.nurunuru.app.data.models.DmConversation
 import io.nurunuru.app.data.models.DmMessage
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+
+private const val TAG = "NuruNuru-Talk"
 
 data class TalkUiState(
     val conversations: List<DmConversation> = emptyList(),
@@ -33,11 +36,14 @@ class TalkViewModel(
 
     fun loadConversations() {
         viewModelScope.launch {
+            Log.d(TAG, "Loading DM conversations...")
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 val conversations = repository.fetchDmConversations(myPubkeyHex)
+                Log.d(TAG, "Conversations loaded: ${conversations.size}")
                 _uiState.update { it.copy(conversations = conversations, isLoading = false) }
             } catch (e: Exception) {
+                Log.e(TAG, "Error loading conversations", e)
                 _uiState.update { it.copy(error = "トークの読み込みに失敗しました", isLoading = false) }
             }
         }

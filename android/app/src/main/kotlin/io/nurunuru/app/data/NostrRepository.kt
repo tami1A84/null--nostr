@@ -1,5 +1,6 @@
 package io.nurunuru.app.data
 
+import android.util.Log
 import io.nurunuru.*
 import uniffi.nurunuru.*
 import io.nurunuru.app.data.models.*
@@ -7,6 +8,8 @@ import io.nurunuru.app.data.prefs.AppPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import rust.nostr.sdk.*
+
+private const val TAG = "NuruNuru-Repo"
 
 /**
  * High-level Nostr operations using the Rust engine and official SDK.
@@ -21,7 +24,13 @@ class NostrRepository(
 
     /** Fetch global recommended timeline using the Rust recommendation engine. */
     suspend fun fetchRecommendedTimeline(limit: Int = 50): List<ScoredPost> = withContext(Dispatchers.IO) {
-        val scoredPosts = client.getRecommendedFeedAsync(limit.toUInt())
+        Log.d(TAG, "Fetching recommended timeline...")
+        val scoredPosts = try {
+            client.getRecommendedFeedAsync(limit.toUInt())
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get recommended feed", e)
+            emptyList()
+        }
 
         // Pre-fetch profiles to avoid suspend calls in map
         fetchProfiles(scoredPosts.map { it.pubkey })
@@ -45,7 +54,13 @@ class NostrRepository(
 
     /** Search for notes by text (NIP-50). */
     suspend fun searchNotes(query: String, limit: Int = 30): List<ScoredPost> = withContext(Dispatchers.IO) {
-        val eventIds = client.searchAsync(query, limit.toUInt())
+        Log.d(TAG, "Searching for: $query")
+        val eventIds = try {
+            client.searchAsync(query, limit.toUInt())
+        } catch (e: Exception) {
+            Log.e(TAG, "Search failed", e)
+            emptyList()
+        }
         eventIds.map { id ->
             // Minimal event info, would be better to fetch from cache
             ScoredPost(event = NostrEvent(id = id))
@@ -57,7 +72,14 @@ class NostrRepository(
     suspend fun fetchProfile(pubkeyHex: String): UserProfile? = withContext(Dispatchers.IO) {
         profileCache[pubkeyHex]?.let { return@withContext it }
 
-        val ffiProfile = client.fetchProfileAsync(pubkeyHex) ?: return@withContext null
+        Log.d(TAG, "Fetching profile for $pubkeyHex")
+        val ffiProfile = try {
+            client.fetchProfileAsync(pubkeyHex)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch profile", e)
+            null
+        } ?: return@withContext null
+
         val profile = UserProfile(
             pubkey = ffiProfile.pubkey,
             name = ffiProfile.name,
@@ -77,7 +99,13 @@ class NostrRepository(
 
     /** Fetch recent notes for a user. */
     suspend fun fetchUserNotes(pubkeyHex: String, limit: Int = 30): List<ScoredPost> = withContext(Dispatchers.IO) {
-        val scoredPosts = client.fetchUserNotesAsync(pubkeyHex, limit.toUInt())
+        Log.d(TAG, "Fetching notes for $pubkeyHex")
+        val scoredPosts = try {
+            client.fetchUserNotesAsync(pubkeyHex, limit.toUInt())
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch user notes", e)
+            emptyList()
+        }
 
         // Pre-fetch profiles
         fetchProfiles(scoredPosts.map { it.pubkey })
@@ -92,17 +120,31 @@ class NostrRepository(
 
     /** Fetch follow list (pubkeys). */
     suspend fun fetchFollowList(pubkeyHex: String): List<String> = withContext(Dispatchers.IO) {
-        client.fetchFollowListAsync(pubkeyHex)
+        try {
+            client.fetchFollowListAsync(pubkeyHex)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch follow list", e)
+            emptyList()
+        }
     }
 
     // ─── Actions ──────────────────────────────────────────────
 
     suspend fun publishNote(content: String): String = withContext(Dispatchers.IO) {
-        client.publishNoteAsync(content)
+        try {
+            client.publishNoteAsync(content)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to publish note", e)
+            ""
+        }
     }
 
     suspend fun zapPost(eventId: String, authorPubkey: String, amountSats: Long, message: String? = null) = withContext(Dispatchers.IO) {
-        client.zapAsync(eventId, authorPubkey, amountSats.toULong(), message)
+        try {
+            client.zapAsync(eventId, authorPubkey, amountSats.toULong(), message)
+        } catch (e: Exception) {
+            Log.e(TAG, "Zap failed", e)
+        }
     }
 
     suspend fun likePost(eventId: String): Boolean = withContext(Dispatchers.IO) {
@@ -110,7 +152,6 @@ class NostrRepository(
         // (Assuming NuruNuruClient handles common cases, but showing SDK usage here)
         try {
             // This is just an example of how one might use the SDK directly
-            // In practice, we'd use the signer associated with the client
             true
         } catch (e: Exception) {
             false
@@ -124,7 +165,13 @@ class NostrRepository(
     // ─── DMs (NIP-17) ──────────────────────────────────────────
 
     suspend fun fetchDmConversations(pubkeyHex: String): List<DmConversation> = withContext(Dispatchers.IO) {
-        val convs = client.fetchDmConversationsAsync()
+        Log.d(TAG, "Fetching DM conversations")
+        val convs = try {
+            client.fetchDmConversationsAsync()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch DM conversations", e)
+            emptyList()
+        }
 
         // Pre-fetch profiles
         val profilesMap = fetchProfiles(convs.map { it.partnerPubkey })
@@ -140,7 +187,13 @@ class NostrRepository(
     }
 
     suspend fun fetchDmMessages(myPubkeyHex: String, partnerPubkeyHex: String): List<DmMessage> = withContext(Dispatchers.IO) {
-        val msgs = client.fetchDmMessagesAsync(partnerPubkeyHex, 100u)
+        Log.d(TAG, "Fetching messages for $partnerPubkeyHex")
+        val msgs = try {
+            client.fetchDmMessagesAsync(partnerPubkeyHex, 100u)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to fetch DM messages", e)
+            emptyList()
+        }
         msgs.map { m: FfiDmMessage ->
             DmMessage(
                 event = NostrEvent(id = m.eventId, pubkey = m.senderPubkey, createdAt = m.createdAt.toLong()),
@@ -152,6 +205,11 @@ class NostrRepository(
     }
 
     suspend fun sendDm(recipientPubkey: String, content: String) = withContext(Dispatchers.IO) {
-        client.sendDmAsync(recipientPubkey, content)
+        Log.d(TAG, "Sending DM to $recipientPubkey")
+        try {
+            client.sendDmAsync(recipientPubkey, content)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send DM", e)
+        }
     }
 }

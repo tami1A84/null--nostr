@@ -13,14 +13,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import android.util.Log
 import io.nurunuru.*
 import uniffi.nurunuru.*
 import io.nurunuru.app.NuruNuruApp
+import io.nurunuru.app.data.EngineManager
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.prefs.AppPreferences
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.*
+
+private const val TAG = "NuruNuru-Main"
 
 enum class BottomTab(
     val label: String,
@@ -59,16 +63,27 @@ fun MainScreen(
     val nuruColors = LocalNuruColors.current
     var activeTab by remember { mutableStateOf(BottomTab.TIMELINE) }
 
-    // Create shared NuruNuruClient and Repository
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val nuruClient = remember {
-        NuruNuruBridge.create(context, privateKeyHex)
+    val isEngineReady by EngineManager.isReady.collectAsState()
+
+    if (!isEngineReady) {
+        Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+            CircularProgressIndicator(color = LineGreen)
+        }
+        return
     }
-    val repository = remember { NostrRepository(nuruClient, app.prefs) }
+
+    // Get shared client from manager
+    val nuruClient = EngineManager.getClient()
+    val repository = remember(nuruClient) { NostrRepository(nuruClient, app.prefs) }
 
     // Connect on start
     LaunchedEffect(nuruClient) {
-        nuruClient.connectAsync()
+        try {
+            Log.d(TAG, "Connecting to relays...")
+            nuruClient.connectAsync()
+        } catch (e: Exception) {
+            Log.e(TAG, "Initial connection failed", e)
+        }
     }
 
     // ViewModels
@@ -85,16 +100,6 @@ fun MainScreen(
     // My profile for post modal avatar
     val homeState by homeVM.uiState.collectAsState()
     val myProfile = homeState.profile
-
-    // Disconnect on dispose
-    val scope = rememberCoroutineScope()
-    DisposableEffect(nuruClient) {
-        onDispose {
-            scope.launch {
-                nuruClient.disconnectAsync()
-            }
-        }
-    }
 
     Scaffold(
         bottomBar = {
