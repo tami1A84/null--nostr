@@ -16,6 +16,7 @@ import {
   hasNip07,
   verifyNip05,
   encodeNpub,
+  uploadImage,
   fetchProfileCached,
   fetchProfilesBatch,
   getAllCachedProfiles,
