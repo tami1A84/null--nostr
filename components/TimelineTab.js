@@ -19,6 +19,7 @@ import {
   unrepostEvent,
   deleteEvent,
   fetchFollowListCached,
+  fetchMutualFollowsCached,
   fetchProfilesBatch,
   getAllCachedProfiles,
   getReadRelays,
@@ -272,15 +273,53 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     if (!pubkey) return
     try {
       const lastRead = parseInt(localStorage.getItem('lastNotificationReadAt') || '0', 10)
-      const events = await fetchEvents({
-        kinds: [NOSTR_KINDS.REACTION],
-        '#p': [pubkey],
-        since: lastRead,
-        limit: 50
-      }, [getDefaultRelay()])
+      const relays = [getDefaultRelay()]
 
-      // Filter for custom emoji reactions
-      const hasNew = events.some(e => e.tags.some(t => t[0] === 'emoji') && e.created_at > lastRead)
+      const [events, mutualFollowPubkeys] = await Promise.all([
+        fetchEvents({
+          kinds: [NOSTR_KINDS.REACTION, NOSTR_KINDS.ZAP], // Reaction and Zap
+          '#p': [pubkey],
+          since: lastRead,
+          limit: 50
+        }, relays),
+        fetchMutualFollowsCached(pubkey, relays)
+      ])
+
+      // Check for new reactions or zaps
+      let hasNew = events.some(e => {
+        if (e.kind === NOSTR_KINDS.REACTION) {
+          return e.tags.some(t => t[0] === 'emoji') && e.created_at > lastRead
+        }
+        if (e.kind === NOSTR_KINDS.ZAP) {
+          return e.created_at > lastRead
+        }
+        return false
+      })
+
+      // Check for birthdays today if not already read today
+      if (!hasNew && mutualFollowPubkeys.length > 0) {
+        const today = new Date()
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() / 1000
+
+        if (lastRead < startOfToday) {
+          const todayMonthDay = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+
+          // Need profiles to check birthdays
+          const profileMap = await fetchProfilesBatch(mutualFollowPubkeys)
+          const hasBirthdayToday = mutualFollowPubkeys.some(pk => {
+            const profile = profileMap[pk]
+            if (profile?.birthday) {
+              return profile.birthday.endsWith(todayMonthDay)
+            }
+            return false
+          })
+
+          if (hasBirthdayToday) {
+            hasNew = true
+          }
+        }
+      }
+
       setHasUnreadNotifications(hasNew)
     } catch (e) {
       console.error('Failed to check notifications:', e)
