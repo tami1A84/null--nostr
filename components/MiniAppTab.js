@@ -3,52 +3,26 @@
 import { useState, useEffect } from 'react'
 import { nip19 } from 'nostr-tools'
 import {
-  fetchMuteList,
-  removeFromMuteList,
-  fetchEvents,
-  parseProfile,
-  shortenPubkey,
-  getDefaultRelay,
-  setDefaultRelay,
-  getUploadServer,
-  setUploadServer,
   getLoginMethod,
-  getAutoSignEnabled,
-  setAutoSignEnabled,
-  requestVanishFromRelay,
-  requestGlobalVanish,
-  canSign,
-  FALLBACK_RELAYS,
-  publishRelayListMetadata,
-  fetchRelayListMetadata
+  hexToBytes,
+  copyToClipboard
 } from '@/lib/nostr'
-import {
-  autoDetectRelays,
-  loadUserGeohash,
-  saveUserGeohash,
-  encodeGeohash,
-  findNearestRelays,
-  generateRelayListByLocation,
-  loadUserLocation,
-  formatDistance,
-  GPS_RELAY_DATABASE,
-  DIRECTORY_RELAYS,
-  REGION_COORDINATES,
-  selectRelaysByRegion,
-  loadSelectedRegion,
-  saveSelectedRegion,
-  getRegionById
-} from '@/lib/geohash'
-import {
-  fetchUserRelayList,
-  RELAY_LIST_DISCOVERY_RELAYS
-} from '@/lib/outbox'
 import { hasPrivateKey, storePrivateKey } from '@/lib/secure-key-store'
-import { clearBadgeCache } from './BadgeDisplay'
-import SchedulerApp from './SchedulerApp'
-import EventBackupApp from './EventBackupApp'
+import MiniAppModal from './MiniAppModal'
 
-// Nosskey Settings Component
+// Import mini app components
+import ZapSettings from './miniapps/ZapSettings'
+import RelaySettings from './miniapps/RelaySettings'
+import UploadSettings from './miniapps/UploadSettings'
+import MuteList from './miniapps/MuteList'
+import EmojiSettings from './miniapps/EmojiSettings'
+import BadgeSettings from './miniapps/BadgeSettings'
+import ElevenLabsSettings from './miniapps/ElevenLabsSettings'
+import SchedulerApp from './miniapps/SchedulerApp'
+import EventBackupApp from './miniapps/EventBackupApp'
+import VanishRequest from './miniapps/VanishRequest'
+
+// Nosskey Settings Component (kept here as it's part of the login section)
 function NosskeySettings({ pubkey }) {
   const [showSettings, setShowSettings] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -57,7 +31,6 @@ function NosskeySettings({ pubkey }) {
   const [autoSign, setAutoSign] = useState(true)
   const [hasExportedKey, setHasExportedKey] = useState(false)
 
-  // Load settings
   useEffect(() => {
     if (typeof window !== 'undefined') {
       if (hasPrivateKey()) {
@@ -67,14 +40,6 @@ function NosskeySettings({ pubkey }) {
       setAutoSign(savedAutoSign !== 'false')
     }
   }, [])
-
-  const hexToBytes = (hex) => {
-    const bytes = new Uint8Array(hex.length / 2)
-    for (let i = 0; i < hex.length; i += 2) {
-      bytes[i / 2] = parseInt(hex.substr(i, 2), 16)
-    }
-    return bytes
-  }
 
   const handleAutoSignChange = (enabled) => {
     setAutoSign(enabled)
@@ -91,62 +56,25 @@ function NosskeySettings({ pubkey }) {
     try {
       const manager = window.nosskeyManager
       const keyInfo = manager.getCurrentKeyInfo()
-      
-      if (!keyInfo) {
-        throw new Error('鍵情報が見つかりません。再ログインしてください。')
-      }
-      
-      // Enable cache before export
+      if (!keyInfo) throw new Error('鍵情報が見つかりません')
       manager.setCacheOptions({ enabled: true, timeoutMs: 3600000 })
-      
-      // Export - don't pass credentialId, let SDK handle it from keyInfo
       const privateKeyHex = await manager.exportNostrKey(keyInfo)
-      
-      if (!privateKeyHex) {
-        throw new Error('秘密鍵を取得できませんでした')
-      }
-      
+      if (!privateKeyHex) throw new Error('秘密鍵を取得できませんでした')
       const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
       setExportedNsec(nsec)
-      
-      // Store the private key securely for auto-signing
       storePrivateKey(pubkey, privateKeyHex)
       setHasExportedKey(true)
-      
     } catch (e) {
-      console.error('Export error:', e)
-      if (e.name === 'NotAllowedError') {
-        alert('パスキー認証がキャンセルされました')
-      } else {
-        alert('秘密鍵のエクスポートに失敗しました: ' + e.message)
-      }
+      console.error(e)
+      alert('エクスポートに失敗しました: ' + e.message)
     } finally {
       setExporting(false)
     }
   }
 
-  const handleCopyNsec = async () => {
-    if (!exportedNsec) return
-    try {
-      await navigator.clipboard.writeText(exportedNsec)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 3000)
-    } catch {
-      // Clipboard API not available
-    }
-  }
-
-  const handleCloseExport = () => {
-    setExportedNsec(null)
-    setCopied(false)
-  }
-
   return (
     <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-      <button
-        onClick={() => setShowSettings(!showSettings)}
-        className="w-full flex items-center justify-between"
-      >
+      <button onClick={() => setShowSettings(!showSettings)} className="w-full flex items-center justify-between">
         <div className="flex items-center gap-2">
           <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             <path d="M12 2a4 4 0 014 4v2h2a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V10a2 2 0 012-2h2V6a4 4 0 014-4z"/>
@@ -161,95 +89,53 @@ function NosskeySettings({ pubkey }) {
 
       {showSettings && (
         <div className="mt-4 space-y-4">
-          {/* Auto Sign Setting */}
           <div className="bg-[var(--bg-tertiary)] p-3 rounded-xl">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-[var(--text-primary)]">自動署名</p>
                 <p className="text-xs text-[var(--text-tertiary)]">
-                  {hasExportedKey 
-                    ? (autoSign ? '投稿時に生体認証なし' : '毎回生体認証を要求')
-                    : '秘密鍵をエクスポートすると有効化'}
+                  {hasExportedKey ? (autoSign ? '投稿時に生体認証なし' : '毎回生体認証を要求') : '秘密鍵をエクスポートすると有効化'}
                 </p>
               </div>
               <button
                 onClick={() => handleAutoSignChange(!autoSign)}
                 disabled={!hasExportedKey}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  autoSign && hasExportedKey ? 'bg-[var(--line-green)]' : 'bg-[var(--border-color)]'
-                } ${!hasExportedKey ? 'opacity-50' : ''}`}
+                className={`relative w-12 h-6 rounded-full transition-colors ${autoSign && hasExportedKey ? 'bg-[var(--line-green)]' : 'bg-[var(--border-color)]'} ${!hasExportedKey ? 'opacity-50' : ''}`}
               >
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                  autoSign && hasExportedKey ? 'translate-x-6' : 'translate-x-0'
-                }`} />
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${autoSign && hasExportedKey ? 'translate-x-6' : 'translate-x-0'}`} />
               </button>
             </div>
           </div>
-
-          {/* Export Key */}
-          {!exportedNsec ? (
-            <div>
-              <p className="text-xs text-[var(--text-tertiary)] mb-3">
-                秘密鍵をエクスポートして他のアプリで使用できます。
-              </p>
-              <button
-                onClick={handleExportKey}
-                disabled={exporting}
-                className="w-full py-3 text-sm disabled:opacity-50 btn-secondary"
-              >
-                {exporting ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
-                      <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
-                    </svg>
-                    認証中...
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                      <polyline points="17 8 12 3 7 8"/>
-                      <line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                    秘密鍵を表示
-                  </span>
-                )}
-              </button>
-            </div>
-          ) : (
+          <button onClick={handleExportKey} disabled={exporting} className="w-full py-3 text-sm btn-secondary disabled:opacity-50">
+            {exporting ? '認証中...' : '秘密鍵を表示'}
+          </button>
+          {exportedNsec && (
             <div className="space-y-3">
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 rounded-xl">
-                <p className="text-xs text-red-600 dark:text-red-400 font-medium">
-                  ⚠️ 秘密鍵は他人に見せないでください
+              <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl">
+                <p className="text-[10px] text-red-500 font-bold mb-1">⚠️ 警告: 秘密鍵の取り扱い</p>
+                <p className="text-[10px] text-red-500/80 leading-relaxed">
+                  この鍵はあなたの身元を証明する唯一の手段です。他人に教えたり、安全でない場所に保存したりしないでください。
                 </p>
               </div>
-              
-              <div className="bg-[var(--bg-tertiary)] p-3 rounded-xl">
-                <p className="text-xs text-[var(--text-tertiary)] mb-2">秘密鍵 (nsec)</p>
-                <div className="bg-[var(--bg-primary)] p-2 rounded-lg border border-[var(--border-color)]">
-                  <p className="text-xs font-mono text-[var(--text-primary)] break-all select-all">
-                    {exportedNsec}
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex gap-2">
+              <div className="bg-[var(--bg-tertiary)] p-3 rounded-xl flex items-center justify-between gap-2">
+                <p className="text-xs text-[var(--text-primary)] break-all font-mono select-all flex-1">{exportedNsec}</p>
                 <button
-                  onClick={handleCopyNsec}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                    copied 
-                      ? 'bg-[var(--line-green)] text-white' 
-                      : 'btn-secondary'
-                  }`}
+                  onClick={() => {
+                    copyToClipboard(exportedNsec)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2000)
+                  }}
+                  className="p-2 text-[var(--text-secondary)] hover:text-[var(--line-green)] transition-colors"
                 >
-                  {copied ? '✓ コピーしました' : 'コピー'}
-                </button>
-                <button
-                  onClick={handleCloseExport}
-                  className="flex-1 btn-secondary py-2 text-sm"
-                >
-                  閉じる
+                  {copied ? (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                    </svg>
+                  )}
                 </button>
               </div>
             </div>
@@ -260,2369 +146,382 @@ function NosskeySettings({ pubkey }) {
   )
 }
 
-// Default zap amounts for quick select
-const ZAP_PRESETS = [21, 100, 500, 1000, 5000, 10000]
-
-// Popular relay list for search
-const KNOWN_RELAYS = [
-  { url: 'wss://yabu.me', name: 'やぶみ (デフォルト)', region: 'JP' },
-  { url: 'wss://relay-jp.nostr.wirednet.jp', name: 'WiredNet JP', region: 'JP' },
-  { url: 'wss://r.kojira.io', name: 'Kojira', region: 'JP' },
-  { url: 'wss://nos.lol', name: 'nos.lol', region: 'Global' },
-  { url: 'wss://relay.damus.io', name: 'Damus', region: 'Global' },
-  { url: 'wss://relay.snort.social', name: 'Snort', region: 'Global' },
-  { url: 'wss://nostr.wine', name: 'nostr.wine (有料)', region: 'Global' },
-  { url: 'wss://relay.nostr.bg', name: 'nostr.bg', region: 'EU' },
-]
-
-// Upload server presets
-const UPLOAD_SERVERS = [
-  { id: 'nostr.build', name: 'nostr.build', url: 'nostr.build' },
-  { id: 'share.yabu.me', name: 'やぶみ', url: 'share.yabu.me' },
-  { id: 'blossom.nostr', name: 'Blossom (nostr.build)', url: 'https://blossom.nostr.build' },
+const APPS_METADATA = [
+  {
+    id: 'emoji',
+    name: 'カスタム絵文字',
+    description: '投稿やリアクションに使える絵文字を管理・追加',
+    category: 'entertainment',
+    icon: (className) => (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>
+      </svg>
+    )
+  },
+  {
+    id: 'badge',
+    name: 'プロフィールバッジ',
+    description: 'プロフィールに表示するバッジを設定・管理',
+    category: 'entertainment',
+    icon: (className) => (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="12" cy="8" r="6"/><path d="M12 14v8"/><path d="M9 18l3 3 3-3"/>
+      </svg>
+    )
+  },
+  {
+    id: 'scheduler',
+    name: '調整くん',
+    description: 'オフ会や会議の予定を簡単に調整',
+    category: 'entertainment',
+    icon: (className) => (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+    )
+  },
+  {
+    id: 'zap',
+    name: 'Zap設定',
+    description: 'デフォルトのZap金額をクイック設定',
+    category: 'tools',
+    icon: (className) => (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+    )
+  },
+  {
+    id: 'relay',
+    name: 'リレー設定',
+    description: '地域に基づいた最適なリレーを自動設定',
+    category: 'tools',
+    icon: (className) => (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/><circle cx="12" cy="12" r="8" strokeDasharray="4 2"/>
+      </svg>
+    )
+  },
+  {
+    id: 'upload',
+    name: 'アップロード設定',
+    description: '画像のアップロード先サーバーを選択',
+    category: 'tools',
+    icon: (className) => (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+      </svg>
+    )
+  },
+  {
+    id: 'mute',
+    name: 'ミュートリスト',
+    description: '不快なユーザーやキーワードを非表示に管理',
+    category: 'tools',
+    icon: (className) => (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+      </svg>
+    )
+  },
+  {
+    id: 'elevenlabs',
+    name: '音声入力設定',
+    description: 'ElevenLabs Scribeによる高精度な音声入力',
+    category: 'tools',
+    icon: (className) => (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+      </svg>
+    )
+  },
+  {
+    id: 'backup',
+    name: 'バックアップ',
+    description: '自分の投稿データをJSON形式でエクスポート',
+    category: 'tools',
+    icon: (className) => (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    )
+  },
+  {
+    id: 'vanish',
+    name: '削除リクエスト',
+    description: 'リレーに対して全データの削除を要求',
+    category: 'tools',
+    icon: (className) => (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>
+      </svg>
+    )
+  }
 ]
 
 export default function MiniAppTab({ pubkey, onLogout }) {
-  const [defaultZap, setDefaultZap] = useState(21)
-  const [muteList, setMuteList] = useState({ pubkeys: [], eventIds: [], hashtags: [], words: [] })
-  const [mutedProfiles, setMutedProfiles] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [removing, setRemoving] = useState(null)
-  const [showZapInput, setShowZapInput] = useState(false)
-  const [customZap, setCustomZap] = useState('')
-
-  // Relay settings - simplified to single relay
-  const [currentRelay, setCurrentRelay] = useState('wss://yabu.me')
-  const [showRelaySettings, setShowRelaySettings] = useState(false)
-  const [relaySearch, setRelaySearch] = useState('')
-  const [customRelayUrl, setCustomRelayUrl] = useState('')
-  // Geolocation relay auto-setup
-  const [detectingLocation, setDetectingLocation] = useState(false)
-  const [userGeohash, setUserGeohash] = useState(null)
-  const [userLocation, setUserLocation] = useState(null)
-  const [recommendedRelays, setRecommendedRelays] = useState([])
-  const [publishingNip65, setPublishingNip65] = useState(false)
-  // NIP-65 Outbox Model configuration
-  const [nip65Config, setNip65Config] = useState(null)
-  const [nearestRelays, setNearestRelays] = useState([])
-  const [showNip65Details, setShowNip65Details] = useState(false)
-  // Region selection (for users who don't want GPS)
-  const [selectedRegion, setSelectedRegion] = useState(null)
-
-  // Upload server settings
-  const [uploadServerState, setUploadServerState] = useState('nostr.build')
-  const [customBlossomUrl, setCustomBlossomUrl] = useState('')
-  const [showUploadSettings, setShowUploadSettings] = useState(false)
-
-  // Collapsed section states
-  const [showScheduler, setShowScheduler] = useState(false)
-  const [showZapSettings, setShowZapSettings] = useState(false)
-  const [showMuteSettings, setShowMuteSettings] = useState(false)
-  const [showBadgeSettings, setShowBadgeSettings] = useState(false)
-  const [showEventBackup, setShowEventBackup] = useState(false)
-  const [showVanishRequest, setShowVanishRequest] = useState(false)
-
-  // Vanish Request states
-  const [vanishMode, setVanishMode] = useState('relay') // 'relay' or 'global'
-  const [vanishRelay, setVanishRelay] = useState('')
-  const [vanishReason, setVanishReason] = useState('')
-  const [vanishConfirm, setVanishConfirm] = useState('')
-  const [vanishLoading, setVanishLoading] = useState(false)
-  const [vanishResult, setVanishResult] = useState(null)
-
-  // Badge settings
-  const [profileBadges, setProfileBadges] = useState([])
-  const [awardedBadges, setAwardedBadges] = useState([])
-  const [loadingBadges, setLoadingBadges] = useState(false)
-  const [removingBadge, setRemovingBadge] = useState(null)
-  const [addingBadge, setAddingBadge] = useState(null)
-
-  // Emoji settings
-  const [showEmojiSettings, setShowEmojiSettings] = useState(false)
-  const [userEmojis, setUserEmojis] = useState([])
-  const [userEmojiSets, setUserEmojiSets] = useState([])
-  const [loadingEmojis, setLoadingEmojis] = useState(false)
-  const [removingEmoji, setRemovingEmoji] = useState(null)
-  const [emojiSetSearch, setEmojiSetSearch] = useState('')
-  const [searchedEmojiSets, setSearchedEmojiSets] = useState([])
-  const [searchingEmoji, setSearchingEmoji] = useState(false)
-  const [addingEmojiSet, setAddingEmojiSet] = useState(null)
-
-  // ElevenLabs settings
-  const [elevenLabsApiKey, setElevenLabsApiKey] = useState('')
-  const [elevenLabsLanguage, setElevenLabsLanguage] = useState('jpn')
-  const [showElevenLabsSettings, setShowElevenLabsSettings] = useState(false)
-
-  // My Mini Apps state
+  const [activeCategory, setActiveCategory] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [favoriteApps, setFavoriteApps] = useState([])
-  const [showMyApps, setShowMyApps] = useState(false)
-  const [externalAppUrl, setExternalAppUrl] = useState('')
+  const [selectedApp, setSelectedApp] = useState(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [showExternalAdd, setShowExternalAdd] = useState(false)
   const [externalAppName, setExternalAppName] = useState('')
-  const [draggedIndex, setDraggedIndex] = useState(null)
+  const [externalAppUrl, setExternalAppUrl] = useState('')
 
   useEffect(() => {
-    // Load saved default zap from localStorage
-    const saved = localStorage.getItem('defaultZapAmount')
-    if (saved) {
-      setDefaultZap(parseInt(saved, 10))
-    }
-
-    // Load relay setting
-    setCurrentRelay(getDefaultRelay())
-
-    // Load saved geohash and region
-    const savedGeohash = loadUserGeohash()
-    if (savedGeohash) {
-      setUserGeohash(savedGeohash)
-    }
-
-    // Load saved region selection and restore relay config
-    const savedRegionId = loadSelectedRegion()
-    if (savedRegionId) {
-      const result = selectRelaysByRegion(savedRegionId)
-      if (result.region) {
-        setSelectedRegion(result.region)
-        setUserGeohash(result.geohash)
-        setUserLocation(result.location)
-        setNip65Config(result.nip65Config)
-        setNearestRelays(result.nearestRelays || [])
-      }
-    } else {
-      // If no manual region selected, try to restore from GPS location
-      const savedLocation = loadUserLocation()
-      if (savedLocation) {
-        try {
-          const config = generateRelayListByLocation(savedLocation.lat, savedLocation.lon)
-          const nearest = findNearestRelays(savedLocation.lat, savedLocation.lon, 10)
-          setNip65Config(config)
-          setNearestRelays(nearest)
-        } catch (e) {
-          console.error('Failed to restore GPS relay config:', e)
-        }
-      }
-    }
-
-    // Load upload server setting
-    setUploadServerState(getUploadServer())
-
-    // Load ElevenLabs settings
-    if (typeof window !== 'undefined') {
-      const savedElevenLabsKey = localStorage.getItem('elevenlabs_api_key')
-      if (savedElevenLabsKey) setElevenLabsApiKey(savedElevenLabsKey)
-      const savedElevenLabsLang = localStorage.getItem('elevenlabs_language')
-      if (savedElevenLabsLang) setElevenLabsLanguage(savedElevenLabsLang)
-    }
-
-    // Load favorite mini apps
     const savedFavorites = localStorage.getItem('favoriteMiniApps')
     if (savedFavorites) {
       try {
         setFavoriteApps(JSON.parse(savedFavorites))
       } catch (e) {
-        console.error('Failed to load favorite apps:', e)
+        console.error(e)
       }
     }
+  }, [])
 
-    if (pubkey) {
-      loadMuteList()
-    } else {
-      setLoading(false)
-    }
-  }, [pubkey])
-
-  const loadMuteList = async () => {
-    setLoading(true)
-    try {
-      const list = await fetchMuteList(pubkey)
-      setMuteList(list)
-
-      // Fetch profiles for muted pubkeys
-      if (list.pubkeys.length > 0) {
-        const profileEvents = await fetchEvents(
-          { kinds: [0], authors: list.pubkeys, limit: list.pubkeys.length },
-          [getDefaultRelay()]
-        )
-        const profiles = {}
-        for (const event of profileEvents) {
-          profiles[event.pubkey] = parseProfile(event)
-        }
-        setMutedProfiles(profiles)
-      }
-    } catch (e) {
-      console.error('Failed to load mute list:', e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleSetDefaultZap = (amount) => {
-    setDefaultZap(amount)
-    localStorage.setItem('defaultZapAmount', amount.toString())
-    setShowZapInput(false)
-  }
-
-  const handleCustomZap = () => {
-    const amount = parseInt(customZap, 10)
-    if (amount > 0) {
-      handleSetDefaultZap(amount)
-      setCustomZap('')
-    }
-  }
-
-  const handleUnmute = async (type, value) => {
-    if (!pubkey || removing) return
-    setRemoving(value)
-
-    try {
-      await removeFromMuteList(pubkey, type, value)
-      // Update local state
-      if (type === 'pubkey') {
-        setMuteList(prev => ({
-          ...prev,
-          pubkeys: prev.pubkeys.filter(p => p !== value)
-        }))
-      } else if (type === 'hashtag') {
-        setMuteList(prev => ({
-          ...prev,
-          hashtags: prev.hashtags.filter(h => h !== value)
-        }))
-      } else if (type === 'word') {
-        setMuteList(prev => ({
-          ...prev,
-          words: prev.words.filter(w => w !== value)
-        }))
-      }
-    } catch (e) {
-      console.error('Failed to unmute:', e)
-    } finally {
-      setRemoving(null)
-    }
-  }
-
-  // Badge management
-  const loadBadges = async () => {
-    if (!pubkey) return
-    setLoadingBadges(true)
-    
-    try {
-      const currentRelay = getDefaultRelay()
-      // Use multiple relays for better coverage (Japanese relays first)
-      const relays = [currentRelay]
-      const extraRelays = ['wss://yabu.me', 'wss://relay-jp.nostr.wirednet.jp', 'wss://r.kojira.io', 'wss://nos.lol']
-      const allRelays = [...new Set([currentRelay, ...extraRelays])]
-      
-      // Load current profile badges (kind 30008)
-      const profileBadgeEvents = await fetchEvents({
-        kinds: [30008],
-        authors: [pubkey],
-        '#d': ['profile_badges'],
-        limit: 1
-      }, relays)
-      
-      const currentBadges = []
-      if (profileBadgeEvents.length > 0) {
-        const tags = profileBadgeEvents[0].tags
-        const seenRefs = new Set() // Track unique badge refs
-        
-        for (let i = 0; i < tags.length; i++) {
-          if (tags[i][0] === 'a' && tags[i][1]?.startsWith('30009:')) {
-            const ref = tags[i][1]
-            if (!seenRefs.has(ref)) {
-              seenRefs.add(ref)
-              const eTag = tags[i + 1]?.[0] === 'e' ? tags[i + 1][1] : null
-              currentBadges.push({ ref, awardEventId: eTag })
-            }
-          }
-        }
-      }
-      
-      // Fetch badge definitions for profile badges (try multiple relays)
-      for (const badge of currentBadges) {
-        const parts = badge.ref.split(':')
-        if (parts.length >= 3) {
-          const [, creator, ...dTagParts] = parts
-          const dTag = dTagParts.join(':')
-          
-          // Set default values first
-          badge.name = dTag
-          badge.image = ''
-          badge.description = ''
-          
-          // Try fetching from all relays
-          for (const relay of allRelays) {
-            try {
-              const defEvents = await fetchEvents({
-                kinds: [30009],
-                authors: [creator],
-                '#d': [dTag],
-                limit: 1
-              }, [relay])
-              
-              if (defEvents.length > 0) {
-                const event = defEvents[0]
-                badge.name = event.tags.find(t => t[0] === 'name')?.[1] || dTag
-                badge.image = event.tags.find(t => t[0] === 'thumb')?.[1] || 
-                              event.tags.find(t => t[0] === 'image')?.[1] || ''
-                badge.description = event.tags.find(t => t[0] === 'description')?.[1] || ''
-                break // Found it, stop searching
-              }
-            } catch (e) {
-              // Continue to next relay
-            }
-          }
-        }
-      }
-      
-      setProfileBadges(currentBadges)
-      
-      // Load awarded badges (kind 8) from multiple relays
-      let allAwardEvents = []
-      for (const relay of allRelays.slice(0, 3)) { // Limit to first 3 relays for speed
-        try {
-          const events = await fetchEvents({
-            kinds: [8],
-            '#p': [pubkey],
-            limit: 50
-          }, [relay])
-          allAwardEvents = [...allAwardEvents, ...events]
-        } catch (e) {
-          // Continue with other relays
-        }
-      }
-      
-      // Deduplicate by event id
-      const awardEventsMap = new Map()
-      for (const event of allAwardEvents) {
-        if (!awardEventsMap.has(event.id)) {
-          awardEventsMap.set(event.id, event)
-        }
-      }
-      const awardEvents = Array.from(awardEventsMap.values())
-      
-      console.log('Found award events:', awardEvents.length, 'from relays:', allRelays.slice(0, 3).join(', '))
-      
-      const awarded = []
-      const seenAwards = new Set()
-      // Also skip refs that are already in profile
-      for (const b of currentBadges) {
-        seenAwards.add(b.ref)
-      }
-      
-      for (const event of awardEvents) {
-        const aTag = event.tags.find(t => t[0] === 'a' && t[1]?.startsWith('30009:'))
-        if (aTag) {
-          const ref = aTag[1]
-          // Prevent duplicate awards
-          if (seenAwards.has(ref)) continue
-          seenAwards.add(ref)
-          
-          const parts = ref.split(':')
-          const dTag = parts.length >= 3 ? parts.slice(2).join(':') : 'バッジ'
-          const badge = { ref, awardEventId: event.id, name: dTag, image: '', description: '' }
-          
-          if (parts.length >= 3) {
-            const [, creator] = parts
-            
-            // Try fetching from all relays
-            for (const relay of allRelays) {
-              try {
-                const defEvents = await fetchEvents({
-                  kinds: [30009],
-                  authors: [creator],
-                  '#d': [dTag],
-                  limit: 1
-                }, [relay])
-                
-                if (defEvents.length > 0) {
-                  const defEvent = defEvents[0]
-                  badge.name = defEvent.tags.find(t => t[0] === 'name')?.[1] || dTag
-                  badge.image = defEvent.tags.find(t => t[0] === 'thumb')?.[1] || 
-                                defEvent.tags.find(t => t[0] === 'image')?.[1] || ''
-                  badge.description = defEvent.tags.find(t => t[0] === 'description')?.[1] || ''
-                  break // Found it, stop searching
-                }
-              } catch (e) {
-                // Continue to next relay
-              }
-            }
-          }
-          
-          awarded.push(badge)
-        }
-      }
-      
-      console.log('Awarded badges:', awarded.length)
-      setAwardedBadges(awarded)
-    } catch (e) {
-      console.error('Failed to load badges:', e)
-    } finally {
-      setLoadingBadges(false)
-    }
-  }
-  
-  const handleAddBadgeToProfile = async (badge) => {
-    if (!pubkey || addingBadge || profileBadges.length >= 3) return
-    
-    // Check if already in profile (by ref)
-    if (profileBadges.some(b => b.ref === badge.ref)) return
-    
-    setAddingBadge(badge.ref)
-    
-    try {
-      const { signEventNip07, publishEvent, createEventTemplate } = await import('@/lib/nostr')
-      
-      // Build new badge list
-      const newBadges = [...profileBadges, badge]
-      const tags = [['d', 'profile_badges']]
-      
-      for (const b of newBadges) {
-        tags.push(['a', b.ref])
-        if (b.awardEventId) {
-          tags.push(['e', b.awardEventId])
-        }
-      }
-      
-      const event = createEventTemplate(30008, '')
-      event.pubkey = pubkey
-      event.tags = tags
-      
-      const signedEvent = await signEventNip07(event)
-      await publishEvent(signedEvent)
-      
-      // Clear badge cache so it reloads with new data
-      clearBadgeCache(pubkey)
-      
-      setProfileBadges(newBadges)
-      setAwardedBadges(prev => prev.filter(b => b.ref !== badge.ref))
-    } catch (e) {
-      console.error('Failed to add badge:', e)
-    } finally {
-      setAddingBadge(null)
-    }
-  }
-  
-  const handleRemoveBadgeFromProfile = async (badge) => {
-    if (!pubkey || removingBadge) return
-    setRemovingBadge(badge.ref)
-    
-    try {
-      const { signEventNip07, publishEvent, createEventTemplate } = await import('@/lib/nostr')
-      
-      // Remove badge by ref (not by index to avoid removing duplicates)
-      const newBadges = profileBadges.filter(b => b.ref !== badge.ref)
-      const tags = [['d', 'profile_badges']]
-      
-      for (const b of newBadges) {
-        tags.push(['a', b.ref])
-        if (b.awardEventId) {
-          tags.push(['e', b.awardEventId])
-        }
-      }
-      
-      const event = createEventTemplate(30008, '')
-      event.pubkey = pubkey
-      event.tags = tags
-      
-      const signedEvent = await signEventNip07(event)
-      await publishEvent(signedEvent)
-      
-      // Clear badge cache so it reloads with new data
-      clearBadgeCache(pubkey)
-      
-      setProfileBadges(newBadges)
-      // Add back to awarded badges
-      setAwardedBadges(prev => [...prev, badge])
-    } catch (e) {
-      console.error('Failed to remove badge:', e)
-    } finally {
-      setRemovingBadge(null)
-    }
-  }
-
-  // Emoji set management
-  const loadUserEmojis = async () => {
-    if (!pubkey) return
-    setLoadingEmojis(true)
-    
-    try {
-      const relays = [getDefaultRelay()]
-      
-      // Fetch user's emoji list (kind 10030)
-      const events = await fetchEvents({
-        kinds: [10030],
-        authors: [pubkey],
-        limit: 1
-      }, relays)
-
-      const individualEmojis = []
-      const setPointers = []
-
-      if (events.length > 0) {
-        const tags = events[0].tags
-        
-        for (const tag of tags) {
-          if (tag[0] === 'emoji' && tag[1] && tag[2]) {
-            individualEmojis.push({ shortcode: tag[1], url: tag[2] })
-          } else if (tag[0] === 'a' && tag[1]?.startsWith('30030:')) {
-            setPointers.push(tag[1])
-          }
-        }
-      }
-
-      // Load emoji set details
-      const loadedSets = []
-      for (const pointer of setPointers) {
-        const parts = pointer.split(':')
-        if (parts.length >= 3) {
-          const [, author, ...dTagParts] = parts
-          const dTag = dTagParts.join(':')
-          
-          try {
-            const setEvents = await fetchEvents({
-              kinds: [30030],
-              authors: [author],
-              '#d': [dTag],
-              limit: 1
-            }, relays)
-            
-            if (setEvents.length > 0) {
-              const setEvent = setEvents[0]
-              const setName = setEvent.tags.find(t => t[0] === 'title')?.[1] || dTag
-              const emojiCount = setEvent.tags.filter(t => t[0] === 'emoji').length
-              
-              loadedSets.push({
-                pointer,
-                name: setName,
-                author,
-                dTag,
-                emojiCount
-              })
-            }
-          } catch (e) {
-            console.error('Failed to load emoji set:', e)
-          }
-        }
-      }
-
-      setUserEmojis(individualEmojis)
-      setUserEmojiSets(loadedSets)
-    } catch (e) {
-      console.error('Failed to load user emojis:', e)
-    } finally {
-      setLoadingEmojis(false)
-    }
-  }
-
-  const searchEmojiSets = async () => {
-    if (!emojiSetSearch.trim()) {
-      setSearchedEmojiSets([])
-      return
-    }
-    
-    setSearchingEmoji(true)
-    try {
-      const relays = [getDefaultRelay()]
-      
-      // Search for emoji sets
-      const events = await fetchEvents({
-        kinds: [30030],
-        limit: 20
-      }, relays)
-      
-      const search = emojiSetSearch.toLowerCase()
-      const results = events
-        .filter(e => {
-          const title = e.tags.find(t => t[0] === 'title')?.[1] || ''
-          const dTag = e.tags.find(t => t[0] === 'd')?.[1] || ''
-          return title.toLowerCase().includes(search) || dTag.toLowerCase().includes(search)
-        })
-        .map(e => {
-          const dTag = e.tags.find(t => t[0] === 'd')?.[1] || ''
-          const title = e.tags.find(t => t[0] === 'title')?.[1] || dTag
-          const emojiCount = e.tags.filter(t => t[0] === 'emoji').length
-          const pointer = `30030:${e.pubkey}:${dTag}`
-          
-          return {
-            pointer,
-            name: title,
-            author: e.pubkey,
-            dTag,
-            emojiCount,
-            emojis: e.tags
-              .filter(t => t[0] === 'emoji' && t[1] && t[2])
-              .slice(0, 5)
-              .map(t => ({ shortcode: t[1], url: t[2] }))
-          }
-        })
-        .filter(s => s.emojiCount > 0)
-        .filter(s => !userEmojiSets.some(us => us.pointer === s.pointer))
-      
-      setSearchedEmojiSets(results)
-    } catch (e) {
-      console.error('Failed to search emoji sets:', e)
-    } finally {
-      setSearchingEmoji(false)
-    }
-  }
-
-  const handleAddEmojiSet = async (set) => {
-    if (!pubkey || addingEmojiSet) return
-    setAddingEmojiSet(set.pointer)
-    
-    try {
-      const { signEventNip07, publishEvent, createEventTemplate } = await import('@/lib/nostr')
-      
-      // Build new emoji list
-      const tags = []
-      
-      // Add existing emojis
-      for (const emoji of userEmojis) {
-        tags.push(['emoji', emoji.shortcode, emoji.url])
-      }
-      
-      // Add existing sets
-      for (const s of userEmojiSets) {
-        tags.push(['a', s.pointer])
-      }
-      
-      // Add new set
-      tags.push(['a', set.pointer])
-      
-      const event = createEventTemplate(10030, '')
-      event.pubkey = pubkey
-      event.tags = tags
-      
-      const signedEvent = await signEventNip07(event)
-      await publishEvent(signedEvent)
-      
-      setUserEmojiSets(prev => [...prev, set])
-      setSearchedEmojiSets(prev => prev.filter(s => s.pointer !== set.pointer))
-    } catch (e) {
-      console.error('Failed to add emoji set:', e)
-    } finally {
-      setAddingEmojiSet(null)
-    }
-  }
-
-  const handleRemoveEmojiSet = async (set) => {
-    if (!pubkey || removingEmoji) return
-    setRemovingEmoji(set.pointer)
-    
-    try {
-      const { signEventNip07, publishEvent, createEventTemplate } = await import('@/lib/nostr')
-      
-      // Build new emoji list without the removed set
-      const tags = []
-      
-      // Add existing emojis
-      for (const emoji of userEmojis) {
-        tags.push(['emoji', emoji.shortcode, emoji.url])
-      }
-      
-      // Add remaining sets
-      for (const s of userEmojiSets) {
-        if (s.pointer !== set.pointer) {
-          tags.push(['a', s.pointer])
-        }
-      }
-      
-      const event = createEventTemplate(10030, '')
-      event.pubkey = pubkey
-      event.tags = tags
-      
-      const signedEvent = await signEventNip07(event)
-      await publishEvent(signedEvent)
-      
-      setUserEmojiSets(prev => prev.filter(s => s.pointer !== set.pointer))
-    } catch (e) {
-      console.error('Failed to remove emoji set:', e)
-    } finally {
-      setRemovingEmoji(null)
-    }
-  }
-
-  // Single relay management
-  const handleChangeRelay = (relayUrl) => {
-    setCurrentRelay(relayUrl)
-    setDefaultRelay(relayUrl)
-    setRelaySearch('')
-  }
-
-  const handleSetCustomRelay = () => {
-    const url = customRelayUrl.trim()
-    if (url && url.startsWith('wss://')) {
-      handleChangeRelay(url)
-      setCustomRelayUrl('')
-    }
-  }
-
-  const getFilteredRelays = () => {
-    if (!relaySearch.trim()) return KNOWN_RELAYS
-    const search = relaySearch.toLowerCase()
-    return KNOWN_RELAYS.filter(r =>
-      r.url.toLowerCase().includes(search) ||
-      r.name.toLowerCase().includes(search) ||
-      r.region.toLowerCase().includes(search)
-    )
-  }
-
-  // Auto-detect location and recommend relays with NIP-65 configuration
-  const handleAutoDetectLocation = async () => {
-    setDetectingLocation(true)
-    try {
-      const result = await autoDetectRelays()
-      if (result.geohash) {
-        setUserGeohash(result.geohash)
-        setUserLocation(result.location)
-        setRecommendedRelays(result.relays)
-        setNip65Config(result.nip65Config)
-        setNearestRelays(result.nearestRelays || [])
-        setSelectedRegion(null) // Clear manual region selection when using GPS
-
-        // Auto-select the first recommended relay (nearest outbox relay)
-        if (result.nip65Config?.outbox?.length > 0) {
-          handleChangeRelay(result.nip65Config.outbox[0].url)
-        } else if (result.relays.length > 0) {
-          handleChangeRelay(result.relays[0].url)
-        }
-      } else if (result.error) {
-        alert(`位置情報の取得に失敗しました: ${result.error}`)
-      }
-    } catch (e) {
-      console.error('Location detection failed:', e)
-      alert('位置情報の取得に失敗しました。ブラウザの位置情報設定を確認してください。')
-    } finally {
-      setDetectingLocation(false)
-    }
-  }
-
-  // Select region manually (for users who don't want to share GPS)
-  const handleSelectRegion = (regionId) => {
-    const result = selectRelaysByRegion(regionId)
-    if (result.region) {
-      setSelectedRegion(result.region)
-      setUserGeohash(result.geohash)
-      setUserLocation(result.location)
-      setRecommendedRelays(result.relays)
-      setNip65Config(result.nip65Config)
-      setNearestRelays(result.nearestRelays || [])
-
-      // Auto-select the first recommended relay
-      if (result.nip65Config?.outbox?.length > 0) {
-        handleChangeRelay(result.nip65Config.outbox[0].url)
-      }
-    }
-  }
-
-  // Handle clicking on a relay in the nearest relays list
-  const handleSelectNearestRelay = (relay) => {
-    handleChangeRelay(relay.url)
-    // Also update NIP-65 config to use this relay as the primary outbox
-    if (nip65Config) {
-      const newOutbox = [relay, ...nip65Config.outbox.filter(r => r.url !== relay.url)].slice(0, 5)
-      const newCombined = [
-        { url: relay.url, read: true, write: true },
-        ...nip65Config.combined.filter(r => r.url !== relay.url)
-      ]
-      setNip65Config({
-        ...nip65Config,
-        outbox: newOutbox,
-        combined: newCombined
-      })
-    }
-  }
-
-  // Publish relay list to NIP-65 (kind:10002) using auto-detected config
-  const handlePublishRelayList = async () => {
-    if (!pubkey || !canSign()) {
-      alert('リレーリストを発行するにはログインが必要です')
-      return
-    }
-    setPublishingNip65(true)
-    try {
-      // Use NIP-65 config if available, otherwise use current relay
-      let relayList
-      if (nip65Config?.combined?.length > 0) {
-        relayList = nip65Config.combined
-      } else {
-        relayList = [{ url: currentRelay, read: true, write: true }]
-      }
-
-      const result = await publishRelayListMetadata(relayList)
-      if (result.success) {
-        const outboxCount = relayList.filter(r => r.write).length
-        const inboxCount = relayList.filter(r => r.read).length
-        alert(`リレーリストを発行しました (NIP-65)\nOutbox: ${outboxCount}リレー\nInbox: ${inboxCount}リレー`)
-      }
-    } catch (e) {
-      console.error('Failed to publish relay list:', e)
-      alert('リレーリストの発行に失敗しました: ' + e.message)
-    } finally {
-      setPublishingNip65(false)
-    }
-  }
-
-  const handleSelectUploadServer = (server) => {
-    setUploadServerState(server)
-    setUploadServer(server)
-  }
-
-  const handleSetCustomBlossom = () => {
-    const url = customBlossomUrl.trim()
-    if (url && url.startsWith('https://')) {
-      setUploadServerState(url)
-      setUploadServer(url)
-      setCustomBlossomUrl('')
-    }
-  }
-
-  // My Mini Apps management
-  const saveFavoriteApps = (apps) => {
+  const saveFavorites = (apps) => {
     setFavoriteApps(apps)
     localStorage.setItem('favoriteMiniApps', JSON.stringify(apps))
   }
 
-  const handleAddToFavorites = (appId, appName, appType = 'internal') => {
-    const newApp = { id: appId, name: appName, type: appType }
-    if (!favoriteApps.some(app => app.id === appId)) {
-      saveFavoriteApps([...favoriteApps, newApp])
+  const handleToggleFavorite = (appId, appName, appType = 'internal', url = null) => {
+    if (favoriteApps.some(a => a.id === appId)) {
+      saveFavorites(favoriteApps.filter(a => a.id !== appId))
+    } else {
+      saveFavorites([...favoriteApps, { id: appId, name: appName, type: appType, url }])
     }
   }
 
-  const handleRemoveFromFavorites = (appId) => {
-    saveFavoriteApps(favoriteApps.filter(app => app.id !== appId))
+  const handleAddExternal = () => {
+    if (!externalAppUrl.trim().startsWith('http')) return
+    const appId = 'external_' + Date.now()
+    const appName = externalAppName.trim() || new URL(externalAppUrl).hostname
+    const newApp = { id: appId, name: appName, type: 'external', url: externalAppUrl }
+    saveFavorites([...favoriteApps, newApp])
+    setExternalAppName('')
+    setExternalAppUrl('')
+    setShowExternalAdd(false)
   }
 
-  const handleAddExternalApp = () => {
-    const url = externalAppUrl.trim()
-    if (url && url.startsWith('http')) {
-      const appId = 'external_' + Date.now()
-      // Use user-provided name, or fallback to hostname
-      const appName = externalAppName.trim() || new URL(url).hostname
-      const newApp = { id: appId, name: appName, type: 'external', url }
-      saveFavoriteApps([...favoriteApps, newApp])
-      setExternalAppUrl('')
-      setExternalAppName('')
-    }
-  }
-
-  const handleDragStart = (index) => {
-    setDraggedIndex(index)
-  }
-
-  const handleDragOver = (e) => {
-    e.preventDefault()
-  }
-
-  const handleDrop = (dropIndex) => {
-    if (draggedIndex === null) return
-    const newApps = [...favoriteApps]
-    const [removed] = newApps.splice(draggedIndex, 1)
-    newApps.splice(dropIndex, 0, removed)
-    saveFavoriteApps(newApps)
-    setDraggedIndex(null)
-  }
-
-  const handleLogoutClick = () => {
-    if (onLogout && confirm('ログアウトしますか？')) {
-      onLogout()
-    }
-  }
-
-  const handleFavoriteAppClick = (app) => {
-    // For external apps, open in new tab
-    if (app.type === 'external' && app.url) {
+  const openApp = (app) => {
+    if (app.type === 'external') {
       window.open(app.url, '_blank', 'noopener,noreferrer')
-      return
-    }
-
-    // For internal apps, expand the corresponding section
-    switch (app.id) {
-      case 'scheduler':
-        setShowScheduler(true)
-        // Scroll to scheduler section
-        setTimeout(() => {
-          document.querySelector('#scheduler-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 100)
-        break
-      case 'zap':
-        setShowZapSettings(true)
-        setTimeout(() => {
-          document.querySelector('#zap-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 100)
-        break
-      case 'relay':
-        setShowRelaySettings(true)
-        setTimeout(() => {
-          document.querySelector('#relay-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 100)
-        break
-      case 'upload':
-        setShowUploadSettings(true)
-        setTimeout(() => {
-          document.querySelector('#upload-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 100)
-        break
-      case 'mute':
-        setShowMuteSettings(true)
-        setTimeout(() => {
-          document.querySelector('#mute-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 100)
-        break
-      case 'elevenlabs':
-        setShowElevenLabsSettings(true)
-        setTimeout(() => {
-          document.querySelector('#elevenlabs-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 100)
-        break
-      case 'badge':
-        setShowBadgeSettings(true)
-        // Load badges if not already loaded
-        if (profileBadges.length === 0 && awardedBadges.length === 0 && !loadingBadges) {
-          loadBadges()
-        }
-        setTimeout(() => {
-          document.querySelector('#badge-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 100)
-        break
-      case 'emoji':
-        setShowEmojiSettings(true)
-        // Load emojis if not already loaded
-        if (userEmojis.length === 0 && userEmojiSets.length === 0 && !loadingEmojis) {
-          loadUserEmojis()
-        }
-        setTimeout(() => {
-          document.querySelector('#emoji-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 100)
-        break
-      default:
-        break
+    } else {
+      setSelectedApp(app)
+      setIsModalOpen(true)
     }
   }
 
-  // Available mini apps that can be added to favorites
-  const availableMiniApps = [
-    { id: 'elevenlabs', name: '音声入力設定' },
-    { id: 'scheduler', name: '調整くん' },
-    { id: 'zap', name: 'Zap設定' },
-    { id: 'relay', name: 'リレー設定' },
-    { id: 'upload', name: 'アップロード設定' },
-    { id: 'mute', name: 'ミュートリスト' },
-    { id: 'badge', name: 'プロフィールバッジ' },
-    { id: 'emoji', name: 'カスタム絵文字' },
-  ].filter(app => !favoriteApps.some(fav => fav.id === app.id))
+  const filteredApps = APPS_METADATA.filter(app => {
+    const matchesCategory = activeCategory === 'all' || app.category === activeCategory
+    const matchesSearch = app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          app.description.toLowerCase().includes(searchQuery.toLowerCase())
+    return matchesCategory && matchesSearch
+  })
+
+  const renderAppContent = () => {
+    if (!selectedApp) return null
+    switch (selectedApp.id) {
+      case 'emoji': return <EmojiSettings pubkey={pubkey} />
+      case 'badge': return <BadgeSettings pubkey={pubkey} />
+      case 'scheduler': return <SchedulerApp pubkey={pubkey} />
+      case 'zap': return <ZapSettings />
+      case 'relay': return <RelaySettings pubkey={pubkey} />
+      case 'upload': return <UploadSettings />
+      case 'mute': return <MuteList pubkey={pubkey} />
+      case 'elevenlabs': return <ElevenLabsSettings />
+      case 'backup': return <EventBackupApp pubkey={pubkey} />
+      case 'vanish': return <VanishRequest pubkey={pubkey} />
+      default: return null
+    }
+  }
 
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen pb-20 bg-[var(--bg-primary)]">
       {/* Header */}
       <header className="sticky top-0 z-40 header-blur border-b border-[var(--border-color)]">
-        <div className="flex items-center justify-center px-4 h-12">
-          <h1 className="text-lg font-semibold text-[var(--text-primary)]">ミニアプリ</h1>
+        <div className="flex items-center justify-between px-4 h-14">
+          <div className="flex items-center gap-1">
+            <h1 className="text-lg font-bold text-[var(--text-primary)]">ミニアプリ</h1>
+            <button className="text-[var(--text-tertiary)]">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </button>
+          </div>
+          <button className="flex items-center gap-1 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
+             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+               <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+             </svg>
+             <span className="hidden sm:inline">ミニアプリを検索</span>
+          </button>
         </div>
       </header>
 
-      <div className="p-4 space-y-4">
-        {/* Login Method Display with Logout Button */}
+      <div className="p-4 space-y-6">
+        {/* Login Section */}
         <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-[var(--line-green)] flex items-center justify-center flex-shrink-0">
-              {getLoginMethod() === 'nosskey' ? (
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2a4 4 0 014 4v2h2a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V10a2 2 0 012-2h2V6a4 4 0 014-4z"/>
-                  <circle cx="12" cy="15" r="1"/>
-                </svg>
-              ) : getLoginMethod() === 'extension' ? (
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                  <path d="M7 11V7a5 5 0 0110 0v4"/>
-                </svg>
-              ) : getLoginMethod() === 'readOnly' ? (
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                  <circle cx="12" cy="12" r="3"/>
-                </svg>
-              ) : getLoginMethod() === 'local' ? (
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
-                </svg>
-              ) : (
-                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M8 12l2 2 4-4"/>
-                </svg>
-              )}
+               <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                 <path d="M12 2a4 4 0 014 4v2h2a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V10a2 2 0 012-2h2V6a4 4 0 014-4z"/><circle cx="12" cy="15" r="1"/>
+               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-[var(--text-primary)]">
-                {getLoginMethod() === 'nosskey' ? 'パスキーでログイン中' :
-                 getLoginMethod() === 'extension' ? '拡張機能でログイン中' :
-                 getLoginMethod() === 'readOnly' ? '読み取り専用モード' :
-                 getLoginMethod() === 'local' ? 'ローカルキーでログイン中' :
-                 (getLoginMethod() === 'connect' || getLoginMethod() === 'nostr-connect' || getLoginMethod() === 'bunker') ? 'Nostr Connectでログイン中' :
-                 getLoginMethod() === 'nostr-login' ? 'Nostrログインでログイン中' :
-                 'ログイン中'}
+              <p className="font-medium text-[var(--text-primary)] truncate">
+                {getLoginMethod() === 'nosskey' ? 'パスキーでログイン中' : 'ログイン中'}
               </p>
-              <p className="text-xs text-[var(--text-tertiary)]">
-                {getLoginMethod() === 'nosskey' ? 'Face ID / Touch ID / Windows Hello' :
-                 getLoginMethod() === 'extension' ? 'Alby / nos2x' :
-                 getLoginMethod() === 'readOnly' ? '投稿・署名はできません' :
-                 getLoginMethod() === 'local' ? 'ブラウザに秘密鍵を保存' :
-                 (getLoginMethod() === 'connect' || getLoginMethod() === 'nostr-connect' || getLoginMethod() === 'bunker') ? 'Nostr Connect / リモート署名' :
-                 getLoginMethod() === 'nostr-login' ? '拡張機能 / Nostr Connect / 読み取り専用' :
-                 ''}
+              <p className="text-xs text-[var(--text-tertiary)] truncate">
+                {pubkey.slice(0, 8)}...{pubkey.slice(-8)}
               </p>
             </div>
-            <button
-              onClick={handleLogoutClick}
-              className="px-3 py-1.5 text-xs bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex-shrink-0"
-            >
+            <button onClick={() => onLogout && confirm('ログアウトしますか？') && onLogout()} className="px-3 py-1.5 text-xs bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
               ログアウト
             </button>
           </div>
         </section>
 
-        {/* Nosskey Settings - only show when logged in with Nosskey */}
-        {getLoginMethod() === 'nosskey' && (
-          <NosskeySettings pubkey={pubkey} />
+        {getLoginMethod() === 'nosskey' && <NosskeySettings pubkey={pubkey} />}
+
+        {/* Search Bar */}
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="ミニアプリを検索"
+            className="w-full h-10 pl-10 pr-4 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-[var(--line-green)]"
+          />
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+        </div>
+
+        {/* History / Favorites */}
+        {favoriteApps.length > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-[var(--text-primary)]">履歴・おすすめ</h2>
+              <svg className="w-4 h-4 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </div>
+            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+              {favoriteApps.map(app => (
+                <button key={app.id} onClick={() => openApp(app)} className="flex flex-col items-center gap-1.5 min-w-[64px] group">
+                  <div className="w-14 h-14 rounded-full bg-[var(--bg-secondary)] flex items-center justify-center group-active:scale-95 transition-transform shadow-sm border border-[var(--border-color)]">
+                    {app.type === 'external' ? (
+                      <svg className="w-6 h-6 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
+                      </svg>
+                    ) : (
+                      APPS_METADATA.find(a => a.id === app.id)?.icon("w-7 h-7 text-[var(--text-secondary)]")
+                    )}
+                  </div>
+                  <span className="text-[10px] text-[var(--text-primary)] text-center line-clamp-1 w-16 font-medium">{app.name}</span>
+                </button>
+              ))}
+            </div>
+          </section>
         )}
 
-        {/* My Mini Apps Section */}
-        <section className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <button
-            onClick={() => setShowMyApps(!showMyApps)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">マイミニアプリ</h2>
-              {favoriteApps.length > 0 && (
-                <span className="text-sm text-[var(--text-tertiary)]">({favoriteApps.length})</span>
-              )}
-            </div>
-            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showMyApps ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
+        {/* Category Tabs */}
+        <div className="flex gap-2 border-b border-[var(--border-color)] overflow-x-auto scrollbar-hide">
+          {[
+            { id: 'all', name: 'すべて' },
+            { id: 'entertainment', name: 'エンタメ' },
+            { id: 'tools', name: 'ツール' }
+          ].map(cat => (
+            <button
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id)}
+              className={`pb-2 px-1 text-sm font-medium transition-colors relative ${activeCategory === cat.id ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]'}`}
+            >
+              {cat.name}
+              {activeCategory === cat.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--text-primary)]" />}
+            </button>
+          ))}
+        </div>
 
-          {showMyApps && (
-            <div className="mt-4 space-y-4">
-              {/* Favorited Apps */}
-              {favoriteApps.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">お気に入りアプリ</h3>
-                  <div className="space-y-2">
-                    {favoriteApps.map((app, index) => (
-                      <div
-                        key={app.id}
-                        draggable
-                        onDragStart={() => handleDragStart(index)}
-                        onDragOver={handleDragOver}
-                        onDrop={() => handleDrop(index)}
-                        className="flex items-center justify-between p-3 bg-[var(--bg-tertiary)] rounded-xl hover:bg-[var(--border-color)] transition-colors"
-                      >
-                        <div
-                          className="flex items-center gap-3 flex-1 cursor-pointer"
-                          onClick={() => handleFavoriteAppClick(app)}
-                        >
-                          <svg className="w-4 h-4 text-[var(--text-tertiary)] cursor-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="3" y1="9" x2="21" y2="9"/>
-                            <line x1="3" y1="15" x2="21" y2="15"/>
-                          </svg>
-                          <span className="text-sm text-[var(--text-primary)]">{app.name}</span>
-                          {app.type === 'external' && (
-                            <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">外部</span>
-                          )}
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleRemoveFromFavorites(app.id)
-                          }}
-                          className="text-xs text-red-400 hover:text-red-500 flex-shrink-0"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="18" y1="6" x2="6" y2="18"/>
-                            <line x1="6" y1="6" x2="18" y2="18"/>
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
+        {/* App List */}
+        <div className="space-y-4">
+          {filteredApps.map(app => (
+            <div key={app.id} className="flex items-center gap-4 group">
+              <button onClick={() => openApp(app)} className="flex-1 flex items-center gap-4 text-left">
+                <div className="w-14 h-14 rounded-2xl bg-[var(--bg-secondary)] flex items-center justify-center flex-shrink-0 shadow-sm">
+                  {app.icon("w-7 h-7 text-[var(--text-secondary)]")}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-[var(--text-primary)] truncate">{app.name}</h3>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${app.category === 'entertainment' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                      {app.category === 'entertainment' ? 'エンタメ' : 'ツール'}
+                    </span>
                   </div>
-                  <p className="text-xs text-[var(--text-tertiary)] mt-2">ドラッグして並び替えができます</p>
+                  <p className="text-xs text-[var(--text-tertiary)] line-clamp-1 mt-0.5">{app.description}</p>
                 </div>
-              )}
-
-              {/* Add Nurunuru Mini App */}
-              {availableMiniApps.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">ぬるぬるミニアプリを追加</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {availableMiniApps.map(app => (
-                      <button
-                        key={app.id}
-                        onClick={() => handleAddToFavorites(app.id, app.name)}
-                        className="px-3 py-1.5 text-sm bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-full hover:bg-[var(--line-green)] hover:text-white transition-colors"
-                      >
-                        + {app.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Add External Mini App */}
-              <div>
-                <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">外部ミニアプリを追加</h3>
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={externalAppName}
-                    onChange={(e) => setExternalAppName(e.target.value)}
-                    placeholder="アプリ名(例:おいくらサッツ)"
-                    className="w-full input-line text-sm"
-                  />
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      value={externalAppUrl}
-                      onChange={(e) => setExternalAppUrl(e.target.value)}
-                      placeholder="https://..."
-                      className="flex-1 input-line text-sm"
-                    />
-                    <button
-                      onClick={handleAddExternalApp}
-                      disabled={!externalAppUrl.trim().startsWith('http')}
-                      className="btn-line text-sm px-3 disabled:opacity-50"
-                    >
-                      追加
-                    </button>
-                  </div>
-                </div>
-                <p className="text-xs text-[var(--text-tertiary)] mt-1">名前とURLを入力して外部のミニアプリを追加できます</p>
-              </div>
-
-              {favoriteApps.length === 0 && (
-                <div className="py-6 text-center text-[var(--text-tertiary)]">
-                  <p className="text-sm">お気に入りのミニアプリはありません</p>
-                  <p className="text-xs mt-1">上から追加してください</p>
-                </div>
-              )}
+              </button>
+              <button
+                onClick={() => handleToggleFavorite(app.id, app.name)}
+                className={`p-2 transition-colors ${favoriteApps.some(a => a.id === app.id) ? 'text-yellow-500' : 'text-[var(--text-tertiary)]'}`}
+              >
+                <svg className="w-5 h-5" fill={favoriteApps.some(a => a.id === app.id) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+              </button>
             </div>
-          )}
-        </section>
+          ))}
 
-        {/* Default Zap Amount Setting */}
-        <section id="zap-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <button
-            onClick={() => setShowZapSettings(!showZapSettings)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-              </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">デフォルトZap金額</h2>
-              <span className="text-sm text-[var(--text-tertiary)]">({defaultZap} sats)</span>
-            </div>
-            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showZapSettings ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-
-          {showZapSettings && (
-            <div className="mt-4">
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                {ZAP_PRESETS.map(amount => (
-                  <button
-                    key={amount}
-                    onClick={() => handleSetDefaultZap(amount)}
-                    className={`py-2.5 px-3 rounded-xl text-sm font-medium transition-all ${
-                      defaultZap === amount
-                        ? 'bg-[var(--line-green)] text-white'
-                        : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--border-color)]'
-                    }`}
-                  >
-                    {amount}
-                  </button>
-                ))}
-              </div>
-
-              {showZapInput ? (
+          {/* External App Add Button */}
+          <div className="pt-4 border-t border-[var(--border-color)]">
+            {showExternalAdd ? (
+              <div className="space-y-3 p-4 bg-[var(--bg-secondary)] rounded-2xl animate-fadeIn">
+                <input
+                  type="text"
+                  value={externalAppName}
+                  onChange={(e) => setExternalAppName(e.target.value)}
+                  placeholder="アプリ名 (任意)"
+                  className="w-full input-line text-sm"
+                />
                 <div className="flex gap-2">
                   <input
-                    type="number"
-                    value={customZap}
-                    onChange={(e) => setCustomZap(e.target.value)}
-                    placeholder="カスタム金額"
-                    className="flex-1 input-line text-sm"
-                    min="1"
-                  />
-                  <button
-                    onClick={handleCustomZap}
-                    className="btn-line text-sm px-4"
-                  >
-                    設定
-                  </button>
-                  <button
-                    onClick={() => setShowZapInput(false)}
-                    className="btn-secondary text-sm px-3"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/>
-                      <line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowZapInput(true)}
-                  className="w-full py-2 text-sm text-[var(--line-green)] hover:underline"
-                >
-                  カスタム金額を設定
-                </button>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Relay Settings - Simplified */}
-        <section id="relay-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <button
-            onClick={() => setShowRelaySettings(!showRelaySettings)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
-                <circle cx="12" cy="12" r="8" strokeDasharray="4 2"/>
-              </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">リレー</h2>
-              <span className="text-xs text-[var(--text-tertiary)] truncate max-w-[120px]">{currentRelay.replace('wss://', '')}</span>
-            </div>
-            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showRelaySettings ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-
-          {showRelaySettings && (
-            <div className="mt-4 space-y-4">
-              {/* Region Display */}
-              <div className="p-3 bg-[var(--line-green)] bg-opacity-10 rounded-xl border border-[var(--line-green)]">
-                <p className="text-xs text-[var(--text-tertiary)] mb-1">地域</p>
-                <p className="text-sm font-medium text-[var(--text-primary)]">
-                  {selectedRegion ? selectedRegion.name : (userGeohash ? 'GPS検出' : '未設定')}
-                </p>
-                <p className="text-xs text-[var(--text-tertiary)] mt-1">
-                  メインリレー: {currentRelay.replace('wss://', '')}
-                </p>
-              </div>
-
-              {/* Region Selection */}
-              <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
-                <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">地域を選択</p>
-                <p className="text-xs text-[var(--text-tertiary)] mb-3">
-                  地域を選択すると最適なリレーが自動設定されます
-                </p>
-                <select
-                  value={selectedRegion?.id || ''}
-                  onChange={(e) => e.target.value && handleSelectRegion(e.target.value)}
-                  className="w-full py-2.5 px-3 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg text-sm border border-[var(--border-color)] focus:border-[var(--line-green)] focus:outline-none"
-                >
-                  <option value="">地域を選択...</option>
-                  <optgroup label="日本">
-                    {REGION_COORDINATES.filter(r => r.country === 'JP').map(r => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="アジア">
-                    {REGION_COORDINATES.filter(r => ['SG', 'TW', 'KR', 'CN', 'IN'].includes(r.country)).map(r => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="北米">
-                    {REGION_COORDINATES.filter(r => ['US', 'CA'].includes(r.country)).map(r => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="ヨーロッパ">
-                    {REGION_COORDINATES.filter(r => ['EU', 'UK'].includes(r.country)).map(r => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="その他">
-                    {REGION_COORDINATES.filter(r => ['AU', 'BR', 'Global'].includes(r.country)).map(r => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </optgroup>
-                </select>
-
-                {/* GPS auto-detect button */}
-                <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
-                  <button
-                    onClick={handleAutoDetectLocation}
-                    disabled={detectingLocation}
-                    className="w-full py-2 bg-[var(--bg-secondary)] hover:bg-[var(--border-color)] text-[var(--text-secondary)] rounded-lg text-xs font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {detectingLocation ? (
-                      <>
-                        <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
-                          <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
-                        </svg>
-                        位置情報を取得中...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="10" r="3"/>
-                          <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"/>
-                        </svg>
-                        GPSで自動検出
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Show nearest relays with distance */}
-                {nearestRelays.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
-                    <p className="text-xs text-[var(--text-tertiary)] mb-2">最寄りのリレー:</p>
-                    <div className="space-y-1">
-                      {nearestRelays.slice(0, 5).map(relay => (
-                        <button
-                          key={relay.url}
-                          onClick={() => handleSelectNearestRelay(relay)}
-                          className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between ${
-                            currentRelay === relay.url
-                              ? 'bg-[var(--line-green)] text-white'
-                              : 'bg-[var(--bg-secondary)] text-[var(--text-primary)] hover:bg-[var(--border-color)]'
-                          }`}
-                        >
-                          <span>{relay.name} ({relay.region})</span>
-                          <span className="opacity-70">{formatDistance(relay.distance)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* NIP-65 Outbox Model Configuration */}
-                {nip65Config && (
-                  <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
-                    <button
-                      onClick={() => setShowNip65Details(!showNip65Details)}
-                      className="w-full flex items-center justify-between text-xs text-[var(--text-secondary)] mb-2"
-                    >
-                      <span className="font-medium">NIP-65 Outbox Model 設定</span>
-                      <svg className={`w-4 h-4 transition-transform ${showNip65Details ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="6,9 12,15 18,9"/>
-                      </svg>
-                    </button>
-
-                    {showNip65Details && (
-                      <div className="space-y-3">
-                        {/* Outbox (Write) Relays */}
-                        {nip65Config.outbox?.length > 0 && (
-                          <div>
-                            <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
-                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M12 19l7-7 3 3-7 7-3-3z"/>
-                                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
-                              </svg>
-                              Outbox (投稿先) - {nip65Config.outbox.length}リレー
-                            </p>
-                            <div className="space-y-1">
-                              {nip65Config.outbox.map(relay => (
-                                <div key={relay.url} className="px-2 py-1 bg-green-500 bg-opacity-10 rounded text-xs text-[var(--text-primary)] flex justify-between">
-                                  <span className="truncate">{relay.name}</span>
-                                  <span className="text-green-500 opacity-70">{formatDistance(relay.distance)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Inbox (Read) Relays */}
-                        {nip65Config.inbox?.length > 0 && (
-                          <div>
-                            <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
-                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-                              </svg>
-                              Inbox (受信先) - {nip65Config.inbox.length}リレー
-                            </p>
-                            <div className="space-y-1">
-                              {nip65Config.inbox.map(relay => (
-                                <div key={relay.url} className="px-2 py-1 bg-blue-500 bg-opacity-10 rounded text-xs text-[var(--text-primary)] flex justify-between">
-                                  <span className="truncate">{relay.name}</span>
-                                  <span className="text-blue-500 opacity-70">{formatDistance(relay.distance)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Discovery Relays */}
-                        {nip65Config.discover?.length > 0 && (
-                          <div>
-                            <p className="text-xs text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
-                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <circle cx="11" cy="11" r="8"/>
-                                <path d="M21 21l-4.35-4.35"/>
-                              </svg>
-                              Discover (NIP-65検索) - {nip65Config.discover.length}リレー
-                            </p>
-                            <div className="space-y-1">
-                              {nip65Config.discover.map(relay => (
-                                <div key={relay.url} className="px-2 py-1 bg-purple-500 bg-opacity-10 rounded text-xs text-[var(--text-primary)]">
-                                  <span className="truncate">{relay.name}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Publish to NIP-65 */}
-              {pubkey && canSign() && (
-                <div className="p-3 bg-[var(--bg-tertiary)] rounded-xl">
-                  <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">リレーリストを発行 (NIP-65)</p>
-                  <p className="text-xs text-[var(--text-tertiary)] mb-3">
-                    現在のリレー設定を他のクライアントと共有できます
-                  </p>
-                  <button
-                    onClick={handlePublishRelayList}
-                    disabled={publishingNip65}
-                    className="w-full py-2.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {publishingNip65 ? (
-                      <>
-                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
-                          <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
-                        </svg>
-                        発行中...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 19l7-7 3 3-7 7-3-3z"/>
-                          <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
-                          <path d="M2 2l7.586 7.586"/>
-                          <circle cx="11" cy="11" r="2"/>
-                        </svg>
-                        リレーリストを発行
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-            </div>
-          )}
-        </section>
-
-        {/* Upload Server Settings */}
-        <section id="upload-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <button
-            onClick={() => setShowUploadSettings(!showUploadSettings)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">画像アップロード</h2>
-            </div>
-            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showUploadSettings ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-
-          {showUploadSettings && (
-            <div className="mt-4 space-y-3">
-              <p className="text-xs text-[var(--text-tertiary)]">
-                プロフィール画像のアップロード先
-              </p>
-              
-              {/* Preset servers */}
-              <div className="space-y-2">
-                {UPLOAD_SERVERS.map(server => (
-                  <button
-                    key={server.id}
-                    onClick={() => handleSelectUploadServer(server.url)}
-                    className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${
-                      uploadServerState === server.url
-                        ? 'bg-[var(--line-green)] text-white'
-                        : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
-                    }`}
-                  >
-                    <span className="text-sm font-medium">{server.name}</span>
-                    {uploadServerState === server.url && (
-                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                    )}
-                  </button>
-                ))}
-              </div>
-
-              {/* Custom Blossom URL */}
-              <div className="pt-2">
-                <p className="text-xs text-[var(--text-tertiary)] mb-2">
-                  カスタムBlossomサーバー
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={customBlossomUrl}
-                    onChange={(e) => setCustomBlossomUrl(e.target.value)}
+                    type="url"
+                    value={externalAppUrl}
+                    onChange={(e) => setExternalAppUrl(e.target.value)}
                     placeholder="https://..."
                     className="flex-1 input-line text-sm"
                   />
-                  <button
-                    onClick={handleSetCustomBlossom}
-                    className="btn-line text-sm px-3"
-                  >
-                    設定
+                  <button onClick={handleAddExternal} disabled={!externalAppUrl.trim().startsWith('http')} className="btn-line text-sm px-4">
+                    追加
                   </button>
                 </div>
+                <button onClick={() => setShowExternalAdd(false)} className="w-full text-xs text-[var(--text-tertiary)] hover:underline">
+                  キャンセル
+                </button>
               </div>
-
-              <p className="text-xs text-[var(--text-tertiary)] pt-2">
-                現在: {uploadServerState}
-              </p>
-            </div>
-          )}
-        </section>
-
-        {/* Mute List Management */}
-        <section id="mute-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <button
-            onClick={() => setShowMuteSettings(!showMuteSettings)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
-              </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">ミュートリスト</h2>
-              {(muteList.pubkeys.length + muteList.hashtags.length + muteList.words.length) > 0 && (
-                <span className="text-sm text-[var(--text-tertiary)]">
-                  ({muteList.pubkeys.length + muteList.hashtags.length + muteList.words.length}件)
-                </span>
-              )}
-            </div>
-            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showMuteSettings ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-
-          {showMuteSettings && (
-            <div className="mt-4">
-              {loading ? (
-                <div className="py-8 text-center text-[var(--text-tertiary)]">
-                  読み込み中...
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Muted Users */}
-                  {muteList.pubkeys.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">ミュートしたユーザー</h3>
-                      <div className="space-y-2">
-                        {muteList.pubkeys.map(pk => {
-                          const profile = mutedProfiles[pk]
-                          return (
-                            <div key={pk} className="flex items-center justify-between p-2 bg-[var(--bg-tertiary)] rounded-xl">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className="w-8 h-8 rounded-full overflow-hidden bg-[var(--bg-primary)] flex-shrink-0">
-                                  {profile?.picture ? (
-                                    <img
-                                      src={profile.picture}
-                                      alt=""
-                                      className="w-full h-full object-cover"
-                                      referrerPolicy="no-referrer"
-                                      onError={(e) => {
-                                        e.target.style.display = 'none'
-                                        e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center"><svg class="w-4 h-4 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>'
-                                      }}
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center">
-                                      <svg className="w-4 h-4 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                                      </svg>
-                                    </div>
-                                  )}
-                                </div>
-                                <span className="text-sm text-[var(--text-primary)] truncate">
-                                  {profile?.name || shortenPubkey(pk, 8)}
-                                </span>
-                              </div>
-                              <button
-                                onClick={() => handleUnmute('pubkey', pk)}
-                                disabled={removing === pk}
-                                className="text-xs text-red-400 hover:underline disabled:opacity-50 px-2"
-                              >
-                                {removing === pk ? '...' : '解除'}
-                              </button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Muted Hashtags */}
-                  {muteList.hashtags.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">ミュートしたハッシュタグ</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {muteList.hashtags.map(tag => (
-                          <div key={tag} className="flex items-center gap-1 px-3 py-1.5 bg-[var(--bg-tertiary)] rounded-full">
-                            <span className="text-sm text-[var(--text-primary)]">#{tag}</span>
-                            <button
-                              onClick={() => handleUnmute('hashtag', tag)}
-                              disabled={removing === tag}
-                              className="text-red-400 hover:text-red-500 disabled:opacity-50 ml-1"
-                            >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <line x1="18" y1="6" x2="6" y2="18"/>
-                                <line x1="6" y1="6" x2="18" y2="18"/>
-                              </svg>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Muted Words */}
-                  {muteList.words.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">ミュートしたワード</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {muteList.words.map(word => (
-                          <div key={word} className="flex items-center gap-1 px-3 py-1.5 bg-[var(--bg-tertiary)] rounded-full">
-                            <span className="text-sm text-[var(--text-primary)]">{word}</span>
-                            <button
-                              onClick={() => handleUnmute('word', word)}
-                              disabled={removing === word}
-                              className="text-red-400 hover:text-red-500 disabled:opacity-50 ml-1"
-                            >
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <line x1="18" y1="6" x2="6" y2="18"/>
-                                <line x1="6" y1="6" x2="18" y2="18"/>
-                              </svg>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Empty state */}
-                  {muteList.pubkeys.length === 0 && muteList.hashtags.length === 0 && muteList.words.length === 0 && (
-                    <div className="py-6 text-center text-[var(--text-tertiary)]">
-                      <p className="text-sm">ミュートしているユーザーやワードはありません</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Emoji Settings */}
-        <section id="emoji-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <button
-            onClick={() => {
-              setShowEmojiSettings(!showEmojiSettings)
-              if (!showEmojiSettings && userEmojis.length === 0 && userEmojiSets.length === 0) {
-                loadUserEmojis()
-              }
-            }}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
-                <line x1="9" y1="9" x2="9.01" y2="9"/>
-                <line x1="15" y1="9" x2="15.01" y2="9"/>
-              </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">カスタム絵文字</h2>
-              {(userEmojis.length > 0 || userEmojiSets.length > 0) && (
-                <span className="text-sm text-[var(--text-tertiary)]">
-                  ({userEmojiSets.length}セット)
-                </span>
-              )}
-            </div>
-            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showEmojiSettings ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-          
-          {showEmojiSettings && (
-            <div className="mt-4 space-y-4">
-              {loadingEmojis ? (
-                <div className="py-6 text-center text-[var(--text-tertiary)]">
-                  <p className="text-sm">読み込み中...</p>
-                </div>
-              ) : (
-                <>
-                  {/* Current Emoji Sets */}
-                  {userEmojiSets.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">
-                        登録済み絵文字セット
-                      </h3>
-                      <div className="space-y-2">
-                        {userEmojiSets.map((set, i) => (
-                          <div key={set.pointer} className="flex items-center justify-between p-2 bg-[var(--bg-tertiary)] rounded-xl">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-8 h-8 rounded bg-[var(--bg-secondary)] flex items-center justify-center flex-shrink-0">
-                                <svg className="w-5 h-5 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
-                                  <line x1="7" y1="7" x2="7.01" y2="7"/>
-                                </svg>
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-sm text-[var(--text-primary)] truncate block">
-                                  {set.name}
-                                </span>
-                                <span className="text-xs text-[var(--text-tertiary)]">
-                                  {set.emojiCount}個の絵文字
-                                </span>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleRemoveEmojiSet(set)}
-                              disabled={removingEmoji === set.pointer}
-                              className="text-xs text-red-500 hover:underline disabled:opacity-50 px-2 flex-shrink-0"
-                            >
-                              {removingEmoji === set.pointer ? '...' : '削除'}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Search Emoji Sets */}
-                  <div>
-                    <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">
-                      絵文字セットを追加
-                    </h3>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={emojiSetSearch}
-                        onChange={(e) => setEmojiSetSearch(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && searchEmojiSets()}
-                        placeholder="セット名で検索..."
-                        className="flex-1 input-line text-sm"
-                      />
-                      <button
-                        onClick={searchEmojiSets}
-                        disabled={searchingEmoji}
-                        className="px-3 py-2 bg-[var(--line-green)] text-white rounded-lg text-sm disabled:opacity-50"
-                      >
-                        {searchingEmoji ? '...' : '検索'}
-                      </button>
-                    </div>
-                    
-                    {/* Search Results */}
-                    {searchedEmojiSets.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {searchedEmojiSets.map((set) => (
-                          <div key={set.pointer} className="p-3 bg-[var(--bg-primary)] rounded-xl border border-[var(--border-color)]">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium text-[var(--text-primary)]">
-                                {set.name}
-                              </span>
-                              <button
-                                onClick={() => handleAddEmojiSet(set)}
-                                disabled={addingEmojiSet === set.pointer}
-                                className="text-xs text-[var(--line-green)] hover:underline disabled:opacity-50"
-                              >
-                                {addingEmojiSet === set.pointer ? '追加中...' : '追加'}
-                              </button>
-                            </div>
-                            <p className="text-xs text-[var(--text-tertiary)] mb-2">
-                              {set.emojiCount}個の絵文字
-                            </p>
-                            {/* Preview emojis */}
-                            {set.emojis && set.emojis.length > 0 && (
-                              <div className="flex gap-1">
-                                {set.emojis.map((emoji, j) => (
-                                  <img
-                                    key={j}
-                                    src={emoji.url}
-                                    alt={emoji.shortcode}
-                                    className="w-6 h-6 object-contain"
-                                    title={`:${emoji.shortcode}:`}
-                                  />
-                                ))}
-                                {set.emojiCount > 5 && (
-                                  <span className="text-xs text-[var(--text-tertiary)] self-center">
-                                    +{set.emojiCount - 5}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Empty state */}
-                  {userEmojiSets.length === 0 && userEmojis.length === 0 && searchedEmojiSets.length === 0 && (
-                    <div className="py-4 text-center text-[var(--text-tertiary)]">
-                      <p className="text-sm">登録済みの絵文字セットはありません</p>
-                      <p className="text-xs mt-1">上の検索から絵文字セットを追加できます</p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Badge Settings */}
-        <section id="badge-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <button
-            onClick={() => {
-              setShowBadgeSettings(!showBadgeSettings)
-              if (!showBadgeSettings && profileBadges.length === 0 && awardedBadges.length === 0) {
-                loadBadges()
-              }
-            }}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="8" r="6"/>
-                <path d="M12 14v8"/>
-                <path d="M9 18l3 3 3-3"/>
-              </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">プロフィールバッジ</h2>
-              {profileBadges.length > 0 && (
-                <span className="text-sm text-[var(--text-tertiary)]">
-                  ({profileBadges.length}/3)
-                </span>
-              )}
-            </div>
-            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showBadgeSettings ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-
-          {showBadgeSettings && (
-            <div className="mt-4">
-              {loadingBadges ? (
-                <div className="py-8 text-center text-[var(--text-tertiary)]">
-                  読み込み中...
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Current Profile Badges */}
-                  <div>
-                    <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">
-                      表示中のバッジ (最大3つ)
-                    </h3>
-                    {profileBadges.length > 0 ? (
-                      <div className="space-y-2">
-                        {profileBadges.map((badge, i) => (
-                          <div key={`${badge.ref}-${i}`} className="flex items-center justify-between p-2 bg-[var(--bg-tertiary)] rounded-xl">
-                            <div className="flex items-center gap-2 min-w-0">
-                              {badge.image ? (
-                                <img 
-                                  src={badge.image} 
-                                  alt="" 
-                                  className="w-8 h-8 rounded object-contain flex-shrink-0"
-                                  referrerPolicy="no-referrer"
-                                  onError={(e) => {
-                                    e.target.style.display = 'none'
-                                    e.target.nextSibling?.classList?.remove('hidden')
-                                  }}
-                                />
-                              ) : null}
-                              <div className={`w-8 h-8 rounded bg-[var(--bg-secondary)] flex items-center justify-center flex-shrink-0 ${badge.image ? 'hidden' : ''}`}>
-                                <svg className="w-5 h-5 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                  <circle cx="12" cy="8" r="6"/>
-                                  <path d="M12 14v8"/>
-                                  <path d="M9 18l3 3 3-3"/>
-                                </svg>
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-sm text-[var(--text-primary)] truncate block">
-                                  {badge.name || 'バッジ'}
-                                </span>
-                                {badge.description && (
-                                  <span className="text-xs text-[var(--text-tertiary)] truncate block">
-                                    {badge.description}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleRemoveBadgeFromProfile(badge)}
-                              disabled={removingBadge === badge.ref}
-                              className="text-xs text-red-400 hover:underline disabled:opacity-50 px-2 flex-shrink-0"
-                            >
-                              {removingBadge === badge.ref ? '...' : '削除'}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-[var(--text-tertiary)] py-2">
-                        表示中のバッジはありません
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Available Badges */}
-                  {awardedBadges.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-2">
-                        獲得済みバッジ
-                      </h3>
-                      <div className="space-y-2">
-                        {awardedBadges.map((badge, i) => (
-                          <div key={`${badge.ref}-${i}`} className="flex items-center justify-between p-2 bg-[var(--bg-tertiary)] rounded-xl">
-                            <div className="flex items-center gap-2 min-w-0">
-                              {badge.image ? (
-                                <img 
-                                  src={badge.image} 
-                                  alt="" 
-                                  className="w-8 h-8 rounded object-contain flex-shrink-0"
-                                  referrerPolicy="no-referrer"
-                                  onError={(e) => {
-                                    e.target.style.display = 'none'
-                                    e.target.nextSibling?.classList?.remove('hidden')
-                                  }}
-                                />
-                              ) : null}
-                              <div className={`w-8 h-8 rounded bg-[var(--bg-secondary)] flex items-center justify-center flex-shrink-0 ${badge.image ? 'hidden' : ''}`}>
-                                <svg className="w-5 h-5 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                  <circle cx="12" cy="8" r="6"/>
-                                  <path d="M12 14v8"/>
-                                  <path d="M9 18l3 3 3-3"/>
-                                </svg>
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-sm text-[var(--text-primary)] truncate block">
-                                  {badge.name || 'バッジ'}
-                                </span>
-                                {badge.description && (
-                                  <span className="text-xs text-[var(--text-tertiary)] truncate block">
-                                    {badge.description}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleAddBadgeToProfile(badge)}
-                              disabled={addingBadge === badge.ref || profileBadges.length >= 3}
-                              className="text-xs text-[var(--line-green)] hover:underline disabled:opacity-50 px-2 flex-shrink-0"
-                            >
-                              {addingBadge === badge.ref ? '...' : '追加'}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {profileBadges.length === 0 && awardedBadges.length === 0 && (
-                    <div className="py-6 text-center text-[var(--text-tertiary)]">
-                      <p className="text-sm">獲得したバッジはありません</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* ElevenLabs STT Settings */}
-        <section id="elevenlabs-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <button
-            onClick={() => setShowElevenLabsSettings(!showElevenLabsSettings)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">ElevenLabs音声入力</h2>
-            </div>
-            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showElevenLabsSettings ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-
-          {showElevenLabsSettings && (
-            <div className="mt-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">APIキー</label>
-                <input
-                  type="password"
-                  value={elevenLabsApiKey}
-                  onChange={(e) => {
-                    setElevenLabsApiKey(e.target.value)
-                    localStorage.setItem('elevenlabs_api_key', e.target.value)
-                  }}
-                  className="w-full input-line text-sm"
-                  placeholder="xi-api-key..."
-                />
-                <p className="text-xs text-[var(--text-tertiary)] mt-1">
-                  <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener noreferrer" className="text-[var(--line-green)] hover:underline">
-                    ElevenLabsダッシュボード
-                  </a>から取得してください
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">言語</label>
-                <select
-                  value={elevenLabsLanguage}
-                  onChange={(e) => {
-                    setElevenLabsLanguage(e.target.value)
-                    localStorage.setItem('elevenlabs_language', e.target.value)
-                  }}
-                  className="w-full py-2.5 px-3 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg text-sm border border-[var(--border-color)] focus:border-[var(--line-green)] focus:outline-none"
-                >
-                  <option value="jpn">日本語 (Japanese)</option>
-                  <option value="eng">英語 (English)</option>
-                  <option value="cmn">中国語 (Chinese)</option>
-                  <option value="spa">スペイン語 (Spanish)</option>
-                  <option value="fra">フランス語 (French)</option>
-                  <option value="deu">ドイツ語 (German)</option>
-                  <option value="ita">イタリア語 (Italian)</option>
-                  <option value="por">ポルトガル語 (Portuguese)</option>
-                  <option value="hin">ヒンディー語 (Hindi)</option>
-                </select>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Scheduler Mini App - 調整くん (Collapsible, at bottom) */}
-        <section id="scheduler-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <button
-            onClick={() => setShowScheduler(!showScheduler)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">調整くん</h2>
-            </div>
-            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showScheduler ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-
-          {showScheduler && (
-            <div className="mt-4">
-              <SchedulerApp pubkey={pubkey} />
-            </div>
-          )}
-        </section>
-
-        {/* Event Backup Mini App - イベントバックアップ */}
-        <section id="event-backup-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <button
-            onClick={() => setShowEventBackup(!showEventBackup)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">イベントバックアップ</h2>
-            </div>
-            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showEventBackup ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-
-          {showEventBackup && (
-            <div className="mt-4">
-              <EventBackupApp pubkey={pubkey} />
-            </div>
-          )}
-        </section>
-
-        {/* NIP-62: Request to Vanish - 削除リクエスト */}
-        <section id="vanish-request-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
-          <button
-            onClick={() => setShowVanishRequest(!showVanishRequest)}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M3 6h18"/>
-                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
-                <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                <line x1="10" y1="11" x2="10" y2="17"/>
-                <line x1="14" y1="11" x2="14" y2="17"/>
-              </svg>
-              <h2 className="font-semibold text-[var(--text-primary)]">削除リクエスト </h2>
-            </div>
-            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showVanishRequest ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-
-          {showVanishRequest && (
-            <div className="mt-4 space-y-4">
-              {/* Warning */}
-              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
-                <p className="text-sm text-red-400 font-medium flex items-center gap-2">
-                  <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                  </svg>
-                  この操作は取り消せません
-                </p>
-                <p className="text-xs text-[var(--text-tertiary)] mt-1">
-                  削除リクエスト(kind 62)を送信すると、対象リレーはあなたの全イベントを削除します。
-                  リレーがNIP-62に対応している場合のみ有効です。
-                </p>
-              </div>
-
-              {/* Mode Selection */}
-              <div className="space-y-2">
-                <p className="text-sm text-[var(--text-secondary)]">削除範囲</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setVanishMode('relay')}
-                    className={`flex-1 py-2 px-3 text-sm rounded-lg transition-colors ${
-                      vanishMode === 'relay'
-                        ? 'bg-[var(--line-green)] text-white'
-                        : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
-                    }`}
-                  >
-                    特定リレー
-                  </button>
-                  <button
-                    onClick={() => setVanishMode('global')}
-                    className={`flex-1 py-2 px-3 text-sm rounded-lg transition-colors ${
-                      vanishMode === 'global'
-                        ? 'bg-red-500 text-white'
-                        : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
-                    }`}
-                  >
-                    全リレー
-                  </button>
-                </div>
-              </div>
-
-              {/* Relay Selection (for relay mode) */}
-              {vanishMode === 'relay' && (
-                <div className="space-y-2">
-                  <label className="text-sm text-[var(--text-secondary)]">対象リレー</label>
-                  <input
-                    type="text"
-                    value={vanishRelay}
-                    onChange={(e) => setVanishRelay(e.target.value)}
-                    placeholder="wss://relay.example.com"
-                    className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--line-green)]/50"
-                  />
-                  <div className="flex flex-wrap gap-1">
-                    <button
-                      onClick={() => setVanishRelay(getDefaultRelay())}
-                      className="text-xs px-2 py-1 rounded bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-                    >
-                      現在のリレー
-                    </button>
-                    {FALLBACK_RELAYS.slice(0, 3).map(relay => (
-                      <button
-                        key={relay}
-                        onClick={() => setVanishRelay(relay)}
-                        className="text-xs px-2 py-1 rounded bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] truncate max-w-[120px]"
-                      >
-                        {relay.replace('wss://', '')}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Global Warning */}
-              {vanishMode === 'global' && (
-                <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3">
-                  <p className="text-sm text-red-300 font-medium">
-                    ⚠️ 全リレーへの削除リクエスト
-                  </p>
-                  <p className="text-xs text-red-300/80 mt-1">
-                    この操作は全てのリレーにあなたの全イベント削除をリクエストします。
-                    一度実行すると、投稿・いいね・フォローリストなど全てのデータが削除される可能性があります。
-                  </p>
-                </div>
-              )}
-
-              {/* Reason (optional) */}
-              <div className="space-y-2">
-                <label className="text-sm text-[var(--text-secondary)]">理由（任意）</label>
-                <textarea
-                  value={vanishReason}
-                  onChange={(e) => setVanishReason(e.target.value)}
-                  placeholder="削除理由を入力..."
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--line-green)]/50 resize-none"
-                />
-              </div>
-
-              {/* Confirmation */}
-              <div className="space-y-2">
-                <label className="text-sm text-[var(--text-secondary)]">
-                  確認のため「削除」と入力してください
-                </label>
-                <input
-                  type="text"
-                  value={vanishConfirm}
-                  onChange={(e) => setVanishConfirm(e.target.value)}
-                  placeholder="削除"
-                  className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-red-500/50"
-                />
-              </div>
-
-              {/* Submit Button */}
+            ) : (
               <button
-                onClick={async () => {
-                  if (vanishConfirm !== '削除') {
-                    alert('確認のため「削除」と入力してください')
-                    return
-                  }
-                  if (vanishMode === 'relay' && !vanishRelay) {
-                    alert('リレーURLを入力してください')
-                    return
-                  }
-                  if (!canSign()) {
-                    alert('署名機能が利用できません')
-                    return
-                  }
-
-                  const confirmMessage = vanishMode === 'global'
-                    ? '本当に全リレーへ削除リクエストを送信しますか？この操作は取り消せません。'
-                    : `${vanishRelay} への削除リクエストを送信しますか？`
-
-                  if (!confirm(confirmMessage)) return
-
-                  setVanishLoading(true)
-                  setVanishResult(null)
-
-                  try {
-                    let result
-                    if (vanishMode === 'global') {
-                      result = await requestGlobalVanish(vanishReason)
-                    } else {
-                      result = await requestVanishFromRelay(vanishRelay, vanishReason)
-                    }
-
-                    setVanishResult({
-                      success: result.success,
-                      message: result.success
-                        ? `削除リクエストを送信しました（${vanishMode === 'global' ? '全リレー' : vanishRelay}）`
-                        : '送信に失敗しました'
-                    })
-
-                    // Reset form on success
-                    if (result.success) {
-                      setVanishConfirm('')
-                      setVanishReason('')
-                    }
-                  } catch (e) {
-                    console.error('Vanish request failed:', e)
-                    setVanishResult({
-                      success: false,
-                      message: 'エラー: ' + e.message
-                    })
-                  } finally {
-                    setVanishLoading(false)
-                  }
-                }}
-                disabled={vanishLoading || vanishConfirm !== '削除' || (vanishMode === 'relay' && !vanishRelay)}
-                className={`w-full py-3 text-sm font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  vanishMode === 'global'
-                    ? 'bg-red-500 hover:bg-red-600 text-white'
-                    : 'bg-orange-500 hover:bg-orange-600 text-white'
-                }`}
+                onClick={() => setShowExternalAdd(true)}
+                className="w-full py-4 flex items-center justify-center gap-2 text-sm text-[var(--text-secondary)] border-2 border-dashed border-[var(--border-color)] rounded-2xl hover:bg-[var(--bg-secondary)] transition-colors"
               >
-                {vanishLoading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
-                      <path d="M12 2a10 10 0 019.5 7" strokeLinecap="round"/>
-                    </svg>
-                    送信中...
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M3 6h18"/>
-                      <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/>
-                      <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                    </svg>
-                    {vanishMode === 'global' ? '全リレーに削除リクエスト送信' : '削除リクエスト送信'}
-                  </span>
-                )}
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                外部ミニアプリを追加
               </button>
-
-              {/* Result Message */}
-              {vanishResult && (
-                <div className={`p-3 rounded-xl ${
-                  vanishResult.success
-                    ? 'bg-green-500/10 border border-green-500/30 text-green-400'
-                    : 'bg-red-500/10 border border-red-500/30 text-red-400'
-                }`}>
-                  <p className="text-sm">{vanishResult.message}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Open Source Link */}
-        <section className="text-center py-4">
-          <a
-            href="https://github.com/tami1A84/null--nostr"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-            </svg>
-            <span>ソースコード（GitHub）</span>
-          </a>
-        </section>
+            )}
+          </div>
+        </div>
       </div>
+
+      <MiniAppModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={selectedApp?.name}
+      >
+        {renderAppContent()}
+      </MiniAppModal>
     </div>
   )
 }
