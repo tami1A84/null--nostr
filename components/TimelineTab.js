@@ -321,7 +321,13 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           const hasBirthdayToday = mutualFollowPubkeys.some(pk => {
             const profile = profileMap[pk]
             if (profile?.birthday) {
-              return profile.birthday.endsWith(todayMonthDay)
+              if (typeof profile.birthday === 'string') {
+                return profile.birthday.endsWith(todayMonthDay)
+              } else if (typeof profile.birthday === 'object') {
+                const bMonth = String(profile.birthday.month || '').padStart(2, '0')
+                const bDay = String(profile.birthday.day || '').padStart(2, '0')
+                return `${bMonth}-${bDay}` === todayMonthDay
+              }
             }
             return false
           })
