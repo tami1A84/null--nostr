@@ -361,6 +361,11 @@ export default function PostItem({
   
   // Extract client tag
   const clientTag = post.tags?.find(t => t[0] === 'client')?.[1] || null
+
+  // ProofMode verification (Kind 34236)
+  const isDivine = post.kind === 34236
+  const verificationLevel = post.tags?.find(t => t[0] === 'verification-level')?.[1]
+  const videoUrlTag = post.tags?.find(t => t[0] === 'url')?.[1]
   
   // Replace custom emoji shortcodes with images
   const emojifyContent = (text) => {
@@ -414,16 +419,21 @@ export default function PostItem({
 
   // Render content with nostr: links, URLs, images, hashtags, and custom emoji
   const renderContent = (content) => {
-    if (!content) return null
+    if (!content && !isDivine) return null
 
     const combinedRegex = /(https?:\/\/[^\s]+|nostr:(?:note1|nevent1|npub1|nprofile1|naddr1)[a-z0-9]{58,}|#[^\s#\u3000]+)/gi
-    const parts = content.split(combinedRegex).filter(Boolean)
+    const parts = (content || '').split(combinedRegex).filter(Boolean)
 
     // Collect images, videos, and other content separately
     const images = []
     const videos = []
     const previewUrls = []
     const textParts = []
+
+    // For Kind 34236, add the video URL from tags if not in content
+    if (isDivine && videoUrlTag && !content?.includes(videoUrlTag)) {
+      videos.push(videoUrlTag)
+    }
 
     parts.forEach((part, i) => {
       // Check for hashtags
@@ -602,13 +612,47 @@ export default function PostItem({
     const renderVideos = () => {
       if (videos.length === 0) return null
       return videos.map((url, idx) => (
-        <video
-          key={`video-${idx}`}
-          src={url}
-          controls
-          className="mt-2 rounded-lg max-h-72 w-full"
-          onClick={(e) => e.stopPropagation()}
-        />
+        <div key={`video-${idx}`} className="relative mt-2">
+          <video
+            src={url}
+            autoPlay={isDivine}
+            loop={isDivine}
+            muted={isDivine}
+            playsInline
+            controls={!isDivine}
+            className={`rounded-lg w-full ${isDivine ? 'aspect-square object-cover max-w-[400px]' : 'max-h-72'}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (isDivine) {
+                // Toggle mute on tap for loop videos
+                e.target.muted = !e.target.muted
+              }
+            }}
+          />
+          {isDivine && (
+            <div className="absolute top-2 right-2 flex gap-2">
+              {verificationLevel && (
+                <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow-sm ${
+                  verificationLevel.startsWith('verified') ? 'bg-green-600/80' : 'bg-gray-600/80'
+                }`}>
+                  {verificationLevel === 'verified_mobile' ? '✅ MOBILE VERIFIED' :
+                   verificationLevel === 'verified_web' ? '✅ WEB VERIFIED' :
+                   'UNVERIFIED'}
+                </div>
+              )}
+              <div className="px-2 py-0.5 bg-black/50 backdrop-blur-sm rounded-md text-[10px] font-bold text-white">
+                6.3s LOOP
+              </div>
+            </div>
+          )}
+          {isDivine && (
+             <div className="absolute bottom-2 right-2 p-1.5 bg-black/40 rounded-full text-white/80 pointer-events-none">
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                   <path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" />
+                </svg>
+             </div>
+          )}
+        </div>
       ))
     }
 

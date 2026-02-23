@@ -5,6 +5,7 @@ import { publishEvent, nip19 } from '@/lib/nostr'
 import { uploadImagesInParallel } from '@/lib/imageUtils'
 import EmojiPicker from './EmojiPicker'
 import { useSTT } from '@/hooks/useSTT'
+import DivineVideoRecorder from './DivineVideoRecorder'
 
 // Extract hashtags from content (NIP-01)
 function extractHashtags(content) {
@@ -79,6 +80,8 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
   const [selectedEmojis, setSelectedEmojis] = useState([])
   const [contentWarning, setContentWarning] = useState('')
   const [showCWInput, setShowCWInput] = useState(false)
+  const [showRecorder, setShowRecorder] = useState(false)
+  const [recordedVideo, setRecordedVideo] = useState(null)
 
   // Speech to Text
   const handleTranscript = useCallback((text) => {
@@ -146,7 +149,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
   const handlePost = async () => {
     const content = postContent.trim()
-    if (!content && imageFiles.length === 0) return
+    if (!content && imageFiles.length === 0 && !recordedVideo) return
     if (posting) return
 
     try {
@@ -154,7 +157,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
       let finalContent = content
 
       // Upload images if selected
-      if (imageFiles.length > 0) {
+      if (imageFiles.length > 0 && !recordedVideo) {
         try {
           setUploadingImage(true)
           setUploadProgress(`画像をアップロード中... (0/${imageFiles.length})`)
@@ -229,8 +232,20 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
         tags.push(['t', hashtag])
       })
 
+      // Add video tags if present
+      if (recordedVideo) {
+        tags.push(['url', recordedVideo.url])
+        tags.push(['m', recordedVideo.mimeType])
+        tags.push(['size', String(recordedVideo.size)])
+        if (recordedVideo.proofTags) {
+          // Filter out duplicate 'x' tags if they exist
+          const proofTags = recordedVideo.proofTags.filter(t => t[0] !== 'x' || !tags.some(tt => tt[0] === 'x'))
+          tags.push(...proofTags)
+        }
+      }
+
       await publishEvent({
-        kind: 1,
+        kind: recordedVideo ? 34236 : 1,
         content: finalContent,
         tags,
         created_at: Math.floor(Date.now() / 1000),
@@ -268,9 +283,9 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
     }
   }
 
-  const isValid = postContent.trim() || imageFiles.length > 0
+    const isValid = postContent.trim() || imageFiles.length > 0 || recordedVideo
   const isLoading = posting || uploadingImage
-  const canAddMoreImages = imageFiles.length < MAX_IMAGES
+    const canAddMoreImages = imageFiles.length < MAX_IMAGES && !recordedVideo
 
   return (
     <div
@@ -310,7 +325,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
         </div>
 
         {/* Content */}
-        <div className="p-4">
+        <div className="p-4 overflow-y-auto max-h-[60vh]">
           {/* Content Warning Input */}
           {showCWInput && (
             <div className="mb-3 pb-3 border-b border-[var(--border-color)]">
@@ -350,7 +365,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
               maxLength={10000}
             />
             {((postContent && (postContent.includes('#') || selectedEmojis.length > 0)) || partialText || isSTTActive) && (
-              <div className="w-full h-32 overflow-y-auto pointer-events-none">
+              <div className="w-full min-h-[128px] overflow-y-auto pointer-events-none">
                 <ContentPreview
                   content={postContent + (partialText ? (postContent ? ' ' : '') + partialText : '')}
                   customEmojis={selectedEmojis}
@@ -359,8 +374,35 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
             )}
           </div>
 
+          {/* Video Preview */}
+          {recordedVideo && (
+            <div className="mt-3 relative aspect-square w-full max-w-[300px] mx-auto overflow-hidden rounded-xl bg-black">
+              <video
+                src={recordedVideo.url}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
+              <button
+                onClick={() => setRecordedVideo(null)}
+                className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+                aria-label="動画を削除"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+              <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-[var(--line-green)] text-white text-[10px] font-bold rounded-md">
+                6.3s LOOP
+              </div>
+            </div>
+          )}
+
           {/* Image Previews - Grid layout like TalkTab */}
-          {imagePreviews.length > 0 && (
+          {imagePreviews.length > 0 && !recordedVideo && (
             <div className="mt-3">
               <div className="flex flex-wrap gap-2">
                 {imagePreviews.map((preview, index) => (
@@ -410,6 +452,18 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
         {/* Toolbar */}
         <div className="px-4 pb-4 flex items-center gap-3 border-t border-[var(--border-color)] pt-3">
+          {/* Video Recorder button */}
+          <button
+            onClick={() => setShowRecorder(true)}
+            className={`action-btn p-2 ${recordedVideo ? 'text-[var(--line-green)]' : 'text-[var(--text-secondary)]'}`}
+            title="6秒動画を録画"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="23 7 16 12 23 17 23 7"></polygon>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+            </svg>
+          </button>
+
           {/* Image upload button */}
           <input
             ref={fileInputRef}
@@ -494,6 +548,19 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
           </span>
         </div>
       </div>
+
+      {/* Video Recorder Modal */}
+      {showRecorder && (
+        <DivineVideoRecorder
+          onComplete={(data) => {
+            setRecordedVideo(data)
+            setShowRecorder(false)
+            setImageFiles([])
+            setImagePreviews([])
+          }}
+          onClose={() => setShowRecorder(false)}
+        />
+      )}
     </div>
   )
 }
