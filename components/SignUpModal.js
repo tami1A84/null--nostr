@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { nip19 } from 'nostr-tools'
-import { savePubkey, setStoredPrivateKey, publishRelayListMetadata } from '@/lib/nostr'
-import { autoDetectRelays, formatDistance, REGION_COORDINATES, selectRelaysByRegion } from '@/lib/geohash'
+import { savePubkey, setStoredPrivateKey, publishRelayListMetadata, setDefaultRelay } from '@/lib/nostr'
+import { autoDetectRelays, formatDistance, REGION_COORDINATES, selectRelaysByRegion, saveSelectedRegion } from '@/lib/geohash'
 
 /**
  * SignUpModal Component
@@ -27,6 +27,9 @@ export default function SignUpModal({ onClose, onSuccess, nosskeyManager }) {
     setError('')
     try {
       if (!nosskeyManager) throw new Error('Passkey manager not initialized')
+
+      // Ensure manager is available globally for other libraries
+      window.nosskeyManager = nosskeyManager
 
       // 1. Create passkey
       const credentialId = await nosskeyManager.createPasskey({
@@ -78,6 +81,12 @@ export default function SignUpModal({ onClose, onSuccess, nosskeyManager }) {
       if (result.nearestRelays && result.nearestRelays.length > 0) {
         setRecommendedRelays(result.nearestRelays)
         setLocationInfo(result.region || { name: '検出された地域' })
+
+        // Save detected region ID for persistence in Mini App settings
+        if (result.region?.id) {
+          saveSelectedRegion(result.region.id)
+        }
+
         setSelectionMode('auto')
       } else {
         // Fallback to manual if auto fails
@@ -104,25 +113,36 @@ export default function SignUpModal({ onClose, onSuccess, nosskeyManager }) {
   // Finish setup and publish relay list
   const handleFinishSetup = async () => {
     setLoading(true)
+
+    // 1. Basic persistence (must happen even if publish fails)
+    savePubkey(createdPubkey)
+    localStorage.setItem('nurunuru_login_method', 'nosskey')
+
+    if (recommendedRelays.length > 0) {
+      // Set the first relay as default for the application immediately
+      if (recommendedRelays[0]?.url) {
+        setDefaultRelay(recommendedRelays[0].url)
+      }
+
+      // Ensure region is saved for Mini App persistence
+      if (locationInfo?.id) {
+        saveSelectedRegion(locationInfo.id)
+      }
+    }
+
     try {
       if (recommendedRelays.length > 0) {
-        // Publish NIP-65 relay list
+        // 2. Publish NIP-65 relay list (may prompt for passkey signature)
         await publishRelayListMetadata(recommendedRelays.map(r => ({
           url: r.url,
           read: true,
           write: true
         })))
       }
-
-      // Save pubkey and complete
-      savePubkey(createdPubkey)
-      localStorage.setItem('nurunuru_login_method', 'nosskey')
       setStep('success')
     } catch (e) {
-      console.error('Setup finish error:', e)
-      // Even if relay setup fails, we can proceed to success as the key is created
-      savePubkey(createdPubkey)
-      localStorage.setItem('nurunuru_login_method', 'nosskey')
+      console.error('Relay list publication failed, but account is created:', e)
+      // Proceed to success anyway
       setStep('success')
     } finally {
       setLoading(false)

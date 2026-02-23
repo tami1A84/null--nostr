@@ -382,6 +382,19 @@ export default function MiniAppTab({ pubkey, onLogout }) {
         setNip65Config(result.nip65Config)
         setNearestRelays(result.nearestRelays || [])
       }
+    } else {
+      // If no manual region selected, try to restore from GPS location
+      const savedLocation = loadUserLocation()
+      if (savedLocation) {
+        try {
+          const config = generateRelayListByLocation(savedLocation.lat, savedLocation.lon)
+          const nearest = findNearestRelays(savedLocation.lat, savedLocation.lon, 10)
+          setNip65Config(config)
+          setNearestRelays(nearest)
+        } catch (e) {
+          console.error('Failed to restore GPS relay config:', e)
+        }
+      }
     }
 
     // Load upload server setting
