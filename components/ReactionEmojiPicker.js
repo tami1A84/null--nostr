@@ -9,18 +9,6 @@ import { getImageUrl } from '@/lib/imageUtils'
 const KIND_EMOJI_LIST = 10030
 const KIND_EMOJI_SET = 30030
 
-// Frequently used Unicode emojis for quick reactions
-const QUICK_EMOJIS = [
-  { char: '\u2764\uFE0F', label: 'heart' },
-  { char: '\uD83D\uDE02', label: 'joy' },
-  { char: '\uD83D\uDE0D', label: 'heart_eyes' },
-  { char: '\uD83D\uDE31', label: 'scream' },
-  { char: '\uD83D\uDE22', label: 'cry' },
-  { char: '\uD83D\uDE4F', label: 'pray' },
-  { char: '\uD83D\uDD25', label: 'fire' },
-  { char: '\uD83C\uDF89', label: 'tada' },
-]
-
 export default function ReactionEmojiPicker({ pubkey, onSelect, onClose }) {
   const [emojis, setEmojis] = useState([])
   const [emojiSets, setEmojiSets] = useState([])
@@ -145,10 +133,6 @@ export default function ReactionEmojiPicker({ pubkey, onSelect, onClose }) {
         ? emojis
         : emojiSets.find(s => s.name === activeTab)?.emojis || []
 
-  const handleUnicodeSelect = (emoji) => {
-    onSelect({ type: 'unicode', content: emoji.char })
-  }
-
   const handleCustomSelect = (emoji) => {
     onSelect({ type: 'custom', shortcode: emoji.shortcode, url: emoji.url })
   }
@@ -192,27 +176,9 @@ export default function ReactionEmojiPicker({ pubkey, onSelect, onClose }) {
           </button>
         </div>
 
-        {/* Quick Unicode Emojis */}
-        <div className="px-4 pb-3">
-          <div className="grid grid-cols-8 gap-1">
-            {QUICK_EMOJIS.map((emoji) => (
-              <button
-                key={emoji.label}
-                onClick={() => handleUnicodeSelect(emoji)}
-                className="aspect-square flex items-center justify-center rounded-xl hover:bg-[var(--bg-tertiary)] active:scale-90 transition-all text-2xl"
-                title={emoji.label}
-              >
-                {emoji.char}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Custom Emoji Section */}
         {pubkey && (
           <>
-            <div className="border-t border-[var(--border-color)]" />
-
             {/* Search */}
             <div className="px-4 py-2">
               <input
