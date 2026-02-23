@@ -364,7 +364,7 @@ export default function PostItem({
 
   // ProofMode verification (Kind 34236)
   const isDivine = post.kind === 34236
-  const verificationLevel = post.tags?.find(t => t[0] === 'verification-level')?.[1]
+  const verificationLevel = post.tags?.find(t => t[0] === 'verification')?.[1] || post.tags?.find(t => t[0] === 'verification-level')?.[1]
   const videoUrlTag = post.tags?.find(t => t[0] === 'url')?.[1]
   
   // Replace custom emoji shortcodes with images

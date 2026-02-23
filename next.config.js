@@ -77,6 +77,8 @@ const nextConfig = {
                 "img-src 'self' data: blob: https:",
                 // Fonts: self
                 "font-src 'self' data:",
+                // Media: allow video from self, data/blob and https (for diVine videos)
+                "media-src 'self' https: data: blob:",
                 // Connect: self + wss (Nostr relay WebSockets) + HTTPS APIs + nostr-login + ElevenLabs
                 "connect-src 'self' wss: https: https://unpkg.com https://nostr-login.pages.dev https://*.nostr-login.pages.dev https://api.elevenlabs.io",
                 // Workers: self (Service Worker) + blob/data for worklets

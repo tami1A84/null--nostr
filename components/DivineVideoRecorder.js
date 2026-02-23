@@ -12,6 +12,7 @@ export default function DivineVideoRecorder({ onComplete, onClose }) {
   const chunksRef = useRef([])
   const progressIntervalRef = useRef(null)
   const startTimeRef = useRef(0)
+  const streamRef = useRef(null)
 
   const [stream, setStream] = useState(null)
   const [isReady, setIsReady] = useState(false)
@@ -71,7 +72,11 @@ export default function DivineVideoRecorder({ onComplete, onClose }) {
         try {
           console.log('Trying camera constraints:', constraints)
           const s = await navigator.mediaDevices.getUserMedia(constraints)
+
+          // Store in ref and state
+          streamRef.current = s
           setStream(s)
+
           if (videoRef.current) {
             videoRef.current.srcObject = s
           }
@@ -89,8 +94,16 @@ export default function DivineVideoRecorder({ onComplete, onClose }) {
     }
     setupCamera()
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop())
+      // Robust cleanup using ref
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => {
+          track.stop()
+          console.log('Camera track stopped:', track.kind)
+        })
+        streamRef.current = null
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
       }
       if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
     }
@@ -172,7 +185,8 @@ export default function DivineVideoRecorder({ onComplete, onClose }) {
         url: videoUrl,
         proofTags,
         mimeType: blob.type,
-        size: blob.size
+        size: blob.size,
+        dim: '720x720'
       })
     } catch (err) {
       console.error('Video processing failed:', err)

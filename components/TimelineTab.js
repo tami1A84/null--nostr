@@ -1189,16 +1189,32 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       // Add client tag
       event.tags = [...event.tags, ['client', 'nullnull']]
 
-      // Add video tags if present
+      // Add video tags if present (imeta for diVine compatibility)
       if (recordedVideo) {
         event.kind = 34236
+        const hashTag = recordedVideo.proofTags?.find(t => t[0] === 'x')
+        const hash = hashTag ? hashTag[1] : ''
+
+        // Build imeta tag
+        const imetaParts = [
+          `url ${recordedVideo.url}`,
+          `m ${recordedVideo.mimeType}`,
+          `size ${recordedVideo.size}`,
+          `dim ${recordedVideo.dim || '720x720'}`
+        ]
+        if (hash) imetaParts.push(`x ${hash}`)
+
+        event.tags.push(['imeta', ...imetaParts])
+
+        // Also keep individual tags for broader compatibility
         event.tags.push(['url', recordedVideo.url])
         event.tags.push(['m', recordedVideo.mimeType])
-        event.tags.push(['size', String(recordedVideo.size)])
+        event.tags.push(['x', hash])
+
         if (recordedVideo.proofTags) {
-          // Filter out duplicate 'x' tags if they exist
-          const proofTags = recordedVideo.proofTags.filter(t => t[0] !== 'x' || !event.tags.some(tt => tt[0] === 'x'))
-          event.tags.push(...proofTags)
+          // Add verification and proofmode tags
+          const diVineTags = recordedVideo.proofTags.filter(t => t[0] === 'verification' || t[0] === 'proofmode')
+          event.tags.push(...diVineTags)
         }
       }
 
