@@ -50,6 +50,12 @@
 - 検索結果からいいね・リポスト・Zap
 - 最近の検索履歴
 
+### Video & Audio
+
+- **Divine Video**: 6.3秒のループ動画投稿（Kind 34236）
+- **ProofMode**: PGP署名による動画の真正性検証（AI生成・改ざん防止）
+- **ElevenLabs STT**: Scribe v2 を使用した高精度なリアルタイム音声入力（日本語対応）
+
 ### Mini Apps（Settings）
 
 - デフォルトZap金額設定
@@ -117,8 +123,10 @@ npm run dev
 |----------|------------|
 | Framework | Next.js 14.2 |
 | UI | React 18.3, Tailwind CSS 3.4 |
-| Protocol | nostr-tools 2.17 |
+| Protocol | nostr-tools 2.17, rx-nostr |
 | Auth | [nosskey-sdk](https://github.com/ocknamo/nosskey-sdk) 0.0.4 |
+| STT | ElevenLabs Scribe v2 |
+| Core | Rust (NuruNuru Core), nostrdb |
 | Search | [searchnos](https://github.com/darashi/searchnos) (NIP-50) |
 
 ---
@@ -152,6 +160,7 @@ npm run dev
 | NIP-65 | Relay List Metadata（リレーリスト・Outbox Model） |
 | NIP-70 | Protected Events（保護イベントの検出・作成） |
 | NIP-98 | HTTP Auth（画像アップロード用） |
+| Kind 34236 | Short Loop Video (Divine) |
 
 ---
 
@@ -332,38 +341,49 @@ GPS共有を望まない場合、手動で地域を選択できます：
 ## Architecture
 
 ```
+src/
+  core/              Redux/Store logic
+  adapters/          Platform adapters (Storage, Signing, Network)
+  ui/                Modular React components & hooks
+  platform/          Environment detection (Web/Electron)
+
 app/
-  layout.js          Root layout
+  layout.js          Next.js Root layout
   page.js            Main entry
+  api/               Server-side API routes (ElevenLabs, etc.)
 
 components/
   TimelineTab.js     Timeline view
-  TalkTab.js         DM conversations
+  TalkTab.js         DM conversations (NIP-17)
   HomeTab.js         Profile & settings
   MiniAppTab.js      Mini applications
   PostItem.js        Post rendering
-  ...
+  DivineVideoRecorder.js Video recording with ProofMode
 
 lib/
   nostr.js           Protocol operations
   connection-manager.js   WebSocket pool management
   cache.js           Data caching layer
-  secure-key-store.js     Secure key storage
-  validation.js      Input validation & sanitization
-  errors.js          Custom error classes
-  security.js        Security utilities
-  nip46.js           Nostr Connect
-  imageUtils.js      Image processing
+  rust-bridge.js     Rust engine bridge
   recommendation.js  Recommendation algorithm
-  geohash.js         Geolocation & relay detection
-  constants.js       Application constants
+
+rust-engine/
+  nurunuru-core/     Core logic in Rust
+  nurunuru-ffi/      UniFFI bindings for Mobile/Native
+  nurunuru-napi/     Node.js bindings for Desktop
 ```
 
 ---
 
 ## License
 
-The Unlicense
+このプロジェクトの大部分は **Unlicense** ですが、以下のコードは **MPL-2.0** に基づいています。
+
+- `components/DivineVideoRecorder.js`
+- `lib/proofmode.js`
+- 動画投稿機能
+
+それ以外の部分は [The Unlicense](LICENSE) の下で自由に利用可能です。
 
 ---
 
