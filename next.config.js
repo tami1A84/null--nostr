@@ -69,8 +69,8 @@ const nextConfig = {
               key: 'Content-Security-Policy',
               value: [
                 "default-src 'self'",
-                // Scripts: self + inline + nostr-login from unpkg
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com",
+                // Scripts: self + inline + nostr-login from unpkg + blob/data for AudioWorklets
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com blob: data:",
                 // Styles: self + inline (Tailwind uses inline styles)
                 "style-src 'self' 'unsafe-inline'",
                 // Images: self + https (profile pictures from any HTTPS source)
@@ -79,8 +79,8 @@ const nextConfig = {
                 "font-src 'self' data:",
                 // Connect: self + wss (Nostr relay WebSockets) + HTTPS APIs + nostr-login + ElevenLabs
                 "connect-src 'self' wss: https: https://unpkg.com https://nostr-login.pages.dev https://*.nostr-login.pages.dev https://api.elevenlabs.io",
-                // Workers: self (Service Worker)
-                "worker-src 'self' blob:",
+                // Workers: self (Service Worker) + blob/data for worklets
+                "worker-src 'self' blob: data:",
                 // Manifest
                 "manifest-src 'self'",
                 // Block object/embed/base
