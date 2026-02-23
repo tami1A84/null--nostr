@@ -32,7 +32,8 @@ export default function LoginScreen({ onLogin }) {
       try {
         const { NosskeyManager } = await import('nosskey-sdk')
         const manager = new NosskeyManager({
-          storageOptions: { enabled: true, storageKey: 'nurunuru_nosskey' }
+          storageOptions: { enabled: true, storageKey: 'nurunuru_nosskey' },
+          cacheOptions: { enabled: true, timeoutMs: 3600000 }
         })
         nosskeyManagerRef.current = manager
         
