@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useScribe } from '@elevenlabs/react';
+import { useScribe, CommitStrategy } from '@elevenlabs/react';
 
 /**
  * Custom hook for ElevenLabs Speech-to-Text (STT)
@@ -29,12 +29,16 @@ export function useSTT(onTranscript) {
   const scribe = useScribe({
     modelId: 'scribe_v2_realtime',
     languageCode: language,
+    commitStrategy: CommitStrategy.VAD,
     onCommittedTranscript: (data) => {
       if (data.text && onTranscript) {
         // Append a space if there's already text, but the handling of appending
         // is done in the component using this hook.
         onTranscript(data.text);
       }
+    },
+    onPartialTranscript: (data) => {
+      // UseScribeReturn already manages partialTranscript state
     },
     onSessionStarted: () => {
       setIsRecording(true);
@@ -107,5 +111,6 @@ export function useSTT(onTranscript) {
     isRecording: isRecording || scribe.isConnected,
     toggleRecording,
     isConnected: scribe.isConnected,
+    partialText: scribe.partialTranscript,
   };
 }

@@ -172,7 +172,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const handleTranscript = useCallback((text) => {
     setNewPost(prev => prev ? prev + ' ' + text : text)
   }, [])
-  const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
+  const { isRecording: isSTTActive, toggleRecording: toggleSTT, partialText } = useSTT(handleTranscript)
 
   // Birdwatch (NIP-32) state
   const [birdwatchLabels, setBirdwatchLabels] = useState({}) // eventId -> array of label events
@@ -1452,17 +1452,20 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                   onChange={(e) => setNewPost(e.target.value)}
                   spellCheck={false}
                   className={`w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none placeholder-[var(--text-tertiary)] outline-none text-base ${
-                    newPost && (newPost.includes('#') || emojiTags.length > 0)
+                    (newPost && (newPost.includes('#') || emojiTags.length > 0)) || partialText || isSTTActive
                       ? 'text-transparent caret-[var(--text-primary)] absolute inset-0 z-10'
                       : 'text-[var(--text-primary)] relative'
                   }`}
                   placeholder="いまどうしてる？"
                   autoFocus
                 />
-                {/* Visible preview layer - only show when there are hashtags or emojis */}
-                {newPost && (newPost.includes('#') || emojiTags.length > 0) && (
+                {/* Visible preview layer - show when there are hashtags, emojis, or active STT */}
+                {((newPost && (newPost.includes('#') || emojiTags.length > 0)) || partialText || isSTTActive) && (
                   <div className="w-full min-h-[120px] sm:min-h-[150px] pointer-events-none">
-                    <ContentPreview content={newPost} customEmojis={emojiTags} />
+                    <ContentPreview
+                      content={newPost + (partialText ? (newPost ? ' ' : '') + partialText : '')}
+                      customEmojis={emojiTags}
+                    />
                   </div>
                 )}
               </div>

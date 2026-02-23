@@ -44,7 +44,7 @@ export function PostModal({
   const handleTranscript = React.useCallback((text: string) => {
     setContent(prev => prev ? prev + ' ' + text : text)
   }, [])
-  const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
+  const { isRecording: isSTTActive, toggleRecording: toggleSTT, partialText } = useSTT(handleTranscript)
 
   const imageInputRef = useRef<HTMLInputElement>(null)
   const imageAddRef = useRef<HTMLInputElement>(null)
@@ -119,7 +119,7 @@ export function PostModal({
     onClose()
   }
 
-  const showPreview = content && (content.includes('#') || emojiTags.length > 0)
+  const showPreview = (content && (content.includes('#') || emojiTags.length > 0)) || !!partialText || isSTTActive
   const isSubmitDisabled = posting || uploadingImage || (!content.trim() && imageFiles.length === 0)
 
   return (
@@ -182,7 +182,10 @@ export function PostModal({
             />
             {showPreview && (
               <div className="w-full min-h-[120px] sm:min-h-[150px] pointer-events-none">
-                <ContentPreview content={content} customEmojis={emojiTags} />
+                <ContentPreview
+                  content={content + (partialText ? (content ? ' ' : '') + partialText : '')}
+                  customEmojis={emojiTags}
+                />
               </div>
             )}
           </div>

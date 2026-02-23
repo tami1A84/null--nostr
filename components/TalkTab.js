@@ -220,7 +220,7 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
   const handleTranscript = useCallback((text) => {
     setNewMessage(prev => prev ? prev + ' ' + text : text)
   }, [])
-  const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
+  const { isRecording: isSTTActive, toggleRecording: toggleSTT, partialText } = useSTT(handleTranscript)
 
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -1179,17 +1179,20 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
               }}
               spellCheck={false}
               className={`w-full input-line py-2 resize-none min-h-[40px] max-h-[120px] ${
-                newMessage && selectedEmojis.length > 0
+                (newMessage && selectedEmojis.length > 0) || partialText || isSTTActive
                   ? 'text-transparent caret-[var(--text-primary)]'
                   : ''
               }`}
               placeholder="メッセージ"
               rows={1}
             />
-            {/* Preview overlay for custom emojis */}
-            {newMessage && selectedEmojis.length > 0 && (
+            {/* Preview overlay for custom emojis or active STT */}
+            {((newMessage && selectedEmojis.length > 0) || partialText || isSTTActive) && (
               <div className="absolute inset-0 pointer-events-none px-4 py-2 overflow-hidden">
-                <MessagePreview content={newMessage} customEmojis={selectedEmojis} />
+                <MessagePreview
+                  content={newMessage + (partialText ? (newMessage ? ' ' : '') + partialText : '')}
+                  customEmojis={selectedEmojis}
+                />
               </div>
             )}
           </div>
