@@ -58,6 +58,7 @@ import NotificationModal from './NotificationModal'
 import EmojiPicker from './EmojiPicker'
 import { NOSTR_KINDS } from '@/lib/constants'
 import { useSTT } from '@/hooks/useSTT'
+import DivineVideoRecorder from './DivineVideoRecorder'
 
 // Extract hashtags from content (NIP-01)
 function extractHashtags(content) {
@@ -154,6 +155,8 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const [uploadProgress, setUploadProgress] = useState('')
   const [posting, setPosting] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [showRecorder, setShowRecorder] = useState(false)
+  const [recordedVideo, setRecordedVideo] = useState(null)
   const [emojiTags, setEmojiTags] = useState([]) // Array of emoji tags for post
   const [contentWarning, setContentWarning] = useState('') // Content warning text (NIP-36)
   const [showCWInput, setShowCWInput] = useState(false) // Toggle CW input visibility
@@ -422,7 +425,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     
     try {
       const [notes, reposts] = await Promise.all([
-        fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM], authors: followList, since: oneHourAgo, limit: 50 }, readRelays),
+        fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.SHORT_VIDEO], authors: followList, since: oneHourAgo, limit: 50 }, readRelays),
         fetchEvents({ kinds: [6], authors: followList, since: oneHourAgo, limit: 20 }, readRelays)
       ])
 
@@ -573,7 +576,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
     const oneHourAgo = Math.floor(Date.now() / 1000) - 3600
     
     try {
-      const noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM], authors: followList, since: oneHourAgo, limit: 100 }
+      const noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.SHORT_VIDEO], authors: followList, since: oneHourAgo, limit: 100 }
       const repostFilter = { kinds: [6], authors: followList, since: oneHourAgo, limit: 50 }
       
       const [notes, reposts] = await Promise.all([
@@ -653,7 +656,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         }
 
         const [notes, reposts] = await Promise.all([
-          fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM], authors: followList, since: oneHourAgo, limit: 100 }, readRelays),
+          fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.SHORT_VIDEO], authors: followList, since: oneHourAgo, limit: 100 }, readRelays),
           fetchEvents({ kinds: [6], authors: followList, since: oneHourAgo, limit: 50 }, readRelays)
         ])
 
@@ -697,7 +700,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       }
 
       // おすすめ (global) mode - with recommendation algorithm
-      let noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 200 }
+      let noteFilter = { kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.SHORT_VIDEO], since: threeHoursAgo, limit: 200 }
       let repostFilter = { kinds: [6], since: threeHoursAgo, limit: 100 }
 
       const [notes, reposts] = await Promise.all([
@@ -745,7 +748,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
           if (secondDegreeFollows.size > 0) {
             const secondDegreeArray = Array.from(secondDegreeFollows).slice(0, 50)
             const secondDegreePosts = await fetchEventsWithOutboxModel(
-              { kinds: [1, NOSTR_KINDS.LONG_FORM], since: threeHoursAgo, limit: 100 },
+              { kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.SHORT_VIDEO], since: threeHoursAgo, limit: 100 },
               secondDegreeArray,
               { timeout: 12000 }
             )
@@ -1125,14 +1128,14 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   }
 
   const handlePost = async () => {
-    if ((!newPost.trim() && imageFiles.length === 0) || !pubkey) return
+    if ((!newPost.trim() && imageFiles.length === 0 && !recordedVideo) || !pubkey) return
     setPosting(true)
 
     try {
       let content = newPost.trim()
 
       // Upload images if selected
-      if (imageFiles.length > 0) {
+      if (imageFiles.length > 0 && !recordedVideo) {
         try {
           setUploadingPostImage(true)
           setUploadProgress(`アップロード中... (0/${imageFiles.length})`)
@@ -1180,6 +1183,19 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
       // Add client tag
       event.tags = [...event.tags, ['client', 'nullnull']]
 
+      // Add video tags if present
+      if (recordedVideo) {
+        event.kind = 34236
+        event.tags.push(['url', recordedVideo.url])
+        event.tags.push(['m', recordedVideo.mimeType])
+        event.tags.push(['size', String(recordedVideo.size)])
+        if (recordedVideo.proofTags) {
+          // Filter out duplicate 'x' tags if they exist
+          const proofTags = recordedVideo.proofTags.filter(t => t[0] !== 'x' || !event.tags.some(tt => tt[0] === 'x'))
+          event.tags.push(...proofTags)
+        }
+      }
+
       // Add emoji tags if any
       if (emojiTags.length > 0) {
         event.tags = [...event.tags, ...emojiTags]
@@ -1205,6 +1221,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         setNewPost('')
         setImageFiles([])
         setImagePreviews([])
+        setRecordedVideo(null)
         setEmojiTags([])
         setContentWarning('')
         setShowCWInput(false)
@@ -1423,6 +1440,33 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
               </button>
             </div>
             <div className="flex-1 p-4 pb-20 sm:pb-4 flex flex-col overflow-y-auto">
+              {/* Video Preview */}
+              {recordedVideo && (
+                <div className="mb-4 relative aspect-square w-full max-w-[300px] mx-auto overflow-hidden rounded-xl bg-black">
+                  <video
+                    src={recordedVideo.url}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  <button
+                    onClick={() => setRecordedVideo(null)}
+                    className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+                    aria-label="動画を削除"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                  <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-[var(--line-green)] text-white text-[10px] font-bold rounded-md">
+                    6.3s LOOP
+                  </div>
+                </div>
+              )}
+
               {/* Content Warning Input (NIP-36) */}
               {showCWInput && (
                 <div className="mb-3 pb-3 border-b border-[var(--border-color)]">
@@ -1529,9 +1573,22 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                   onChange={handlePostImageSelect}
                 />
                 <div className="flex items-center gap-4">
+                  {/* Video Recorder button */}
+                  <button
+                    onClick={() => setShowRecorder(true)}
+                    className={`flex items-center gap-2 text-sm ${recordedVideo ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'}`}
+                    title="6秒動画を録画"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                      <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                    </svg>
+                    動画
+                  </button>
+
                   <label
                     htmlFor="timeline-post-image-input"
-                    className={`flex items-center gap-2 text-[var(--line-green)] text-sm cursor-pointer ${imageFiles.length >= MAX_IMAGES ? 'opacity-50 pointer-events-none' : ''}`}
+                    className={`flex items-center gap-2 text-[var(--line-green)] text-sm cursor-pointer ${(imageFiles.length >= MAX_IMAGES || recordedVideo) ? 'opacity-50 pointer-events-none' : ''}`}
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -1684,6 +1741,19 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
             </div>
           </div>
         </div>
+      )}
+
+      {/* Video Recorder Modal */}
+      {showRecorder && (
+        <DivineVideoRecorder
+          onComplete={(data) => {
+            setRecordedVideo(data)
+            setShowRecorder(false)
+            setImageFiles([])
+            setImagePreviews([])
+          }}
+          onClose={() => setShowRecorder(false)}
+        />
       )}
 
       {/* FAB - Post Button (Hidden on desktop where sidebar has compose button) */}
