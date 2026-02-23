@@ -23,26 +23,64 @@ export default function DivineVideoRecorder({ onComplete, onClose }) {
   // Initialize camera
   useEffect(() => {
     async function setupCamera() {
-      try {
-        const s = await navigator.mediaDevices.getUserMedia({
+      const constraintsList = [
+        // 1. High quality square (prefer user-facing)
+        {
           video: {
-            facingMode: 'user',
+            facingMode: { ideal: 'user' },
             width: { ideal: 720 },
             height: { ideal: 720 },
-            aspectRatio: 1
+            aspectRatio: { ideal: 1 }
           },
           audio: true
-        })
-        setStream(s)
-        if (videoRef.current) {
-          videoRef.current.srcObject = s
+        },
+        // 2. Standard quality square (prefer user-facing)
+        {
+          video: {
+            facingMode: { ideal: 'user' },
+            width: { ideal: 480 },
+            height: { ideal: 480 },
+            aspectRatio: { ideal: 1 }
+          },
+          audio: true
+        },
+        // 3. Any camera with audio (prefer user-facing)
+        {
+          video: { facingMode: { ideal: 'user' } },
+          audio: true
+        },
+        // 4. Any camera with audio
+        {
+          video: true,
+          audio: true
+        },
+        // 5. Video only (no audio)
+        {
+          video: true,
+          audio: false
         }
-        setIsReady(true)
-      } catch (err) {
-        console.error('Camera access failed:', err)
-        alert('カメラへのアクセスに失敗しました。カメラの権限を許可してください。')
-        onClose()
+      ]
+
+      let lastError = null
+      for (const constraints of constraintsList) {
+        try {
+          console.log('Trying camera constraints:', constraints)
+          const s = await navigator.mediaDevices.getUserMedia(constraints)
+          setStream(s)
+          if (videoRef.current) {
+            videoRef.current.srcObject = s
+          }
+          setIsReady(true)
+          return // Success!
+        } catch (err) {
+          console.warn('Constraints failed:', constraints, err.name, err.message)
+          lastError = err
+        }
       }
+
+      console.error('All camera access strategies failed:', lastError)
+      alert(`カメラへのアクセスに失敗しました: ${lastError?.message || '不明なエラー'}\n設定でカメラとマイクの権限を再度確認してください。`)
+      onClose()
     }
     setupCamera()
     return () => {
