@@ -24,6 +24,7 @@ import {
   getAllCachedProfiles,
   getReadRelays,
   getWriteRelays,
+  getDefaultRelay,
   reportEvent,
   createBirdwatchLabel,
   fetchBirdwatchLabels,
