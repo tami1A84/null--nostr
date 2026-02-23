@@ -277,9 +277,9 @@ export default function UserProfileView({
         }
       }
 
-      // Fetch posts (include NIP-23 long-form content)
+      // Fetch posts (include NIP-23 long-form content and short videos)
       const noteEvents = await fetchEvents(
-        { kinds: [1, NOSTR_KINDS.LONG_FORM], authors: [targetPubkey], limit: 30 },
+        { kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.SHORT_VIDEO], authors: [targetPubkey], limit: 30 },
         RELAYS
       )
       setPosts(noteEvents)

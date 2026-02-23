@@ -232,15 +232,32 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
         tags.push(['t', hashtag])
       })
 
-      // Add video tags if present
+      // Add video tags if present (imeta for diVine compatibility)
       if (recordedVideo) {
+        const hashTag = recordedVideo.proofTags?.find(t => t[0] === 'x')
+        const hash = hashTag ? hashTag[1] : ''
+
+        // Build imeta tag
+        const imetaParts = [
+          `url ${recordedVideo.url}`,
+          `m ${recordedVideo.mimeType}`,
+          `size ${recordedVideo.size}`,
+          `dim ${recordedVideo.dim || '720x720'}`
+        ]
+        if (hash) imetaParts.push(`x ${hash}`)
+
+        tags.push(['imeta', ...imetaParts])
+
+        // Also keep individual tags for broader compatibility if needed,
+        // but diVine specifically looks for imeta and proofmode
         tags.push(['url', recordedVideo.url])
         tags.push(['m', recordedVideo.mimeType])
-        tags.push(['size', String(recordedVideo.size)])
+        tags.push(['x', hash])
+
         if (recordedVideo.proofTags) {
-          // Filter out duplicate 'x' tags if they exist
-          const proofTags = recordedVideo.proofTags.filter(t => t[0] !== 'x' || !tags.some(tt => tt[0] === 'x'))
-          tags.push(...proofTags)
+          // Add verification and proofmode tags
+          const diVineTags = recordedVideo.proofTags.filter(t => t[0] === 'verification' || t[0] === 'proofmode')
+          tags.push(...diVineTags)
         }
       }
 
