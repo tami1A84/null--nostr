@@ -73,10 +73,6 @@ export default function RelaySettings({ pubkey }) {
     }
   }, [])
 
-  // To simplify, I'll re-import missing functions in the next step or update this file.
-  // Actually I should check what else I need from geohash.
-  // findNearestRelays, generateRelayListByLocation are needed.
-
   const handleChangeRelay = (relayUrl) => {
     setCurrentRelay(relayUrl)
     setDefaultRelay(relayUrl)

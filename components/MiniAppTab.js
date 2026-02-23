@@ -350,12 +350,6 @@ export default function MiniAppTab({ pubkey, onLogout }) {
               </svg>
             </button>
           </div>
-          <button className="flex items-center gap-1 text-sm text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
-             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-               <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-             </svg>
-             <span className="hidden sm:inline">ミニアプリを検索</span>
-          </button>
         </div>
       </header>
 
