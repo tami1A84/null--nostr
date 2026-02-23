@@ -84,7 +84,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
   const handleTranscript = useCallback((text) => {
     setPostContent(prev => prev ? prev + ' ' + text : text)
   }, [])
-  const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
+  const { isRecording: isSTTActive, toggleRecording: toggleSTT, partialText } = useSTT(handleTranscript)
 
   const textareaRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -342,16 +342,19 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
               onKeyDown={handleKeyDown}
               spellCheck={false}
               className={`w-full h-32 resize-none bg-transparent placeholder:text-[var(--text-tertiary)] focus:outline-none ${
-                postContent && (postContent.includes('#') || selectedEmojis.length > 0)
+                (postContent && (postContent.includes('#') || selectedEmojis.length > 0)) || partialText || isSTTActive
                   ? 'text-transparent caret-[var(--text-primary)] absolute inset-0 z-10'
                   : 'text-[var(--text-primary)] relative'
               }`}
               placeholder={replyTo ? '返信を入力...' : 'いまなにしてる？'}
               maxLength={10000}
             />
-            {postContent && (postContent.includes('#') || selectedEmojis.length > 0) && (
+            {((postContent && (postContent.includes('#') || selectedEmojis.length > 0)) || partialText || isSTTActive) && (
               <div className="w-full h-32 overflow-y-auto pointer-events-none">
-                <ContentPreview content={postContent} customEmojis={selectedEmojis} />
+                <ContentPreview
+                  content={postContent + (partialText ? (postContent ? ' ' : '') + partialText : '')}
+                  customEmojis={selectedEmojis}
+                />
               </div>
             )}
           </div>
