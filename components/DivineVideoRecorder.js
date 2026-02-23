@@ -34,27 +34,32 @@ export default function DivineVideoRecorder({ onComplete, onClose }) {
           },
           audio: true
         },
-        // 2. Standard quality square (prefer user-facing)
-        {
-          video: {
-            facingMode: { ideal: 'user' },
-            width: { ideal: 480 },
-            height: { ideal: 480 },
-            aspectRatio: { ideal: 1 }
-          },
-          audio: true
-        },
-        // 3. Any camera with audio (prefer user-facing)
+        // 2. Standard quality (prefer user-facing)
         {
           video: { facingMode: { ideal: 'user' } },
           audio: true
         },
-        // 4. Any camera with audio
+        // 3. High quality square (no audio)
+        {
+          video: {
+            facingMode: { ideal: 'user' },
+            width: { ideal: 720 },
+            height: { ideal: 720 },
+            aspectRatio: { ideal: 1 }
+          },
+          audio: false
+        },
+        // 4. Standard quality (no audio)
+        {
+          video: { facingMode: { ideal: 'user' } },
+          audio: false
+        },
+        // 5. Basic video + audio
         {
           video: true,
           audio: true
         },
-        // 5. Video only (no audio)
+        // 6. Basic video only
         {
           video: true,
           audio: false
@@ -79,7 +84,7 @@ export default function DivineVideoRecorder({ onComplete, onClose }) {
       }
 
       console.error('All camera access strategies failed:', lastError)
-      alert(`カメラへのアクセスに失敗しました: ${lastError?.message || '不明なエラー'}\n設定でカメラとマイクの権限を再度確認してください。`)
+      alert(`カメラへのアクセスに失敗しました: ${lastError?.name} - ${lastError?.message || '不明なエラー'}\n\n原因として以下が考えられます:\n1. カメラ・マイクの権限が許可されていない\n2. 他のアプリがカメラを使用中\n3. デバイスにカメラが搭載されていない\n\n設定を確認してから再度お試しください。`)
       onClose()
     }
     setupCamera()

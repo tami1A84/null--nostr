@@ -113,18 +113,23 @@ export default function NotificationModal({ pubkey, onClose, onViewProfile }) {
       mutualFollowPubkeys.forEach(pk => {
         const profile = profileMap[pk]
         if (profile?.birthday) {
-          // Normalize birthday to MM-DD
-          const bMatch = profile.birthday.match(/(\d{2})-(\d{2})$/)
-          if (bMatch) {
-            const bMonthDay = bMatch[0]
-            if (bMonthDay === todayMonthDay) {
-              birthdayNotifications.push({
-                id: `birthday-${pk}-${todayMonthDay}`,
-                pubkey: pk,
-                type: 'birthday',
-                created_at: Math.floor(today.getTime() / 1000)
-              })
-            }
+          let bMonthDay = null
+          if (typeof profile.birthday === 'string') {
+            const bMatch = profile.birthday.match(/(\d{2})-(\d{2})$/)
+            if (bMatch) bMonthDay = bMatch[0]
+          } else if (typeof profile.birthday === 'object') {
+            const bMonth = String(profile.birthday.month || '').padStart(2, '0')
+            const bDay = String(profile.birthday.day || '').padStart(2, '0')
+            bMonthDay = `${bMonth}-${bDay}`
+          }
+
+          if (bMonthDay === todayMonthDay) {
+            birthdayNotifications.push({
+              id: `birthday-${pk}-${todayMonthDay}`,
+              pubkey: pk,
+              type: 'birthday',
+              created_at: Math.floor(today.getTime() / 1000)
+            })
           }
         }
       })
