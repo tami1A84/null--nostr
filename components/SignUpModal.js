@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { nip19 } from 'nostr-tools'
 import { savePubkey, setStoredPrivateKey, publishRelayListMetadata } from '@/lib/nostr'
-import { autoDetectRelays, formatDistance } from '@/lib/geohash'
+import { autoDetectRelays, formatDistance, REGION_COORDINATES, selectRelaysByRegion } from '@/lib/geohash'
 
 /**
  * SignUpModal Component
@@ -19,6 +19,7 @@ export default function SignUpModal({ onClose, onSuccess, nosskeyManager }) {
   const [createdPubkey, setCreatedPubkey] = useState(null)
   const [recommendedRelays, setRecommendedRelays] = useState([])
   const [locationInfo, setLocationInfo] = useState(null)
+  const [selectionMode, setSelectionMode] = useState('auto') // auto, manual
 
   // Handle account creation
   const handleCreateAccount = async () => {
@@ -74,14 +75,29 @@ export default function SignUpModal({ onClose, onSuccess, nosskeyManager }) {
     setLoading(true)
     try {
       const result = await autoDetectRelays()
-      if (result.nearestRelays) {
+      if (result.nearestRelays && result.nearestRelays.length > 0) {
         setRecommendedRelays(result.nearestRelays)
         setLocationInfo(result.region || { name: '検出された地域' })
+        setSelectionMode('auto')
+      } else {
+        // Fallback to manual if auto fails
+        setSelectionMode('manual')
       }
     } catch (e) {
       console.error('Relay detection failed:', e)
+      setSelectionMode('manual')
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Handle manual region selection
+  const handleRegionSelect = (regionId) => {
+    if (!regionId) return
+    const result = selectRelaysByRegion(regionId)
+    if (result.nearestRelays) {
+      setRecommendedRelays(result.nearestRelays)
+      setLocationInfo(result.region)
     }
   }
 
@@ -167,42 +183,88 @@ export default function SignUpModal({ onClose, onSuccess, nosskeyManager }) {
           )}
 
           {step === 'relay' && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               <div className="text-center">
-                <div className="w-16 h-16 mx-auto bg-blue-500/10 rounded-full flex items-center justify-center mb-4">
-                  <svg className="w-8 h-8 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <div className="w-14 h-14 mx-auto bg-blue-500/10 rounded-full flex items-center justify-center mb-3">
+                  <svg className="w-7 h-7 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
                     <circle cx="12" cy="10" r="3" />
                   </svg>
                 </div>
                 <h2 className="text-xl font-bold text-[var(--text-primary)] mb-1">リレーのセットアップ</h2>
-                <p className="text-[var(--text-secondary)] text-xs mb-4">
-                  現在地に基づいて、最適なリレーを自動的に設定します。
+                <p className="text-[var(--text-secondary)] text-xs">
+                  地域を選択すると最適なリレーが自動設定されます。
                 </p>
               </div>
 
-              <div className="bg-[var(--bg-secondary)] rounded-2xl p-4 space-y-3 max-h-48 overflow-y-auto">
-                {loading ? (
-                  <div className="py-8 text-center space-y-2">
-                    <div className="w-6 h-6 border-2 border-[var(--line-green)] border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    <p className="text-xs text-[var(--text-tertiary)]">最適なリレーを検索中...</p>
+              <div className="space-y-4">
+                {/* Selection Mode Tabs */}
+                <div className="flex p-1 bg-[var(--bg-secondary)] rounded-xl">
+                  <button
+                    onClick={() => {
+                      setSelectionMode('auto')
+                      startRelayDetection()
+                    }}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${
+                      selectionMode === 'auto' ? 'bg-[var(--bg-primary)] text-[var(--line-green)] shadow-sm' : 'text-[var(--text-tertiary)]'
+                    }`}
+                  >
+                    GPSで自動検出
+                  </button>
+                  <button
+                    onClick={() => setSelectionMode('manual')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors ${
+                      selectionMode === 'manual' ? 'bg-[var(--bg-primary)] text-[var(--line-green)] shadow-sm' : 'text-[var(--text-tertiary)]'
+                    }`}
+                  >
+                    手動で地域を選択
+                  </button>
+                </div>
+
+                {selectionMode === 'manual' && (
+                  <div className="animate-fadeIn">
+                    <select
+                      onChange={(e) => handleRegionSelect(e.target.value)}
+                      className="w-full bg-[var(--bg-secondary)] border-none rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:ring-2 focus:ring-[var(--line-green)]"
+                      defaultValue=""
+                    >
+                      <option value="" disabled>地域を選択してください...</option>
+                      {REGION_COORDINATES.map(region => (
+                        <option key={region.id} value={region.id}>
+                          {region.country === 'JP' ? '🇯🇵 ' : ''}{region.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between text-xs font-bold text-[var(--text-tertiary)] px-1 border-b border-[var(--border-color)] pb-2 mb-2">
-                      <span>推奨リレー ({locationInfo?.name || '検出済み'})</span>
-                      <span>距離</span>
-                    </div>
-                    {recommendedRelays.map((relay, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm">
-                        <span className="text-[var(--text-primary)] truncate flex-1">{relay.url.replace('wss://', '')}</span>
-                        <span className="text-[var(--text-tertiary)] text-xs ml-2 font-mono">
-                          {relay.distance ? formatDistance(relay.distance) : '-'}
-                        </span>
-                      </div>
-                    ))}
-                  </>
                 )}
+
+                <div className="bg-[var(--bg-secondary)] rounded-2xl p-4 space-y-3 max-h-40 overflow-y-auto border border-[var(--border-color)]">
+                  {loading ? (
+                    <div className="py-6 text-center space-y-2">
+                      <div className="w-5 h-5 border-2 border-[var(--line-green)] border-t-transparent rounded-full animate-spin mx-auto"></div>
+                      <p className="text-[10px] text-[var(--text-tertiary)]">最適なリレーを検索中...</p>
+                    </div>
+                  ) : recommendedRelays.length > 0 ? (
+                    <>
+                      <div className="flex items-center justify-between text-[10px] font-bold text-[var(--text-tertiary)] px-1 border-b border-[var(--border-color)] pb-2 mb-1">
+                        <span>推奨リレー ({locationInfo?.name || '選択済み'})</span>
+                        <span>距離</span>
+                      </div>
+                      {recommendedRelays.map((relay, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-[var(--text-primary)] truncate flex-1">{relay.url.replace('wss://', '')}</span>
+                          <span className="text-[var(--text-tertiary)] text-[10px] ml-2 font-mono">
+                            {relay.distance ? formatDistance(relay.distance) : '-'}
+                          </span>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="py-6 text-center">
+                      <p className="text-xs text-[var(--text-tertiary)]">地域を選択してください</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <button
