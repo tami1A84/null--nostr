@@ -256,7 +256,7 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
 
         if (recordedVideo.proofTags) {
           // Add verification and proofmode tags
-          const diVineTags = recordedVideo.proofTags.filter(t => t[0] === 'verification' || t[0] === 'proofmode')
+          const diVineTags = recordedVideo.proofTags.filter(t => t[0] === 'verification' || t[0] === 'verification-level' || t[0] === 'proofmode')
           tags.push(...diVineTags)
         }
       }

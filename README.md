@@ -53,10 +53,15 @@
 ### Video & Audio
 
 - **Divine Video**: 6.3秒のループ動画投稿（Kind 34236）
-- **ProofMode**: PGP署名による動画の真正性検証（AI生成・改ざん防止）
+- **ProofMode**: PGP署名による動画の真正性検証。**Verified Web**（Medium Level - Software Verification）に対応し、AI生成や改ざんがないことを証明します。
 - **ElevenLabs STT**: Scribe v2 を使用した高精度なリアルタイム音声入力（日本語対応）
 
-### Mini Apps（Settings）
+### Mini Apps / Scheduler
+
+- **調整くん (Scheduler)**: Chronostr 互換の日程調整ツール
+  - kind 31924~31928 対応
+  - 候補日の作成・回答・集計
+  - [Chronostr](https://chronostr.pages.dev/) との相互運用性
 
 - デフォルトZap金額設定
 - リレー設定
@@ -377,11 +382,10 @@ rust-engine/
 
 ## License
 
-このプロジェクトの大部分は **Unlicense** ですが、以下のコードは **MPL-2.0** に基づいています。
+このプロジェクトの大部分は Unlicense ですが、以下のコードは MPL-2.0 に基づいています。
 
 - `components/DivineVideoRecorder.js`
 - `lib/proofmode.js`
-- 動画投稿機能
 
 それ以外の部分は [The Unlicense](LICENSE) の下で自由に利用可能です。
 
