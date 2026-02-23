@@ -32,6 +32,7 @@ import UserProfileView from './UserProfileView'
 import EmojiPicker from './EmojiPicker'
 import { NOSTR_KINDS } from '@/lib/constants'
 import BadgeDisplay, { clearBadgeCache } from './BadgeDisplay'
+import { useSTT } from '@/hooks/useSTT'
 
 // Extract hashtags from content (NIP-01)
 function extractHashtags(content) {
@@ -207,6 +208,13 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
   const [emojiTags, setEmojiTags] = useState([])
   const [contentWarning, setContentWarning] = useState('') // Content warning text (NIP-36)
   const [showCWInput, setShowCWInput] = useState(false) // Toggle CW input visibility
+
+  // Speech to Text
+  const handleTranscript = (text) => {
+    setNewPost(prev => prev ? prev + ' ' + text : text)
+  }
+  const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
+
   // Follow list state
   const [followList, setFollowList] = useState([])
   const [followListLoading, setFollowListLoading] = useState(false)
@@ -1520,6 +1528,21 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                       <line x1="15" y1="9" x2="15.01" y2="9"/>
                     </svg>
                     絵文字
+                  </button>
+
+                  {/* Microphone button for STT */}
+                  <button
+                    onClick={toggleSTT}
+                    className={`flex items-center gap-2 text-sm ${isSTTActive ? 'text-red-500 animate-pulse' : 'text-[var(--text-tertiary)]'}`}
+                    title="音声入力"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                      <line x1="12" y1="19" x2="12" y2="23"/>
+                      <line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
+                    音声
                   </button>
                 </div>
                 

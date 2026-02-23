@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react'
 import { ContentPreview } from '../common/ContentPreview'
 import type { EmojiTag, CustomEmoji } from '../../types'
+import { useSTT } from '@/hooks/useSTT'
 
 interface PostModalProps {
   pubkey: string
@@ -38,6 +39,12 @@ export function PostModal({
   const [emojiTags, setEmojiTags] = useState<EmojiTag[]>([])
   const [contentWarning, setContentWarning] = useState('')
   const [showCWInput, setShowCWInput] = useState(false)
+
+  // Speech to Text
+  const handleTranscript = (text: string) => {
+    setContent(prev => prev ? prev + ' ' + text : text)
+  }
+  const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
 
   const imageInputRef = useRef<HTMLInputElement>(null)
   const imageAddRef = useRef<HTMLInputElement>(null)
@@ -268,6 +275,18 @@ export function PostModal({
                   絵文字
                 </button>
               )}
+
+              {/* Microphone button for STT */}
+              <button
+                onClick={toggleSTT}
+                className={`flex items-center gap-2 text-sm ${
+                  isSTTActive ? 'text-red-500 animate-pulse' : 'text-[var(--text-tertiary)]'
+                }`}
+                title="音声入力"
+              >
+                <MicIcon className="w-5 h-5" />
+                音声
+              </button>
             </div>
 
             {/* Emoji Picker */}
@@ -333,6 +352,17 @@ function PlusIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  )
+}
+
+function MicIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8" y1="23" x2="16" y2="23"/>
     </svg>
   )
 }
