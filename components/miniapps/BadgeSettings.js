@@ -182,7 +182,16 @@ export default function BadgeSettings({ pubkey }) {
                   {profileBadges.map((badge, i) => (
                     <div key={i} className="flex items-center justify-between p-2 bg-[var(--bg-tertiary)] rounded-xl">
                       <div className="flex items-center gap-2 min-w-0">
-                        {badge.image && <img src={badge.image} alt="" className="w-8 h-8 rounded object-contain" />}
+                        {badge.image ? (
+                          <img src={badge.image} alt="" className="w-8 h-8 rounded object-contain" />
+                        ) : (
+                          <div className="w-8 h-8 rounded bg-[var(--bg-secondary)] flex items-center justify-center">
+                            <svg className="w-4 h-4 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 14l9-5-9-5-9 5 9 5z"/>
+                              <path d="M12 14v7M7 16.5v4M17 16.5v4" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <span className="text-sm text-[var(--text-primary)] truncate block">{badge.name}</span>
                         </div>
@@ -203,7 +212,16 @@ export default function BadgeSettings({ pubkey }) {
                   {awardedBadges.map((badge, i) => (
                     <div key={i} className="flex items-center justify-between p-2 bg-[var(--bg-tertiary)] rounded-xl">
                       <div className="flex items-center gap-2 min-w-0">
-                        {badge.image && <img src={badge.image} alt="" className="w-8 h-8 rounded object-contain" />}
+                        {badge.image ? (
+                          <img src={badge.image} alt="" className="w-8 h-8 rounded object-contain" />
+                        ) : (
+                          <div className="w-8 h-8 rounded bg-[var(--bg-secondary)] flex items-center justify-center">
+                            <svg className="w-4 h-4 text-[var(--text-tertiary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 14l9-5-9-5-9 5 9 5z"/>
+                              <path d="M12 14v7M7 16.5v4M17 16.5v4" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <span className="text-sm text-[var(--text-primary)] truncate block">{badge.name}</span>
                         </div>
