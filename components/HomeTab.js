@@ -208,6 +208,8 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
   const [emojiTags, setEmojiTags] = useState([])
   const [contentWarning, setContentWarning] = useState('') // Content warning text (NIP-36)
   const [showCWInput, setShowCWInput] = useState(false) // Toggle CW input visibility
+  const [showRecorder, setShowRecorder] = useState(false)
+  const [recordedVideo, setRecordedVideo] = useState(null)
 
   // Speech to Text
   const handleTranscript = useCallback((text) => {
@@ -411,9 +413,9 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
     const oneDayAgo = Math.floor(Date.now() / 1000) - 86400 // 24 hours
     
     try {
-      // Fetch notes, reposts, and user's reactions in parallel
+      // Fetch notes, reposts, short videos, and user's reactions in parallel
       const [notes, reposts, myReactionEvents] = await Promise.all([
-        fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM], authors: [pubkey], since: oneDayAgo, limit: 50 }, RELAYS),
+        fetchEvents({ kinds: [1, NOSTR_KINDS.LONG_FORM, NOSTR_KINDS.SHORT_VIDEO], authors: [pubkey], since: oneDayAgo, limit: 50 }, RELAYS),
         fetchEvents({ kinds: [6], authors: [pubkey], since: oneDayAgo, limit: 30 }, RELAYS),
         fetchEvents({ kinds: [7], authors: [pubkey], since: oneDayAgo, limit: 50 }, RELAYS)
       ])
@@ -759,6 +761,32 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
         event.tags = [...event.tags, ...hashtagTags]
       }
 
+      // Add video tags if present
+      if (recordedVideo) {
+        event.kind = 34236
+        const hashTag = recordedVideo.proofTags?.find(t => t[0] === 'x')
+        const hash = hashTag ? hashTag[1] : ''
+
+        // Build imeta tag
+        const imetaParts = [
+          `url ${recordedVideo.url}`,
+          `m ${recordedVideo.mimeType}`,
+          `size ${recordedVideo.size}`,
+          `dim ${recordedVideo.dim || '720x720'}`
+        ]
+        if (hash) imetaParts.push(`x ${hash}`)
+
+        event.tags.push(['imeta', ...imetaParts])
+        event.tags.push(['url', recordedVideo.url])
+        event.tags.push(['m', recordedVideo.mimeType])
+        event.tags.push(['x', hash])
+
+        if (recordedVideo.proofTags) {
+          const diVineTags = recordedVideo.proofTags.filter(t => t[0] === 'verification' || t[0] === 'proofmode')
+          event.tags.push(...diVineTags)
+        }
+      }
+
       const signedEvent = await signEventNip07(event)
       const success = await publishEvent(signedEvent)
 
@@ -767,6 +795,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
         setNewPost('')
         setImageFiles([])
         setImagePreviews([])
+        setRecordedVideo(null)
         setEmojiTags([])
         setContentWarning('')
         setShowCWInput(false)
@@ -1379,6 +1408,33 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
               </button>
             </div>
             <div className="flex-1 p-4 pb-20 sm:pb-4 flex flex-col overflow-y-auto">
+              {/* Video Preview */}
+              {recordedVideo && (
+                <div className="mb-4 relative aspect-square w-full max-w-[300px] mx-auto overflow-hidden rounded-xl bg-black">
+                  <video
+                    src={recordedVideo.url}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  <button
+                    onClick={() => setRecordedVideo(null)}
+                    className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+                    aria-label="動画を削除"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                  <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-[var(--line-green)] text-white text-[10px] font-bold rounded-md">
+                    6.3s LOOP
+                  </div>
+                </div>
+              )}
+
               {/* Content Warning Input (NIP-36) */}
               {showCWInput && (
                 <div className="mb-3 pb-3 border-b border-[var(--border-color)]">
@@ -1482,9 +1538,21 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                   onChange={handlePostImageSelect}
                 />
                 <div className="flex items-center gap-4">
+                  {/* Video Recorder button */}
+                  <button
+                    onClick={() => setShowRecorder(true)}
+                    className={`action-btn p-2 ${recordedVideo ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'}`}
+                    title="6秒動画を録画"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                      <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                    </svg>
+                  </button>
+
                   <label
                     htmlFor="home-post-image-input"
-                    className={`flex items-center gap-2 text-[var(--line-green)] text-sm cursor-pointer ${imageFiles.length >= MAX_IMAGES ? 'opacity-50 pointer-events-none' : ''}`}
+                    className={`flex items-center gap-2 text-[var(--line-green)] text-sm cursor-pointer ${(imageFiles.length >= MAX_IMAGES || recordedVideo) ? 'opacity-50 pointer-events-none' : ''}`}
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -1560,6 +1628,19 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
             </div>
           </div>
         </div>
+      )}
+
+      {/* Video Recorder Modal */}
+      {showRecorder && (
+        <DivineVideoRecorder
+          onComplete={(data) => {
+            setRecordedVideo(data)
+            setShowRecorder(false)
+            setImageFiles([])
+            setImagePreviews([])
+          }}
+          onClose={() => setShowRecorder(false)}
+        />
       )}
 
       {/* FAB - Post Button */}
