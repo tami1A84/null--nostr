@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { publishEvent, nip19 } from '@/lib/nostr'
 import { uploadImagesInParallel } from '@/lib/imageUtils'
 import EmojiPicker from './EmojiPicker'

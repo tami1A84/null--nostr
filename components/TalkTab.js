@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react'
 import { nip19 } from 'nostr-tools'
 import {
   fetchEvents,
