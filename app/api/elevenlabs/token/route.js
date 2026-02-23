@@ -9,7 +9,7 @@ export async function POST(request) {
     }
 
     // Call ElevenLabs API to get a single-use token for Scribe
-    const response = await fetch('https://api.elevenlabs.io/v1/realtime/scribe/token', {
+    const response = await fetch('https://api.elevenlabs.io/v1/single-use-token/realtime_scribe', {
       method: 'POST',
       headers: {
         'xi-api-key': apiKey,

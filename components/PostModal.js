@@ -81,9 +81,9 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
   const [showCWInput, setShowCWInput] = useState(false)
 
   // Speech to Text
-  const handleTranscript = (text) => {
+  const handleTranscript = useCallback((text) => {
     setPostContent(prev => prev ? prev + ' ' + text : text)
-  }
+  }, [])
   const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
 
   const textareaRef = useRef(null)

@@ -41,9 +41,9 @@ export function PostModal({
   const [showCWInput, setShowCWInput] = useState(false)
 
   // Speech to Text
-  const handleTranscript = (text: string) => {
+  const handleTranscript = React.useCallback((text: string) => {
     setContent(prev => prev ? prev + ' ' + text : text)
-  }
+  }, [])
   const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
 
   const imageInputRef = useRef<HTMLInputElement>(null)
