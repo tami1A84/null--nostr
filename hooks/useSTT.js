@@ -9,12 +9,21 @@ export function useSTT(onTranscript) {
   const [isRecording, setIsRecording] = useState(false);
   const [language, setLanguage] = useState('jpn');
 
-  // Load saved language from localStorage on mount
+  // Load saved language from localStorage on mount and keep it in sync
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window === 'undefined') return;
+
+    const syncLanguage = (e) => {
+      if (e && e.key !== 'elevenlabs_language') return;
       const savedLang = localStorage.getItem('elevenlabs_language');
       if (savedLang) setLanguage(savedLang);
-    }
+    };
+
+    syncLanguage();
+
+    window.addEventListener('storage', syncLanguage);
+
+    return () => window.removeEventListener('storage', syncLanguage);
   }, []);
 
   const scribe = useScribe({
@@ -57,23 +66,24 @@ export function useSTT(onTranscript) {
       return;
     }
 
-    // Refresh language from localStorage before starting
-    const currentLang = localStorage.getItem('elevenlabs_language') || 'jpn';
-    if (currentLang !== language) {
-      setLanguage(currentLang);
-    }
-
     try {
       // Get single-use token via our API route to keep it "recommended"
-      const response = await fetch('/api/elevenlabs/token', {
+      const response = await fetch('/api/elevenlabs/token/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail?.message || 'トークンの取得に失敗しました');
+        let errorMessage = 'トークンの取得に失敗しました';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail?.message || errorData.detail || errorData.message || errorMessage;
+          if (typeof errorMessage === 'object') errorMessage = JSON.stringify(errorMessage);
+        } catch (e) {
+          // If response is not JSON
+        }
+        throw new Error(errorMessage);
       }
 
       const { token } = await response.json();

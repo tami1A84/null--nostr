@@ -168,9 +168,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false)
 
   // Speech to Text
-  const handleTranscript = (text) => {
+  const handleTranscript = useCallback((text) => {
     setNewPost(prev => prev ? prev + ' ' + text : text)
-  }
+  }, [])
   const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
 
   // Birdwatch (NIP-32) state

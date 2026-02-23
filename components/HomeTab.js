@@ -210,9 +210,9 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
   const [showCWInput, setShowCWInput] = useState(false) // Toggle CW input visibility
 
   // Speech to Text
-  const handleTranscript = (text) => {
+  const handleTranscript = useCallback((text) => {
     setNewPost(prev => prev ? prev + ' ' + text : text)
-  }
+  }, [])
   const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
 
   // Follow list state

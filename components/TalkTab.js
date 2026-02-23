@@ -217,9 +217,9 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
   const [showCWInput, setShowCWInput] = useState(false)
 
   // Speech to Text
-  const handleTranscript = (text) => {
+  const handleTranscript = useCallback((text) => {
     setNewMessage(prev => prev ? prev + ' ' + text : text)
-  }
+  }, [])
   const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
 
   const messagesEndRef = useRef(null)
