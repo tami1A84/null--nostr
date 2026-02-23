@@ -17,6 +17,7 @@ import {
 import { uploadImagesInParallel, getImageUrl } from '@/lib/imageUtils'
 import EmojiPicker from './EmojiPicker'
 import URLPreview from './URLPreview'
+import { useSTT } from '@/hooks/useSTT'
 
 // Render content preview with custom emojis (for input preview)
 function MessagePreview({ content, customEmojis = [] }) {
@@ -214,6 +215,13 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
   const [selectedEmojis, setSelectedEmojis] = useState([])
   const [contentWarning, setContentWarning] = useState('')
   const [showCWInput, setShowCWInput] = useState(false)
+
+  // Speech to Text
+  const handleTranscript = (text) => {
+    setNewMessage(prev => prev ? prev + ' ' + text : text)
+  }
+  const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
+
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
   const textareaRef = useRef(null)
@@ -1140,6 +1148,20 @@ const TalkTab = forwardRef(function TalkTab({ pubkey, pendingDM, onDMOpened }, r
               </>
             )}
           </div>
+
+          {/* Microphone button for STT */}
+          <button
+            onClick={toggleSTT}
+            className={`action-btn p-2 ${isSTTActive ? 'text-red-500 animate-pulse' : 'text-[var(--text-secondary)]'}`}
+            title="音声入力"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
         </div>
 
         {/* Text input and send button */}

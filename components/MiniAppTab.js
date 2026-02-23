@@ -348,6 +348,11 @@ export default function MiniAppTab({ pubkey, onLogout }) {
   const [searchingEmoji, setSearchingEmoji] = useState(false)
   const [addingEmojiSet, setAddingEmojiSet] = useState(null)
 
+  // ElevenLabs settings
+  const [elevenLabsApiKey, setElevenLabsApiKey] = useState('')
+  const [elevenLabsLanguage, setElevenLabsLanguage] = useState('jpn')
+  const [showElevenLabsSettings, setShowElevenLabsSettings] = useState(false)
+
   // My Mini Apps state
   const [favoriteApps, setFavoriteApps] = useState([])
   const [showMyApps, setShowMyApps] = useState(false)
@@ -399,6 +404,14 @@ export default function MiniAppTab({ pubkey, onLogout }) {
 
     // Load upload server setting
     setUploadServerState(getUploadServer())
+
+    // Load ElevenLabs settings
+    if (typeof window !== 'undefined') {
+      const savedElevenLabsKey = localStorage.getItem('elevenlabs_api_key')
+      if (savedElevenLabsKey) setElevenLabsApiKey(savedElevenLabsKey)
+      const savedElevenLabsLang = localStorage.getItem('elevenlabs_language')
+      if (savedElevenLabsLang) setElevenLabsLanguage(savedElevenLabsLang)
+    }
 
     // Load favorite mini apps
     const savedFavorites = localStorage.getItem('favoriteMiniApps')
@@ -1156,6 +1169,12 @@ export default function MiniAppTab({ pubkey, onLogout }) {
           document.querySelector('#mute-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }, 100)
         break
+      case 'elevenlabs':
+        setShowElevenLabsSettings(true)
+        setTimeout(() => {
+          document.querySelector('#elevenlabs-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 100)
+        break
       case 'badge':
         setShowBadgeSettings(true)
         // Load badges if not already loaded
@@ -1183,6 +1202,7 @@ export default function MiniAppTab({ pubkey, onLogout }) {
 
   // Available mini apps that can be added to favorites
   const availableMiniApps = [
+    { id: 'elevenlabs', name: '音声入力設定' },
     { id: 'scheduler', name: '調整くん' },
     { id: 'zap', name: 'Zap設定' },
     { id: 'relay', name: 'リレー設定' },
@@ -2235,6 +2255,72 @@ export default function MiniAppTab({ pubkey, onLogout }) {
                   )}
                 </div>
               )}
+            </div>
+          )}
+        </section>
+
+        {/* ElevenLabs STT Settings */}
+        <section id="elevenlabs-section" className="bg-[var(--bg-secondary)] rounded-2xl p-4">
+          <button
+            onClick={() => setShowElevenLabsSettings(!showElevenLabsSettings)}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+              <h2 className="font-semibold text-[var(--text-primary)]">ElevenLabs音声入力</h2>
+            </div>
+            <svg className={`w-5 h-5 text-[var(--text-tertiary)] transition-transform ${showElevenLabsSettings ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          {showElevenLabsSettings && (
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">APIキー</label>
+                <input
+                  type="password"
+                  value={elevenLabsApiKey}
+                  onChange={(e) => {
+                    setElevenLabsApiKey(e.target.value)
+                    localStorage.setItem('elevenlabs_api_key', e.target.value)
+                  }}
+                  className="w-full input-line text-sm"
+                  placeholder="xi-api-key..."
+                />
+                <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                  <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener noreferrer" className="text-[var(--line-green)] hover:underline">
+                    ElevenLabsダッシュボード
+                  </a>から取得してください
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">言語</label>
+                <select
+                  value={elevenLabsLanguage}
+                  onChange={(e) => {
+                    setElevenLabsLanguage(e.target.value)
+                    localStorage.setItem('elevenlabs_language', e.target.value)
+                  }}
+                  className="w-full py-2.5 px-3 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg text-sm border border-[var(--border-color)] focus:border-[var(--line-green)] focus:outline-none"
+                >
+                  <option value="jpn">日本語 (Japanese)</option>
+                  <option value="eng">英語 (English)</option>
+                  <option value="cmn">中国語 (Chinese)</option>
+                  <option value="spa">スペイン語 (Spanish)</option>
+                  <option value="fra">フランス語 (French)</option>
+                  <option value="deu">ドイツ語 (German)</option>
+                  <option value="ita">イタリア語 (Italian)</option>
+                  <option value="por">ポルトガル語 (Portuguese)</option>
+                  <option value="hin">ヒンディー語 (Hindi)</option>
+                </select>
+              </div>
             </div>
           )}
         </section>

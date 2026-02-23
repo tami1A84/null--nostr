@@ -62,7 +62,7 @@ const nextConfig = {
             // Restrict browser features
             {
               key: 'Permissions-Policy',
-              value: 'camera=(), microphone=(), geolocation=(self), payment=()',
+              value: 'camera=(), microphone=(self), geolocation=(self), payment=()',
             },
             // Content Security Policy
             {
@@ -77,8 +77,8 @@ const nextConfig = {
                 "img-src 'self' data: blob: https:",
                 // Fonts: self
                 "font-src 'self' data:",
-                // Connect: self + wss (Nostr relay WebSockets) + HTTPS APIs + nostr-login
-                "connect-src 'self' wss: https: https://unpkg.com https://nostr-login.pages.dev https://*.nostr-login.pages.dev",
+                // Connect: self + wss (Nostr relay WebSockets) + HTTPS APIs + nostr-login + ElevenLabs
+                "connect-src 'self' wss: https: https://unpkg.com https://nostr-login.pages.dev https://*.nostr-login.pages.dev https://api.elevenlabs.io",
                 // Workers: self (Service Worker)
                 "worker-src 'self' blob:",
                 // Manifest
