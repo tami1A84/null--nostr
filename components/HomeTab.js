@@ -33,6 +33,7 @@ import EmojiPicker from './EmojiPicker'
 import { NOSTR_KINDS } from '@/lib/constants'
 import BadgeDisplay, { clearBadgeCache } from './BadgeDisplay'
 import { useSTT } from '@/hooks/useSTT'
+import DivineVideoRecorder from './DivineVideoRecorder'
 
 // Extract hashtags from content (NIP-01)
 function extractHashtags(content) {
