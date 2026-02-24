@@ -152,8 +152,8 @@ class NostrRepository(
 
     suspend fun fetchBadges(pubkeyHex: String): List<NostrEvent> {
         val filter = NostrClient.Filter(
-            kinds = listOf(NostrKind.BADGE_AWARD),
-            tags = mapOf("p" to listOf(pubkeyHex)),
+            kinds = listOf(NostrKind.PROFILE_BADGES),
+            authors = listOf(pubkeyHex),
             limit = 1
         )
         val events = client.fetchEvents(filter, timeoutMs = 4_000)

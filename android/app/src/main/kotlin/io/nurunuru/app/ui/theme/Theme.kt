@@ -49,6 +49,7 @@ private val LightColorScheme = lightColorScheme(
 data class NuruColors(
     val lineGreen: Color,
     val zapColor: Color,
+    val textSecondary: Color,
     val textTertiary: Color,
     val bgTertiary: Color,
     val border: Color
@@ -58,6 +59,7 @@ val LocalNuruColors = staticCompositionLocalOf {
     NuruColors(
         lineGreen = LineGreen,
         zapColor = ColorZap,
+        textSecondary = TextSecondary,
         textTertiary = TextTertiary,
         bgTertiary = BgTertiary,
         border = BorderColor
@@ -74,6 +76,7 @@ fun NuruNuruTheme(
         NuruColors(
             lineGreen = LineGreen,
             zapColor = ColorZap,
+            textSecondary = TextSecondary,
             textTertiary = TextTertiary,
             bgTertiary = BgTertiary,
             border = BorderColor
@@ -82,6 +85,7 @@ fun NuruNuruTheme(
         NuruColors(
             lineGreen = LineGreen,
             zapColor = ColorZap,
+            textSecondary = TextSecondaryLight,
             textTertiary = TextTertiaryLight,
             bgTertiary = BgTertiaryLight,
             border = BorderColorLight

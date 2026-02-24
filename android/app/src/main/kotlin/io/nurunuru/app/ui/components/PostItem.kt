@@ -40,9 +40,9 @@ fun PostItem(
     onLike: () -> Unit,
     onRepost: () -> Unit,
     onProfileClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
     onDelete: (() -> Unit)? = null,
     isOwnPost: Boolean = false,
-    modifier: Modifier = Modifier,
     birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList()
 ) {
     val nuruColors = LocalNuruColors.current

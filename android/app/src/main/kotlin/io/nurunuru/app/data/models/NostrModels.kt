@@ -92,6 +92,7 @@ object NostrKind {
     const val DM_GIFT_WRAP = 1059
     const val VIDEO_LOOP = 34236
     const val LABEL = 1985 // Birdwatch
-    const val BADGE_DEFINITION = 8
-    const val BADGE_AWARD = 30008
+    const val BADGE_DEFINITION = 30009
+    const val BADGE_AWARD = 8
+    const val PROFILE_BADGES = 30008
 }

@@ -511,7 +511,11 @@ fun EditProfileModal(
                 colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
                 enabled = !isUploading
             ) {
-                if (isUploading) CircularProgressIndicator(size = 20.dp, color = Color.White)
+                if (isUploading) CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp
+                )
                 else Text("保存", fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(32.dp))

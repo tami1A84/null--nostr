@@ -24,19 +24,20 @@ object ImageUploadUtils {
     ): String? = withContext(Dispatchers.IO) {
         try {
             val url = "https://nostr.build/api/v2/upload/files"
-            val requestBuilder = Request.Builder().url(url)
+            val requestBuilder = okhttp3.Request.Builder().url(url)
 
             // Optional NIP-98 Auth
             if (signer != null) {
                 try {
-                    val now = Timestamp.now()
                     val authEventBuilder = EventBuilder(Kind(27235u), "")
                         .tags(listOf(
                             Tag.parse(listOf("u", url)),
                             Tag.parse(listOf("method", "POST"))
                         ))
 
-                    val authEvent = signer.signEventBuilder(authEventBuilder)
+                    val publicKey = signer.getPublicKey()
+                    val unsignedEvent = authEventBuilder.build(publicKey)
+                    val authEvent = signer.signEvent(unsignedEvent)
                     val authHeader = Base64.encodeToString(authEvent.asJson().toByteArray(), Base64.NO_WRAP)
                     requestBuilder.addHeader("Authorization", "Nostr $authHeader")
                 } catch (e: Exception) {

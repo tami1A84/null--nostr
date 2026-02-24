@@ -8,11 +8,12 @@ import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import android.util.Log
+import java.util.concurrent.ConcurrentHashMap
 
 object Nip05Utils {
     private val client = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
-    private val cache = mutableMapOf<String, Boolean>()
+    private val cache = ConcurrentHashMap<String, Boolean>()
 
     suspend fun verifyNip05(nip05: String, pubkeyHex: String): Boolean = withContext(Dispatchers.IO) {
         val cacheKey = "$nip05:$pubkeyHex"
