@@ -1,0 +1,79 @@
+package io.nurunuru.app.data
+
+import android.util.Base64
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
+import rust.nostr.sdk.*
+
+object ImageUploadUtils {
+    private val client = OkHttpClient()
+    private val json = Json { ignoreUnknownKeys = true }
+
+    suspend fun uploadToNostrBuild(
+        fileBytes: ByteArray,
+        mimeType: String,
+        signer: NostrSigner? = null
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://nostr.build/api/v2/upload/files"
+            val requestBuilder = okhttp3.Request.Builder().url(url)
+
+            // Optional NIP-98 Auth
+            if (signer != null) {
+                try {
+                    val authEventBuilder = EventBuilder(Kind(27235u), "")
+                        .tags(listOf(
+                            Tag.parse(listOf("u", url)),
+                            Tag.parse(listOf("method", "POST"))
+                        ))
+
+                    val publicKey = signer.getPublicKey()
+                    val unsignedEvent = authEventBuilder.build(publicKey)
+                    val authEvent = signer.signEvent(unsignedEvent)
+                    val authHeader = Base64.encodeToString(authEvent.asJson().toByteArray(), Base64.NO_WRAP)
+                    requestBuilder.addHeader("Authorization", "Nostr $authHeader")
+                } catch (e: Exception) {
+                    Log.w("ImageUploadUtils", "Failed to create NIP-98 header", e)
+                }
+            }
+
+            val requestBody = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart(
+                    "file",
+                    "image.${mimeType.split("/").last()}",
+                    fileBytes.toRequestBody(mimeType.toMediaTypeOrNull())
+                )
+                .build()
+
+            val request = requestBuilder
+                .post(requestBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.w("ImageUploadUtils", "Upload failed: ${response.code} ${response.message}")
+                    return@withContext null
+                }
+
+                val body = response.body?.string() ?: return@withContext null
+                val root = json.parseToJsonElement(body).jsonObject
+                if (root["status"]?.jsonPrimitive?.content == "success") {
+                    val data = root["data"]?.jsonArray?.getOrNull(0)?.jsonObject
+                    return@withContext data?.get("url")?.jsonPrimitive?.content
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ImageUploadUtils", "Upload failed", e)
+        }
+        null
+    }
+}

@@ -31,7 +31,8 @@ data class UserProfile(
     val nip05: String? = null,
     val banner: String? = null,
     val lud16: String? = null,
-    val website: String? = null
+    val website: String? = null,
+    val birthday: String? = null
 ) {
     val displayedName: String
         get() = displayName?.takeIf { it.isNotBlank() }
@@ -91,4 +92,7 @@ object NostrKind {
     const val DM_GIFT_WRAP = 1059
     const val VIDEO_LOOP = 34236
     const val LABEL = 1985 // Birdwatch
+    const val BADGE_DEFINITION = 30009
+    const val BADGE_AWARD = 8
+    const val PROFILE_BADGES = 30008
 }

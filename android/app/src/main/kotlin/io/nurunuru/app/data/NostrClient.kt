@@ -33,6 +33,11 @@ class NostrClient(
 
     // ─── Connection ───────────────────────────────────────────────────────────
 
+    fun getSigner(): NostrSigner {
+        val keys = Keys.parse(privateKeyHex)
+        return NostrSigner.keys(keys)
+    }
+
     fun connect() {
         scope.launch {
             try {
@@ -70,6 +75,21 @@ class NostrClient(
 
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize rust-nostr Client", e)
+            }
+        }
+    }
+
+    suspend fun publish(kind: Int, content: String, tags: List<List<String>> = emptyList()): Boolean {
+        val client = sdkClient ?: return false
+        return withContext(Dispatchers.IO) {
+            try {
+                val sdkTags = tags.map { Tag.parse(it) }
+                val builder = EventBuilder(Kind(kind.toUShort()), content).tags(sdkTags)
+                client.sendEventBuilder(builder)
+                true
+            } catch (e: Exception) {
+                Log.w(TAG, "Publish failed for kind $kind: ${e.message}")
+                false
             }
         }
     }
