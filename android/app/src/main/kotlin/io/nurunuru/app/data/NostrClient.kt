@@ -15,8 +15,7 @@ import java.util.concurrent.ConcurrentHashMap
 private const val TAG = "NostrClient"
 
 /**
- * Nostr client powered by the official rust-nostr SDK.
- * Handles relay connections, persistence via nostrdb (LMDB), and event flow.
+ * Nostr client powered by the official rust-nostr SDK (0.44.2).
  */
 class NostrClient(
     private val context: Context,
@@ -37,7 +36,7 @@ class NostrClient(
     fun connect() {
         scope.launch {
             try {
-                // 1. Initialize nostrdb (LMDB) in the app's files directory
+                // 1. Initialize nostrdb (LMDB) in the app's files directory (Android safe path)
                 val dbPath = context.filesDir.absolutePath + "/nostrdb"
                 val database = NostrDatabase.lmdb(dbPath)
 
@@ -66,8 +65,8 @@ class NostrClient(
 
                 Log.d(TAG, "rust-nostr SDK Client connected")
 
-                // Start listening for notifications (incoming events)
-                handleNotifications(client)
+                // Start listening for notifications
+                startNotificationListener(client)
 
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize rust-nostr Client", e)
@@ -75,20 +74,21 @@ class NostrClient(
         }
     }
 
-    private fun handleNotifications(client: Client) {
-        // Commented out temporarily to allow compilation of the rest of the app
-        // The user can verify other fixes (crashes, key utils, etc)
-        /*
+    private fun startNotificationListener(client: Client) {
         scope.launch {
+            // SDK 0.44.x: HandleNotification methods are suspend fun
             client.handleNotifications(object : HandleNotification {
-                override fun handle(relayUrl: RelayUrl, notification: RelayPoolNotification) {
+                override suspend fun handle(relayUrl: RelayUrl, subscriptionId: String, event: Event) {
+                    val nostrEvent = mapSdkEvent(event)
+                    _events.emit(nostrEvent)
+                    subscriptionCallbacks[subscriptionId]?.invoke(nostrEvent)
                 }
 
-                override fun handleMsg(relayUrl: RelayUrl, msg: RelayMessage) {
+                override suspend fun handleMsg(relayUrl: RelayUrl, message: RelayMessage) {
+                    // Handle other relay messages if needed (EOSE, OK, etc.)
                 }
             })
         }
-        */
     }
 
     fun disconnect() {
@@ -138,15 +138,13 @@ class NostrClient(
 
     fun unsubscribe(subId: String) {
         subscriptionCallbacks.remove(subId)
-        // SDK client doesn't always need explicit unsubscribe for simple flows,
-        // but we can add it if we want to send CLOSE.
     }
 
     private fun mapFilter(f: Filter): rust.nostr.sdk.Filter {
         var sdkF = rust.nostr.sdk.Filter()
         f.ids?.let { ids -> sdkF = sdkF.ids(ids.map { EventId.parse(it) }) }
         f.authors?.let { authors -> sdkF = sdkF.authors(authors.map { PublicKey.parse(it) }) }
-        f.kinds?.let { kinds -> sdkF = sdkF.kinds(kinds.map { Kind(it.toUInt().toUShort()) }) }
+        f.kinds?.let { kinds -> sdkF = sdkF.kinds(kinds.map { Kind(it.toUShort()) }) }
         f.since?.let { sdkF = sdkF.since(Timestamp.fromSecs(it.toULong())) }
         f.until?.let { sdkF = sdkF.until(Timestamp.fromSecs(it.toULong())) }
         f.limit?.let { sdkF = sdkF.limit(it.toULong()) }
@@ -155,7 +153,7 @@ class NostrClient(
             try {
                 val alphabet = Alphabet.valueOf(tagName.uppercase())
                 val tag = SingleLetterTag.lowercase(alphabet)
-                values.forEach { v -> sdkF = sdkF.customTag(tag, v) }
+                sdkF = sdkF.customTags(tag, values)
             } catch (e: Exception) {
             }
         }
@@ -169,10 +167,9 @@ class NostrClient(
         return withContext(Dispatchers.IO) {
             try {
                 val sdkFilter = mapFilter(filter)
-                val events = client.fetchEvents(sdkFilter, java.time.Duration.ofMillis(timeoutMs))
-                val results = mutableListOf<NostrEvent>()
-                events.all().forEach { results.add(mapSdkEvent(it)) }
-                results
+                val eventsWrapper = client.fetchEvents(sdkFilter, java.time.Duration.ofMillis(timeoutMs))
+                // SDK 0.44: Use .toVec() to get a Kotlin List<Event>
+                eventsWrapper.toVec().map { mapSdkEvent(it) }
             } catch (e: Exception) {
                 Log.w(TAG, "Fetch events failed: ${e.message}")
                 emptyList()
@@ -186,7 +183,6 @@ class NostrClient(
         val client = sdkClient ?: return false
         return withContext(Dispatchers.IO) {
             try {
-                // Re-build SDK event from our model
                 val sdkEvent = Event.fromJson(serializeNostrEvent(event))
                 client.sendEvent(sdkEvent)
                 true
@@ -198,17 +194,8 @@ class NostrClient(
     }
 
     private fun serializeNostrEvent(e: NostrEvent): String {
-        return """
-            {
-                "id": "${e.id}",
-                "pubkey": "${e.pubkey}",
-                "created_at": ${e.createdAt},
-                "kind": ${e.kind},
-                "tags": ${Json.encodeToString(e.tags)},
-                "content": ${Json.encodeToString(e.content)},
-                "sig": "${e.sig}"
-            }
-        """.trimIndent()
+        val json = Json { encodeDefaults = true }
+        return json.encodeToString(e)
     }
 
     suspend fun publishNote(content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
@@ -218,7 +205,6 @@ class NostrClient(
                 val sdkTags = tags.map { Tag.parse(it) }
                 val builder = EventBuilder.textNote(content).tags(sdkTags)
                 val output = client.sendEventBuilder(builder)
-                // Fetch the event from database to return it
                 val event = client.database().eventById(output.id)
                 event?.let { mapSdkEvent(it) }
             } catch (e: Exception) {
@@ -233,8 +219,9 @@ class NostrClient(
         return withContext(Dispatchers.IO) {
             try {
                 val id = EventId.parse(eventId)
-                // Use the most stable way to build a reaction
-                val builder = EventBuilder(Kind(7u), emoji).tags(listOf(Tag.parse(listOf("e", id.toString()))))
+                // Use safe Tag.event(id) for reactions
+                val tags = listOf(Tag.event(id))
+                val builder = EventBuilder(Kind(7u), emoji).tags(tags)
                 client.sendEventBuilder(builder)
                 true
             } catch (e: Exception) {
@@ -248,7 +235,9 @@ class NostrClient(
         return withContext(Dispatchers.IO) {
             try {
                 val id = EventId.parse(eventId)
-                val builder = EventBuilder(Kind(6u), "").tags(listOf(Tag.parse(listOf("e", id.toString()))))
+                // Use safe Tag.event(id) for reposts
+                val tags = listOf(Tag.event(id))
+                val builder = EventBuilder(Kind(6u), "").tags(tags)
                 client.sendEventBuilder(builder)
                 true
             } catch (e: Exception) {
@@ -277,6 +266,7 @@ class NostrClient(
         return try {
             val sender = PublicKey.parse(senderPubkeyHex)
             val signer = client.signer()
+            // In 0.44.2, Signer has suspend nip04Decrypt
             signer.nip04Decrypt(sender, encryptedContent)
         } catch (e: Exception) {
             null

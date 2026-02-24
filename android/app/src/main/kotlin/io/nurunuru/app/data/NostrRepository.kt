@@ -230,7 +230,7 @@ class NostrRepository(
     suspend fun fetchDmMessages(
         myPubkeyHex: String,
         partnerPubkeyHex: String,
-        decryptFn: (String, String) -> String?
+        decryptFn: suspend (String, String) -> String?
     ): List<DmMessage> {
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.ENCRYPTED_DM),
@@ -239,24 +239,25 @@ class NostrRepository(
         )
         val events = client.fetchEvents(filter, 5_000)
 
-        return events
-            .filter { event ->
-                val pTag = event.getTagValue("p") ?: return@filter false
-                (event.pubkey == myPubkeyHex && pTag == partnerPubkeyHex) ||
-                    (event.pubkey == partnerPubkeyHex && pTag == myPubkeyHex)
-            }
-            .mapNotNull { event ->
-                val isMine = event.pubkey == myPubkeyHex
-                val counterparty = if (isMine) partnerPubkeyHex else event.pubkey
-                val decrypted = decryptFn(counterparty, event.content) ?: return@mapNotNull null
-                DmMessage(
+        val results = mutableListOf<DmMessage>()
+        events.filter { event ->
+            val pTag = event.getTagValue("p") ?: return@filter false
+            (event.pubkey == myPubkeyHex && pTag == partnerPubkeyHex) ||
+                (event.pubkey == partnerPubkeyHex && pTag == myPubkeyHex)
+        }.forEach { event ->
+            val isMine = event.pubkey == myPubkeyHex
+            val counterparty = if (isMine) partnerPubkeyHex else event.pubkey
+            val decrypted = decryptFn(counterparty, event.content)
+            if (decrypted != null) {
+                results.add(DmMessage(
                     event = event,
                     content = decrypted,
                     isMine = isMine,
                     timestamp = event.createdAt
-                )
+                ))
             }
-            .sortedBy { it.timestamp }
+        }
+        return results.sortedBy { it.timestamp }
     }
 
     // ─── Actions ──────────────────────────────────────────────────────────────
