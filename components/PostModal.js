@@ -70,6 +70,14 @@ function ContentPreview({ content, customEmojis = [] }) {
 const MAX_IMAGES = 3
 
 export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuccess }) {
+  const [isDesktop, setIsDesktop] = useState(false)
+  useEffect(() => {
+    const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024)
+    checkDesktop()
+    window.addEventListener('resize', checkDesktop)
+    return () => window.removeEventListener('resize', checkDesktop)
+  }, [])
+
   const [postContent, setPostContent] = useState('')
   const [posting, setPosting] = useState(false)
   const [imageFiles, setImageFiles] = useState([])
@@ -470,16 +478,18 @@ export default function PostModal({ pubkey, replyTo, quotedEvent, onClose, onSuc
         {/* Toolbar */}
         <div className="px-4 pb-4 flex items-center gap-3 border-t border-[var(--border-color)] pt-3">
           {/* Video Recorder button */}
-          <button
-            onClick={() => setShowRecorder(true)}
-            className={`action-btn p-2 ${recordedVideo ? 'text-[var(--line-green)]' : 'text-[var(--text-secondary)]'}`}
-            title="6秒動画を録画"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="23 7 16 12 23 17 23 7"></polygon>
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-            </svg>
-          </button>
+          {!isDesktop && (
+            <button
+              onClick={() => setShowRecorder(true)}
+              className={`action-btn p-2 ${recordedVideo ? 'text-[var(--line-green)]' : 'text-[var(--text-secondary)]'}`}
+              title="6秒動画を録画"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+              </svg>
+            </button>
+          )}
 
           {/* Image upload button */}
           <input
