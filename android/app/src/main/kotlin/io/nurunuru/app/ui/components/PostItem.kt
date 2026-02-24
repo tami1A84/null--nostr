@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Warning
@@ -38,11 +40,14 @@ fun PostItem(
     onLike: () -> Unit,
     onRepost: () -> Unit,
     onProfileClick: (String) -> Unit,
+    onDelete: (() -> Unit)? = null,
+    isOwnPost: Boolean = false,
     modifier: Modifier = Modifier,
     birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList()
 ) {
     val nuruColors = LocalNuruColors.current
     val profile = post.profile
+    var showMenu by remember { mutableStateOf(false) }
 
     // Content Warning state
     val cwReason = post.event.getTagValue("content-warning")
@@ -91,11 +96,44 @@ fun PostItem(
                             )
                         }
                     }
-                    Text(
-                        text = formatTimestamp(post.event.createdAt),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = nuruColors.textTertiary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = formatTimestamp(post.event.createdAt),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = nuruColors.textTertiary
+                        )
+                        if (isOwnPost && onDelete != null) {
+                            Box {
+                                IconButton(
+                                    onClick = { showMenu = true },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.MoreVert,
+                                        contentDescription = "Menu",
+                                        tint = nuruColors.textTertiary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showMenu,
+                                    onDismissRequest = { showMenu = false },
+                                    modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("削除", color = Color.Red) },
+                                        onClick = {
+                                            showMenu = false
+                                            onDelete()
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))

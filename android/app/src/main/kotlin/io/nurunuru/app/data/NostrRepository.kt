@@ -4,7 +4,6 @@ import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
-import kotlinx.serialization.json.JsonArray
 
 /**
  * High-level Nostr operations.
@@ -101,7 +100,8 @@ class NostrRepository(
                 nip05 = obj["nip05"]?.jsonPrimitive?.content,
                 banner = obj["banner"]?.jsonPrimitive?.content,
                 lud16 = obj["lud16"]?.jsonPrimitive?.content,
-                website = obj["website"]?.jsonPrimitive?.content
+                website = obj["website"]?.jsonPrimitive?.content,
+                birthday = obj["birthday"]?.jsonPrimitive?.content
             )
         } catch (e: Exception) {
             UserProfile(pubkey = event.pubkey)
@@ -125,12 +125,68 @@ class NostrRepository(
 
     suspend fun fetchUserNotes(pubkeyHex: String, limit: Int = 30): List<ScoredPost> {
         val filter = NostrClient.Filter(
-            kinds = listOf(NostrKind.TEXT_NOTE),
+            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.LONG_FORM, NostrKind.VIDEO_LOOP, NostrKind.REPOST),
             authors = listOf(pubkeyHex),
             limit = limit
         )
         val events = client.fetchEvents(filter, timeoutMs = 5_000)
         return enrichPosts(events)
+    }
+
+    suspend fun fetchUserLikes(pubkeyHex: String, limit: Int = 30): List<ScoredPost> {
+        val reactionFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.REACTION),
+            authors = listOf(pubkeyHex),
+            limit = limit
+        )
+        val reactions = client.fetchEvents(reactionFilter, timeoutMs = 4_000)
+        val eventIds = reactions.mapNotNull { it.getTagValue("e") }.distinct()
+        if (eventIds.isEmpty()) return emptyList()
+
+        val eventsFilter = NostrClient.Filter(
+            ids = eventIds
+        )
+        val events = client.fetchEvents(eventsFilter, timeoutMs = 5_000)
+        return enrichPosts(events.sortedByDescending { it.createdAt })
+    }
+
+    suspend fun fetchBadges(pubkeyHex: String): List<NostrEvent> {
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.BADGE_AWARD),
+            tags = mapOf("p" to listOf(pubkeyHex)),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        val awardEvent = events.maxByOrNull { it.createdAt } ?: return emptyList()
+
+        // Tags are like ["a", "kind:pubkey:d-tag", "relay"], we want the kind 8 events
+        val badgeTags = awardEvent.tags.filter { it.getOrNull(0) == "a" }
+
+        // Extract kind, pubkey, and d-tag from kind:pubkey:d-tag
+        val badgeDefinitions = mutableListOf<NostrEvent>()
+
+        for (tag in badgeTags) {
+            val identifier = tag.getOrNull(1) ?: continue
+            val parts = identifier.split(":")
+            if (parts.size < 3) continue
+
+            val kind = parts[0].toIntOrNull() ?: continue
+            val pubkey = parts[1]
+            val dTag = parts[2]
+
+            val defFilter = NostrClient.Filter(
+                kinds = listOf(kind),
+                authors = listOf(pubkey),
+                tags = mapOf("d" to listOf(dTag)),
+                limit = 1
+            )
+            val defEvents = client.fetchEvents(defFilter, timeoutMs = 2_000)
+            defEvents.maxByOrNull { it.createdAt }?.let { badgeDefinitions.add(it) }
+
+            if (badgeDefinitions.size >= 3) break
+        }
+
+        return badgeDefinitions
     }
 
     // ─── Reactions ────────────────────────────────────────────────────────────
@@ -323,19 +379,107 @@ class NostrRepository(
     suspend fun sendDm(recipientPubkeyHex: String, content: String): Boolean =
         client.sendEncryptedDm(recipientPubkeyHex, content)
 
+    suspend fun deleteEvent(eventId: String, reason: String = ""): Boolean {
+        return client.publish(
+            kind = NostrKind.DELETION,
+            content = reason,
+            tags = listOf(listOf("e", eventId))
+        )
+    }
+
+    suspend fun followUser(myPubkeyHex: String, targetPubkeyHex: String): Boolean {
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.CONTACT_LIST),
+            authors = listOf(myPubkeyHex),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        val latest = events.maxByOrNull { it.createdAt }
+
+        val tags = latest?.tags?.toMutableList() ?: mutableListOf()
+        if (tags.any { it.firstOrNull() == "p" && it.getOrNull(1) == targetPubkeyHex }) {
+            return true
+        }
+
+        tags.add(listOf("p", targetPubkeyHex))
+
+        return client.publish(
+            kind = NostrKind.CONTACT_LIST,
+            content = latest?.content ?: "",
+            tags = tags
+        )
+    }
+
+    suspend fun unfollowUser(myPubkeyHex: String, targetPubkeyHex: String): Boolean {
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.CONTACT_LIST),
+            authors = listOf(myPubkeyHex),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        val latest = events.maxByOrNull { it.createdAt } ?: return false
+
+        val newTags = latest.tags.filter { !(it.firstOrNull() == "p" && it.getOrNull(1) == targetPubkeyHex) }
+
+        return client.publish(
+            kind = NostrKind.CONTACT_LIST,
+            content = latest.content,
+            tags = newTags
+        )
+    }
+
+    suspend fun uploadImage(fileBytes: ByteArray, mimeType: String): String? {
+        return ImageUploadUtils.uploadToNostrBuild(fileBytes, mimeType, client.getSigner())
+    }
+
+    suspend fun updateProfile(profile: UserProfile): Boolean {
+        val content = buildJsonObject {
+            profile.name?.let { put("name", it) }
+            profile.displayName?.let { put("display_name", it) }
+            profile.about?.let { put("about", it) }
+            profile.picture?.let { put("picture", it) }
+            profile.banner?.let { put("banner", it) }
+            profile.nip05?.let { put("nip05", it) }
+            profile.lud16?.let { put("lud16", it) }
+            profile.website?.let { put("website", it) }
+            profile.birthday?.let { put("birthday", it) }
+        }.toString()
+
+        return client.publish(
+            kind = NostrKind.METADATA,
+            content = content
+        )
+    }
+
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> {
-        val filteredEvents = events.filter { it.kind == NostrKind.TEXT_NOTE || it.kind == NostrKind.VIDEO_LOOP }
-        if (filteredEvents.isEmpty()) return emptyList()
+        if (events.isEmpty()) return emptyList()
 
-        val ids = filteredEvents.map { it.id }
-        val profiles = fetchProfiles(filteredEvents.map { it.pubkey }.distinct())
+        val processedEvents = mutableListOf<NostrEvent>()
+        for (event in events) {
+            if (event.kind == NostrKind.REPOST) {
+                try {
+                    val original = json.decodeFromString<NostrEvent>(event.content)
+                    processedEvents.add(original)
+                } catch (e: Exception) {
+                    // If content is empty or not JSON, we might need to fetch by "e" tag
+                    // But for user profile, usually content is populated
+                }
+            } else if (event.kind == NostrKind.TEXT_NOTE || event.kind == NostrKind.VIDEO_LOOP || event.kind == NostrKind.LONG_FORM) {
+                processedEvents.add(event)
+            }
+        }
+
+        if (processedEvents.isEmpty()) return emptyList()
+
+        val ids = processedEvents.map { it.id }
+        val profiles = fetchProfiles(processedEvents.map { it.pubkey }.distinct())
 
         val reactions = fetchReactions(ids)
         val zaps = fetchZaps(ids)
 
-        val posts = filteredEvents.map { event ->
+        val posts = processedEvents.map { event ->
             val likeCount = reactions[event.id] ?: 0
             val zapAmount = zaps[event.id] ?: 0L
 
