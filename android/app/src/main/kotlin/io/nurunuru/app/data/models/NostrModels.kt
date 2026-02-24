@@ -90,4 +90,5 @@ object NostrKind {
     const val SEALED_DM = 13
     const val DM_GIFT_WRAP = 1059
     const val VIDEO_LOOP = 34236
+    const val LABEL = 1985 // Birdwatch
 }

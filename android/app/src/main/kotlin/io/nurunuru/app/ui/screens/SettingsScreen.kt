@@ -7,15 +7,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.models.DEFAULT_RELAYS
 import io.nurunuru.app.data.prefs.AppPreferences
@@ -23,6 +27,14 @@ import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.AuthViewModel
+
+data class MiniAppData(
+    val id: String,
+    val name: String,
+    val description: String,
+    val category: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,19 +45,24 @@ fun SettingsScreen(
     pictureUrl: String?
 ) {
     val nuruColors = LocalNuruColors.current
-    var relays by remember { mutableStateOf(prefs.relays.toMutableList()) }
-    var newRelayInput by remember { mutableStateOf("") }
     var showLogoutDialog by remember { mutableStateOf(false) }
-    var showNpub by remember { mutableStateOf(false) }
+    var activeCategory by remember { mutableStateOf("all") }
+    var searchQuery by remember { mutableStateOf("") }
+    var showRelaySettings by remember { mutableStateOf(false) }
 
     val npub = remember(pubkeyHex) { NostrKeyUtils.encodeNpub(pubkeyHex) ?: pubkeyHex }
+
+    if (showRelaySettings) {
+        RelaySettingsView(prefs = prefs, onBack = { showRelaySettings = false })
+        return
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "ミニアプリ & 設定",
+                        "ミニアプリ",
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onBackground
                     )
@@ -61,115 +78,94 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(bottom = 80.dp)
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Profile section
+            // Login Status Section
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    UserAvatar(pictureUrl = pictureUrl, displayName = "", size = 48.dp)
-                    Column {
-                        Text(
-                            text = if (showNpub) npub else npub.take(20) + "...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = nuruColors.textTertiary,
-                            modifier = Modifier.clickable { showNpub = !showNpub }
-                        )
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        UserAvatar(pictureUrl = pictureUrl, displayName = "", size = 42.dp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("ログイン中", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text(npub.take(8) + "..." + npub.takeLast(8), style = MaterialTheme.typography.bodySmall, color = nuruColors.textTertiary)
+                        }
+                        TextButton(
+                            onClick = { showLogoutDialog = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("ログアウト", fontSize = 12.sp)
+                        }
                     }
                 }
-                HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
             }
 
-            // Section: リレー管理
+            // Search Bar
             item {
-                SectionHeader(title = "リレー管理")
-            }
-
-            items(relays.toList()) { relay ->
-                RelayItem(
-                    relay = relay,
-                    onDelete = {
-                        relays = relays.toMutableList().also { it.remove(relay) }
-                        prefs.relays = relays.toSet()
-                    }
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("ミニアプリを検索") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Outlined.Search, null, tint = nuruColors.textTertiary) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedBorderColor = LineGreen
+                    )
                 )
             }
 
+            // Category Tabs
             item {
-                // Add relay
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = newRelayInput,
-                        onValueChange = { newRelayInput = it },
-                        placeholder = { Text("wss://relay.example.com") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = LineGreen,
-                            cursorColor = LineGreen
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    IconButton(
-                        onClick = {
-                            val relay = newRelayInput.trim()
-                            if (relay.startsWith("wss://") && !relays.contains(relay)) {
-                                relays = relays.toMutableList().also { it.add(relay) }
-                                prefs.relays = relays.toSet()
-                                newRelayInput = ""
-                            }
-                        },
-                        enabled = newRelayInput.startsWith("wss://")
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "追加", tint = LineGreen)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("all" to "すべて", "entertainment" to "エンタメ", "tools" to "ツール").forEach { (id, label) ->
+                        FilterChip(
+                            selected = activeCategory == id,
+                            onClick = { activeCategory = id },
+                            label = { Text(label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LineGreen,
+                                selectedLabelColor = Color.White
+                            )
+                        )
                     }
                 }
+            }
 
-                // Reset to defaults
-                TextButton(
-                    onClick = {
-                        relays = DEFAULT_RELAYS.toMutableList()
-                        prefs.relays = DEFAULT_RELAYS.toSet()
-                    },
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                ) {
-                    Text("デフォルトに戻す", color = nuruColors.textTertiary)
+            // App List
+            val apps = listOf(
+                MiniAppData("emoji", "カスタム絵文字", "投稿やリアクションに使える絵文字を管理", "entertainment", Icons.Outlined.EmojiEmotions),
+                MiniAppData("badge", "プロフィールバッジ", "プロフィールに表示するバッジを設定", "entertainment", Icons.Outlined.Badge),
+                MiniAppData("scheduler", "調整くん", "オフ会や会議の予定を簡単に調整", "entertainment", Icons.Outlined.CalendarMonth),
+                MiniAppData("zap", "Zap設定", "デフォルトのZap金額をクイック設定", "tools", Icons.Default.Bolt),
+                MiniAppData("relay", "リレー設定", "最適なリレーを自動設定", "tools", Icons.Outlined.Language),
+                MiniAppData("upload", "アップロード設定", "画像のアップロード先サーバーを選択", "tools", Icons.Outlined.CloudUpload),
+                MiniAppData("mute", "ミュートリスト", "不快なユーザーを非表示に管理", "tools", Icons.Outlined.Block),
+                MiniAppData("elevenlabs", "音声入力設定", "高精度な音声入力の設定", "tools", Icons.Outlined.Mic),
+                MiniAppData("backup", "バックアップ", "投稿データをエクスポート", "tools", Icons.Outlined.Backup),
+                MiniAppData("vanish", "削除リクエスト", "データの削除を要求", "tools", Icons.Outlined.DeleteForever)
+            ).filter {
+                (activeCategory == "all" || it.category == activeCategory) &&
+                (searchQuery.isBlank() || it.name.contains(searchQuery) || it.description.contains(searchQuery))
+            }
+
+            items(apps) { app ->
+                MiniAppRow(app = app) {
+                    if (app.id == "relay") {
+                        showRelaySettings = true
+                    }
                 }
-
-                HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
-            }
-
-            // Section: その他
-            item {
-                SectionHeader(title = "その他")
-            }
-
-            item {
-                SettingsRow(
-                    icon = Icons.Outlined.Info,
-                    title = "バージョン",
-                    subtitle = "1.0.0 (Android)"
-                ) {}
-            }
-
-            item {
-                SettingsRow(
-                    icon = Icons.Outlined.Logout,
-                    title = "ログアウト",
-                    titleColor = MaterialTheme.colorScheme.error,
-                    showDivider = false
-                ) { showLogoutDialog = true }
             }
         }
     }
@@ -199,77 +195,111 @@ fun SettingsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SectionHeader(title: String) {
+private fun RelaySettingsView(prefs: AppPreferences, onBack: () -> Unit) {
     val nuruColors = LocalNuruColors.current
-    Text(
-        text = title,
-        style = MaterialTheme.typography.bodySmall,
-        color = nuruColors.textTertiary,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
-    )
-}
+    var relays by remember { mutableStateOf(prefs.relays.toList()) }
+    var newRelayInput by remember { mutableStateOf("") }
 
-@Composable
-private fun RelayItem(relay: String, onDelete: () -> Unit) {
-    val nuruColors = LocalNuruColors.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .background(LineGreen, shape = androidx.compose.foundation.shape.CircleShape)
-            )
-            Text(
-                text = relay,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("リレー設定", fontWeight = FontWeight.SemiBold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "戻る")
+                    }
+                }
             )
         }
-        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-            Icon(Icons.Default.Delete, contentDescription = "削除",
-                tint = nuruColors.textTertiary, modifier = Modifier.size(16.dp))
-        }
-    }
-    HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
-}
-
-@Composable
-private fun SettingsRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    subtitle: String? = null,
-    titleColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onBackground,
-    showDivider: Boolean = true,
-    onClick: () -> Unit
-) {
-    val nuruColors = LocalNuruColors.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = null, tint = nuruColors.textTertiary, modifier = Modifier.size(20.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, color = titleColor)
-            if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = nuruColors.textTertiary)
+    ) { padding ->
+        LazyColumn(modifier = Modifier.padding(padding)) {
+            items(relays) { relay ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(relay, style = MaterialTheme.typography.bodyMedium)
+                    IconButton(onClick = {
+                        relays = relays - relay
+                        prefs.relays = relays.toSet()
+                    }) {
+                        Icon(Icons.Default.Delete, null, tint = nuruColors.textTertiary)
+                    }
+                }
+                HorizontalDivider(color = nuruColors.border)
+            }
+            item {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = newRelayInput,
+                        onValueChange = { newRelayInput = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("wss://...") },
+                        singleLine = true
+                    )
+                    IconButton(onClick = {
+                        if (newRelayInput.isNotBlank()) {
+                            relays = relays + newRelayInput
+                            prefs.relays = relays.toSet()
+                            newRelayInput = ""
+                        }
+                    }) {
+                        Icon(Icons.Default.Add, null, tint = LineGreen)
+                    }
+                }
+                TextButton(
+                    onClick = {
+                        relays = DEFAULT_RELAYS
+                        prefs.relays = DEFAULT_RELAYS.toSet()
+                    },
+                    modifier = Modifier.padding(start = 8.dp)
+                ) {
+                    Text("デフォルトに戻す", color = nuruColors.textTertiary)
+                }
             }
         }
     }
-    if (showDivider) HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+}
+
+@Composable
+private fun MiniAppRow(app: MiniAppData, onClick: () -> Unit) {
+    val nuruColors = LocalNuruColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.size(56.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(app.icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(app.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Surface(
+                    color = if (app.category == "entertainment") Color(0xFFE1BEE7).copy(alpha = 0.2f) else Color(0xFFBBDEFB).copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(100.dp)
+                ) {
+                    Text(
+                        if (app.category == "entertainment") "エンタメ" else "ツール",
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontSize = 10.sp,
+                        color = if (app.category == "entertainment") Color(0xFF9C27B0) else Color(0xFF2196F3)
+                    )
+                }
+            }
+            Text(app.description, style = MaterialTheme.typography.bodySmall, color = nuruColors.textTertiary)
+        }
+        Icon(Icons.Outlined.ChevronRight, null, tint = nuruColors.textTertiary)
+    }
 }

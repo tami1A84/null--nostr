@@ -8,8 +8,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.outlined.ChatBubble
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,12 +37,16 @@ fun PostItem(
     post: ScoredPost,
     onLike: () -> Unit,
     onRepost: () -> Unit,
-    onReply: () -> Unit,
     onProfileClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList()
 ) {
     val nuruColors = LocalNuruColors.current
     val profile = post.profile
+
+    // Content Warning state
+    val cwReason = post.event.getTagValue("content-warning")
+    var isCWExpanded by remember { mutableStateOf(cwReason == null) }
 
     Column(
         modifier = modifier
@@ -95,68 +100,120 @@ fun PostItem(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Content
-                PostContent(post = post)
-
-                // Video / Images
-                if (post.event.kind == NostrKind.VIDEO_LOOP) {
-                    val videoUrl = post.event.getTagValue("url") ?: post.event.content
-                    val isVerified = post.event.getTagValue("verification-level") == "verified_web"
-
-                    if (videoUrl.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(300.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.Black)
-                        ) {
-                            VideoPlayer(videoUrl = videoUrl, modifier = Modifier.fillMaxSize())
-
-                            if (isVerified) {
-                                Surface(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(8.dp),
-                                    color = Color.Black.copy(alpha = 0.6f),
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        text = "✓ Verified Web",
-                                        color = Color.White,
-                                        fontSize = 10.sp,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
+                // Content Warning
+                if (cwReason != null && !isCWExpanded) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .background(Color(0xFFFF9800).copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                            .clickable { isCWExpanded = true }
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFFFF9800),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = cwReason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFFF9800),
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "表示する",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFFF9800),
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 } else {
-                    // Images
-                    extractImages(post.event.content).let { images ->
-                        if (images.isNotEmpty()) {
+                    // Content
+                    if (cwReason != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        ) {
+                            Icon(Icons.Outlined.Warning, null, tint = Color(0xFFFF9800), modifier = Modifier.size(12.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(cwReason, style = MaterialTheme.typography.labelSmall, color = Color(0xFFFF9800))
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                "隠す",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = nuruColors.textTertiary,
+                                modifier = Modifier.clickable { isCWExpanded = false }
+                            )
+                        }
+                    }
+                    PostContent(post = post)
+
+                    // Video / Images
+                    if (post.event.kind == NostrKind.VIDEO_LOOP) {
+                        val videoUrl = post.event.getTagValue("url") ?: post.event.content
+                        val isVerified = post.event.getTagValue("verification-level") == "verified_web"
+
+                        if (videoUrl.isNotBlank()) {
                             Spacer(modifier = Modifier.height(8.dp))
-                            ImageGrid(images = images)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(300.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.Black)
+                            ) {
+                                VideoPlayer(videoUrl = videoUrl, modifier = Modifier.fillMaxSize())
+
+                                if (isVerified) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(8.dp),
+                                        color = Color(0xFF4CAF50).copy(alpha = 0.8f),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "✅ WEB VERIFIED",
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Images
+                        extractImages(post.event.content).let { images ->
+                            if (images.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                ImageGrid(images = images)
+                            }
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // Birdwatch Display
+                if (birdwatchNotes.isNotEmpty()) {
+                    BirdwatchDisplay(notes = birdwatchNotes)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 // Action buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(32.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Reply
-                    ActionButton(
-                        icon = Icons.Outlined.ChatBubble,
-                        count = post.replyCount,
-                        onClick = onReply,
-                        tint = nuruColors.textTertiary
-                    )
                     // Repost
                     ActionButton(
                         icon = Icons.Outlined.Repeat,
@@ -288,6 +345,43 @@ private fun ImageGrid(images: List<String>) {
                             .clip(RoundedCornerShape(8.dp))
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun BirdwatchDisplay(notes: List<io.nurunuru.app.data.models.NostrEvent>) {
+    Surface(
+        color = Color(0xFF2196F3).copy(alpha = 0.05f),
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF2196F3).copy(alpha = 0.2f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = null,
+                    tint = Color(0xFF2196F3),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "コミュニティノート",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF2196F3),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            notes.forEach { note ->
+                Text(
+                    text = note.content,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                )
             }
         }
     }

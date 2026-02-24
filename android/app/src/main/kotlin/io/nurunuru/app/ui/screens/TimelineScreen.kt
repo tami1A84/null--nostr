@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -63,7 +64,7 @@ fun TimelineScreen(
                             FilterChip(
                                 selected = uiState.feedType == FeedType.GLOBAL,
                                 onClick = { viewModel.switchFeed(FeedType.GLOBAL) },
-                                label = { Text("グローバル") },
+                                label = { Text("おすすめ") },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = LineGreen,
                                     selectedLabelColor = MaterialTheme.colorScheme.onPrimary
@@ -72,7 +73,7 @@ fun TimelineScreen(
                             FilterChip(
                                 selected = uiState.feedType == FeedType.FOLLOWING,
                                 onClick = { viewModel.switchFeed(FeedType.FOLLOWING) },
-                                label = { Text("フォロー中") },
+                                label = { Text("フォロー") },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = LineGreen,
                                     selectedLabelColor = MaterialTheme.colorScheme.onPrimary
@@ -91,6 +92,13 @@ fun TimelineScreen(
                             Icon(
                                 imageVector = if (showSearch) Icons.Outlined.Close else Icons.Default.Search,
                                 contentDescription = "検索",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        IconButton(onClick = { /* TODO: Notifications */ }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Notifications,
+                                contentDescription = "通知",
                                 tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
@@ -178,8 +186,8 @@ fun TimelineScreen(
                                 post = post,
                                 onLike = { viewModel.likePost(post.event.id) },
                                 onRepost = { viewModel.repostPost(post.event.id) },
-                                onReply = { /* TODO: open reply modal */ },
-                                onProfileClick = { /* TODO: navigate to profile */ }
+                                onProfileClick = { /* TODO: navigate to profile */ },
+                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
                             )
                         }
                         item {
@@ -204,8 +212,8 @@ fun TimelineScreen(
             pictureUrl = myPictureUrl,
             displayName = myDisplayName,
             onDismiss = { showPostModal = false },
-            onPublish = { content ->
-                viewModel.publishNote(content)
+            onPublish = { content, cw ->
+                viewModel.publishNote(content, cw)
             }
         )
     }

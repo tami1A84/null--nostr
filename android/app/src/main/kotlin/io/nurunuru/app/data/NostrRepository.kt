@@ -167,6 +167,22 @@ class NostrRepository(
         return zapAmounts
     }
 
+    suspend fun fetchBirdwatchNotes(eventIds: List<String>): Map<String, List<NostrEvent>> {
+        if (eventIds.isEmpty()) return emptyMap()
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.LABEL),
+            tags = mapOf("e" to eventIds),
+            limit = 200
+        )
+        val events = client.fetchEvents(filter, 3_000)
+        val map = mutableMapOf<String, MutableList<NostrEvent>>()
+        for (event in events) {
+            val targetId = event.getTagValue("e") ?: continue
+            map.getOrPut(targetId) { mutableListOf() }.add(event)
+        }
+        return map
+    }
+
     private fun parseZapAmount(event: NostrEvent): Long {
         return try {
             val description = event.getTagValue("description") ?: return 0L
@@ -184,13 +200,13 @@ class NostrRepository(
     // ─── DMs ─────────────────────────────────────────────────────────────────
 
     suspend fun fetchDmConversations(pubkeyHex: String): List<DmConversation> {
-        // Fetch received DMs
+        // Fetch received DMs (Kind 4 and Kind 1059)
         val receivedFilter = NostrClient.Filter(
-            kinds = listOf(NostrKind.ENCRYPTED_DM),
+            kinds = listOf(NostrKind.ENCRYPTED_DM, NostrKind.DM_GIFT_WRAP),
             tags = mapOf("p" to listOf(pubkeyHex)),
             limit = 200
         )
-        // Fetch sent DMs
+        // Fetch sent DMs (Kind 4)
         val sentFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.ENCRYPTED_DM),
             authors = listOf(pubkeyHex),
@@ -230,31 +246,52 @@ class NostrRepository(
     suspend fun fetchDmMessages(
         myPubkeyHex: String,
         partnerPubkeyHex: String,
-        decryptFn: suspend (String, String) -> String?
+        decryptNip04Fn: suspend (String, String) -> String?,
+        decryptNip44Fn: suspend (String, String) -> String?
     ): List<DmMessage> {
+        // NIP-17 Gift Wraps are sent from random keys, so we only filter by recipient 'p' tag.
+        // We filter by conversation partner after decryption.
         val filter = NostrClient.Filter(
-            kinds = listOf(NostrKind.ENCRYPTED_DM),
-            authors = listOf(myPubkeyHex, partnerPubkeyHex),
-            limit = 100
+            kinds = listOf(NostrKind.ENCRYPTED_DM, NostrKind.DM_GIFT_WRAP),
+            tags = mapOf("p" to listOf(myPubkeyHex)),
+            limit = 200
         )
         val events = client.fetchEvents(filter, 5_000)
 
         val results = mutableListOf<DmMessage>()
-        events.filter { event ->
-            val pTag = event.getTagValue("p") ?: return@filter false
-            (event.pubkey == myPubkeyHex && pTag == partnerPubkeyHex) ||
-                (event.pubkey == partnerPubkeyHex && pTag == myPubkeyHex)
-        }.forEach { event ->
-            val isMine = event.pubkey == myPubkeyHex
-            val counterparty = if (isMine) partnerPubkeyHex else event.pubkey
-            val decrypted = decryptFn(counterparty, event.content)
-            if (decrypted != null) {
-                results.add(DmMessage(
-                    event = event,
-                    content = decrypted,
-                    isMine = isMine,
-                    timestamp = event.createdAt
-                ))
+        for (event in events) {
+            if (event.kind == NostrKind.ENCRYPTED_DM) {
+                val pTag = event.getTagValue("p") ?: continue
+                if ((event.pubkey == myPubkeyHex && pTag == partnerPubkeyHex) ||
+                    (event.pubkey == partnerPubkeyHex && pTag == myPubkeyHex)) {
+                    val isMine = event.pubkey == myPubkeyHex
+                    val counterparty = if (isMine) partnerPubkeyHex else event.pubkey
+                    val decrypted = decryptNip04Fn(counterparty, event.content)
+                    if (decrypted != null) {
+                        results.add(DmMessage(event, decrypted, isMine, event.createdAt))
+                    }
+                }
+            } else if (event.kind == NostrKind.DM_GIFT_WRAP) {
+                // Nested decryption for Gift Wrap (NIP-17)
+                try {
+                    val sealJson = decryptNip44Fn(event.pubkey, event.content) ?: continue
+                    val seal = json.decodeFromString<NostrEvent>(sealJson)
+                    if (seal.kind != 13) continue
+
+                    val rumorJson = decryptNip44Fn(seal.pubkey, seal.content) ?: continue
+                    val rumor = json.decodeFromString<NostrEvent>(rumorJson)
+                    if (rumor.kind != 14) continue
+
+                    val pTag = rumor.getTagValue("p") ?: continue
+                    val isMine = rumor.pubkey == myPubkeyHex
+                    val messagePartner = if (isMine) pTag else rumor.pubkey
+
+                    if (messagePartner == partnerPubkeyHex) {
+                        results.add(DmMessage(event, rumor.content, isMine, rumor.createdAt))
+                    }
+                } catch (e: Exception) {
+                    // Ignore decryption failures
+                }
             }
         }
         return results.sortedBy { it.timestamp }
@@ -268,9 +305,18 @@ class NostrRepository(
     suspend fun repostPost(eventId: String): Boolean =
         client.publishRepost(eventId)
 
-    suspend fun publishNote(content: String, replyToId: String? = null): NostrEvent? {
+    suspend fun publishNote(
+        content: String,
+        replyToId: String? = null,
+        contentWarning: String? = null
+    ): NostrEvent? {
         val tags = mutableListOf<List<String>>()
         if (replyToId != null) tags.add(listOf("e", replyToId, "", "reply"))
+        if (contentWarning != null) tags.add(listOf("content-warning", contentWarning))
+
+        // Add client tag matching web
+        tags.add(listOf("client", "nullnull"))
+
         return client.publishNote(content, tags)
     }
 
@@ -280,23 +326,41 @@ class NostrRepository(
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> {
-        val sortedEvents = events.filter { it.kind == NostrKind.TEXT_NOTE || it.kind == NostrKind.VIDEO_LOOP }
-            .sortedByDescending { it.createdAt }
-        if (sortedEvents.isEmpty()) return emptyList()
+        val filteredEvents = events.filter { it.kind == NostrKind.TEXT_NOTE || it.kind == NostrKind.VIDEO_LOOP }
+        if (filteredEvents.isEmpty()) return emptyList()
 
-        val ids = sortedEvents.map { it.id }
-        val profiles = fetchProfiles(sortedEvents.map { it.pubkey }.distinct())
+        val ids = filteredEvents.map { it.id }
+        val profiles = fetchProfiles(filteredEvents.map { it.pubkey }.distinct())
 
         val reactions = fetchReactions(ids)
         val zaps = fetchZaps(ids)
 
-        return sortedEvents.map { event ->
+        val posts = filteredEvents.map { event ->
+            val likeCount = reactions[event.id] ?: 0
+            val zapAmount = zaps[event.id] ?: 0L
+
+            // Simple scoring matching web weights
+            // zap: 100 (per 1000 sats roughly), like: 5
+            val engagementScore = (zapAmount / 1000.0) * 100.0 + likeCount * 5.0
+
+            // Time decay (linear over 24h for simplicity)
+            val ageHours = (System.currentTimeMillis() / 1000 - event.createdAt) / 3600.0
+            val timeMultiplier = (24.0 - ageHours.coerceIn(0.0, 24.0)) / 24.0
+
             ScoredPost(
                 event = event,
                 profile = profiles[event.pubkey],
-                likeCount = reactions[event.id] ?: 0,
-                zapAmount = zaps[event.id] ?: 0L
+                likeCount = likeCount,
+                zapAmount = zapAmount,
+                score = engagementScore * timeMultiplier
             )
+        }
+
+        // Sort by score if we have engagement, otherwise by time
+        return if (posts.any { it.score > 0 }) {
+            posts.sortedByDescending { it.score }
+        } else {
+            posts.sortedByDescending { it.event.createdAt }
         }
     }
 }
