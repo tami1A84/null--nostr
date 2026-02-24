@@ -52,8 +52,11 @@ class TalkViewModel(
                 val messages = repository.fetchDmMessages(
                     myPubkeyHex = myPubkeyHex,
                     partnerPubkeyHex = partnerPubkey,
-                    decryptFn = { counterparty, encrypted ->
+                    decryptNip04Fn = { counterparty, encrypted ->
                         nostrClient.decryptNip04(counterparty, encrypted)
+                    },
+                    decryptNip44Fn = { counterparty, encrypted ->
+                        nostrClient.decryptNip44(counterparty, encrypted)
                     }
                 )
                 _uiState.update { it.copy(messages = messages, messagesLoading = false) }

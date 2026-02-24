@@ -272,4 +272,15 @@ class NostrClient(
             null
         }
     }
+
+    suspend fun decryptNip44(senderPubkeyHex: String, encryptedContent: String): String? {
+        val client = sdkClient ?: return null
+        return try {
+            val sender = PublicKey.parse(senderPubkeyHex)
+            val signer = client.signer()
+            signer.nip44Decrypt(sender, encryptedContent)
+        } catch (e: Exception) {
+            null
+        }
+    }
 }

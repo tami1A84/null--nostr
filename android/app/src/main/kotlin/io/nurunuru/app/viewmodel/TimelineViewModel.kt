@@ -18,7 +18,8 @@ data class TimelineUiState(
     val feedType: FeedType = FeedType.GLOBAL,
     val searchQuery: String = "",
     val searchResults: List<ScoredPost> = emptyList(),
-    val isSearching: Boolean = false
+    val isSearching: Boolean = false,
+    val birdwatchNotes: Map<String, List<io.nurunuru.app.data.models.NostrEvent>> = emptyMap()
 )
 
 class TimelineViewModel(
@@ -42,6 +43,7 @@ class TimelineViewModel(
                     FeedType.FOLLOWING -> repository.fetchFollowTimeline(pubkeyHex, 50)
                 }
                 _uiState.update { it.copy(posts = posts, isLoading = false) }
+                fetchBirdwatchForPosts(posts)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "タイムラインの読み込みに失敗しました", isLoading = false) }
             }
@@ -57,8 +59,21 @@ class TimelineViewModel(
                     FeedType.FOLLOWING -> repository.fetchFollowTimeline(pubkeyHex, 50)
                 }
                 _uiState.update { it.copy(posts = posts, isRefreshing = false) }
+                fetchBirdwatchForPosts(posts)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "更新に失敗しました", isRefreshing = false) }
+            }
+        }
+    }
+
+    private fun fetchBirdwatchForPosts(posts: List<ScoredPost>) {
+        viewModelScope.launch {
+            try {
+                val ids = posts.map { it.event.id }
+                val notes = repository.fetchBirdwatchNotes(ids)
+                _uiState.update { it.copy(birdwatchNotes = notes) }
+            } catch (e: Exception) {
+                // Silently ignore
             }
         }
     }
@@ -119,10 +134,10 @@ class TimelineViewModel(
         }
     }
 
-    fun publishNote(content: String) {
+    fun publishNote(content: String, contentWarning: String? = null) {
         viewModelScope.launch {
             try {
-                repository.publishNote(content)
+                repository.publishNote(content, contentWarning = contentWarning)
             } catch (e: Exception) {
                 // Publishing failed silently; do not crash
             }
