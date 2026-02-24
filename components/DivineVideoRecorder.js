@@ -154,7 +154,11 @@ export default function DivineVideoRecorder({ onComplete, onClose }) {
     }
 
     try {
-      const recorder = new MediaRecorder(stream, { mimeType })
+      // Optimize for 1.5mbps lines by limiting bitrate while keeping 720p resolution
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: 1200000 // 1.2 Mbps target
+      })
       mediaRecorderRef.current = recorder
 
       recorder.ondataavailable = (ev) => {

@@ -340,7 +340,14 @@ export default function Home() {
             className={`fixed inset-0 lg:left-[240px] xl:left-[280px] bottom-16 lg:bottom-0 overflow-y-auto ${activeTab === 'home' ? '' : 'invisible pointer-events-none'}`}
             style={{ zIndex: activeTab === 'home' ? 1 : 0 }}
           >
-            <HomeTab ref={homeRef} pubkey={pubkey} onLogout={handleLogout} onStartDM={handleStartDM} onHashtagClick={handleHashtagSearch} />
+            <HomeTab
+              ref={homeRef}
+              pubkey={pubkey}
+              onLogout={handleLogout}
+              onStartDM={handleStartDM}
+              onHashtagClick={handleHashtagSearch}
+              isDesktop={isDesktop}
+            />
           </div>
         )}
         

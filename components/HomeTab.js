@@ -167,7 +167,7 @@ function ProfileNip05Badge({ nip05, pubkey }) {
   )
 }
 
-const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHashtagClick }, ref) {
+const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHashtagClick, isDesktop = false }, ref) {
   const [profile, setProfile] = useState(null)
   const [rawProfile, setRawProfile] = useState(null) // Store original profile JSON
   const [posts, setPosts] = useState([])
@@ -215,7 +215,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
   const handleTranscript = useCallback((text) => {
     setNewPost(prev => prev ? prev + ' ' + text : text)
   }, [])
-  const { isRecording: isSTTActive, toggleRecording: toggleSTT } = useSTT(handleTranscript)
+  const { isRecording: isSTTActive, toggleRecording: toggleSTT, partialText } = useSTT(handleTranscript)
 
   // Follow list state
   const [followList, setFollowList] = useState([])
@@ -1464,17 +1464,20 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                   onChange={(e) => setNewPost(e.target.value)}
                   spellCheck={false}
                   className={`w-full min-h-[120px] sm:min-h-[150px] bg-transparent resize-none placeholder-[var(--text-tertiary)] outline-none text-base ${
-                    newPost && (newPost.includes('#') || emojiTags.length > 0)
+                    (newPost && (newPost.includes('#') || emojiTags.length > 0)) || partialText || isSTTActive
                       ? 'text-transparent caret-[var(--text-primary)] absolute inset-0 z-10'
                       : 'text-[var(--text-primary)] relative'
                   }`}
                   placeholder="いまどうしてる？"
                   autoFocus
                 />
-                {/* Visible preview layer - only show when there are hashtags or emojis */}
-                {newPost && (newPost.includes('#') || emojiTags.length > 0) && (
+                {/* Visible preview layer - show when there are hashtags, emojis, or active STT */}
+                {((newPost && (newPost.includes('#') || emojiTags.length > 0)) || partialText || isSTTActive) && (
                   <div className="w-full min-h-[120px] sm:min-h-[150px] pointer-events-none">
-                    <ContentPreview content={newPost} customEmojis={emojiTags} />
+                    <ContentPreview
+                      content={newPost + (partialText ? (newPost ? ' ' : '') + partialText : '')}
+                      customEmojis={emojiTags}
+                    />
                   </div>
                 )}
               </div>
@@ -1539,27 +1542,34 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                 />
                 <div className="flex items-center gap-4">
                   {/* Video Recorder button */}
-                  <button
-                    onClick={() => setShowRecorder(true)}
-                    className={`action-btn p-2 ${recordedVideo ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'}`}
-                    title="6秒動画を録画"
-                  >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polygon points="23 7 16 12 23 17 23 7"></polygon>
-                      <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-                    </svg>
-                  </button>
+                  {!isDesktop && (
+                    <button
+                      onClick={() => setShowRecorder(true)}
+                      className={`action-btn p-2 ${recordedVideo ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'}`}
+                      title="6秒動画を録画"
+                    >
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                      </svg>
+                    </button>
+                  )}
 
                   <label
                     htmlFor="home-post-image-input"
-                    className={`flex items-center gap-2 text-[var(--line-green)] text-sm cursor-pointer ${(imageFiles.length >= MAX_IMAGES || recordedVideo) ? 'opacity-50 pointer-events-none' : ''}`}
+                    className={`action-btn p-2 cursor-pointer relative ${(imageFiles.length >= MAX_IMAGES || recordedVideo) ? 'opacity-50 pointer-events-none' : ''}`}
+                    title="画像を追加"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                       <circle cx="8.5" cy="8.5" r="1.5"/>
                       <polyline points="21 15 16 10 5 21"/>
                     </svg>
-                    画像 {imageFiles.length > 0 && `(${imageFiles.length}/${MAX_IMAGES})`}
+                    {imageFiles.length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-[var(--line-green)] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
+                        {imageFiles.length}
+                      </span>
+                    )}
                   </label>
                   <input
                     type="file"
@@ -1573,7 +1583,7 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                   {/* Content Warning toggle (NIP-36) */}
                   <button
                     onClick={() => setShowCWInput(!showCWInput)}
-                    className={`flex items-center gap-2 text-sm ${showCWInput ? 'text-orange-500' : 'text-[var(--text-tertiary)]'}`}
+                    className={`action-btn p-2 ${showCWInput ? 'text-orange-500' : 'text-[var(--text-tertiary)]'}`}
                     title="コンテンツ警告 (CW)"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1581,13 +1591,13 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                       <line x1="12" y1="9" x2="12" y2="13"/>
                       <line x1="12" y1="17" x2="12.01" y2="17"/>
                     </svg>
-                    CW
                   </button>
 
                   {/* Emoji picker button */}
                   <button
                     onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                    className={`flex items-center gap-2 text-sm ${showEmojiPicker ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'}`}
+                    className={`action-btn p-2 ${showEmojiPicker ? 'text-[var(--line-green)]' : 'text-[var(--text-tertiary)]'}`}
+                    aria-label="絵文字を追加"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="12" cy="12" r="10"/>
@@ -1595,13 +1605,12 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                       <line x1="9" y1="9" x2="9.01" y2="9"/>
                       <line x1="15" y1="9" x2="15.01" y2="9"/>
                     </svg>
-                    絵文字
                   </button>
 
                   {/* Microphone button for STT */}
                   <button
                     onClick={toggleSTT}
-                    className={`flex items-center gap-2 text-sm ${isSTTActive ? 'text-red-500 animate-pulse' : 'text-[var(--text-tertiary)]'}`}
+                    className={`action-btn p-2 ${isSTTActive ? 'text-red-500 animate-pulse' : 'text-[var(--text-tertiary)]'}`}
                     title="音声入力"
                   >
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1610,7 +1619,6 @@ const HomeTab = forwardRef(function HomeTab({ pubkey, onLogout, onStartDM, onHas
                       <line x1="12" y1="19" x2="12" y2="23"/>
                       <line x1="8" y1="23" x2="16" y2="23"/>
                     </svg>
-                    音声
                   </button>
                 </div>
                 
