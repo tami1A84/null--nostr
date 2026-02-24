@@ -4,6 +4,7 @@ import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
+import kotlinx.serialization.json.JsonArray
 
 /**
  * High-level Nostr operations.
@@ -170,10 +171,10 @@ class NostrRepository(
         return try {
             val description = event.getTagValue("description") ?: return 0L
             val zapRequest = json.parseToJsonElement(description).jsonObject
-            val tagsArr = zapRequest["tags"] as? kotlinx.serialization.json.JsonArray ?: return 0L
+            val tagsArr = zapRequest["tags"] as? JsonArray ?: return 0L
             val amountTag = tagsArr.firstOrNull {
-                it is kotlinx.serialization.json.JsonArray && it.firstOrNull()?.jsonPrimitive?.content == "amount"
-            } as? kotlinx.serialization.json.JsonArray
+                it is JsonArray && it.firstOrNull()?.jsonPrimitive?.content == "amount"
+            } as? JsonArray
             amountTag?.getOrNull(1)?.jsonPrimitive?.content?.toLong() ?: 0L
         } catch (e: Exception) {
             0L

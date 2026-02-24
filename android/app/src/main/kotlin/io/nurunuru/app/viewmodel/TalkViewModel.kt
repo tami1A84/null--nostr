@@ -9,6 +9,7 @@ import io.nurunuru.app.data.models.DmConversation
 import io.nurunuru.app.data.models.DmMessage
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 data class TalkUiState(
     val conversations: List<DmConversation> = emptyList(),
@@ -53,7 +54,7 @@ class TalkViewModel(
                     myPubkeyHex = myPubkeyHex,
                     partnerPubkeyHex = partnerPubkey,
                     decryptFn = { counterparty, encrypted ->
-                        nostrClient.decryptNip04(counterparty, encrypted)
+                        runBlocking { nostrClient.decryptNip04(counterparty, encrypted) }
                     }
                 )
                 _uiState.update { it.copy(messages = messages, messagesLoading = false) }
