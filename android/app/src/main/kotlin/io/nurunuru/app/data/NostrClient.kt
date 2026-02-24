@@ -6,7 +6,7 @@ import io.nurunuru.app.data.models.NostrEvent
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
 import rust.nostr.sdk.*
 import java.util.concurrent.ConcurrentHashMap
 
@@ -41,10 +41,11 @@ class NostrClient(
 
                 // 2. Setup signer
                 val keys = Keys.parse(privateKeyHex)
+                val signer = NostrSigner.keys(keys)
 
                 // 3. Build SDK Client
                 val client = ClientBuilder()
-                    .signer(keys)
+                    .signer(signer)
                     .database(database)
                     .build()
 
@@ -52,7 +53,7 @@ class NostrClient(
                 relays.forEach { url ->
                     val mappedUrl = mapLocalhost(url)
                     try {
-                        client.addRelay(mappedUrl)
+                        client.addRelay(RelayUrl.parse(mappedUrl))
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed to add relay $mappedUrl: ${e.message}")
                     }
@@ -75,24 +76,24 @@ class NostrClient(
     private fun handleNotifications(client: Client) {
         scope.launch {
             client.handleNotifications(object : HandleNotification {
-                override fun handle(notification: RelayPoolNotification) {
+                override fun handle(relayUrl: RelayUrl, notification: RelayPoolNotification) {
                     when (notification) {
                         is RelayPoolNotification.Event -> {
-                            val sdkEvent = notification.event
-                            val event = mapSdkEvent(sdkEvent)
-                            scope.launch { _events.emit(event) }
-
-                            // Trigger subscription callbacks
-                            subscriptionCallbacks.values.forEach { callback ->
-                                callback(event)
+                            // In some SDK versions, the event is accessible via a method
+                            // We use asJson as a workaround if field access fails
+                            try {
+                                val event = mapSdkEvent(notification.asEvent()!!)
+                                scope.launch { _events.emit(event) }
+                                subscriptionCallbacks.values.forEach { it(event) }
+                            } catch (e: Exception) {
+                                // Fallback or ignore
                             }
                         }
                         else -> {}
                     }
                 }
 
-                override fun handleMsg(message: RelayMessage) {
-                    // Optional: handle low-level messages
+                override fun handleMsg(relayUrl: RelayUrl, message: RelayMessage) {
                 }
             })
         }
@@ -117,15 +118,8 @@ class NostrClient(
     }
 
     private fun mapSdkEvent(e: Event): NostrEvent {
-        return NostrEvent(
-            id = e.id().asHex(),
-            pubkey = e.author().asHex(),
-            createdAt = e.createdAt().asSecs().toLong(),
-            kind = e.kind().asLong().toInt(),
-            tags = e.tags().toList().map { it.asVector().toList() },
-            content = e.content(),
-            sig = e.signature().asHex()
-        )
+        val json = Json { ignoreUnknownKeys = true }
+        return json.decodeFromString<NostrEvent>(e.asJson())
     }
 
     // ─── Subscriptions ────────────────────────────────────────────────────────
@@ -160,7 +154,7 @@ class NostrClient(
         var sdkF = rust.nostr.sdk.Filter()
         f.ids?.let { ids -> sdkF = sdkF.ids(ids.map { EventId.parse(it) }) }
         f.authors?.let { authors -> sdkF = sdkF.authors(authors.map { PublicKey.parse(it) }) }
-        f.kinds?.let { kinds -> sdkF = sdkF.kinds(kinds.map { Kind(it.toULong()) }) }
+        f.kinds?.let { kinds -> sdkF = sdkF.kinds(kinds.map { Kind(it.toLong().toUShort()) }) }
         f.since?.let { sdkF = sdkF.since(Timestamp.fromSecs(it.toULong())) }
         f.until?.let { sdkF = sdkF.until(Timestamp.fromSecs(it.toULong())) }
         f.limit?.let { sdkF = sdkF.limit(it.toULong()) }
@@ -168,9 +162,8 @@ class NostrClient(
         f.tags?.forEach { (tagName, values) ->
             try {
                 val alphabet = Alphabet.valueOf(tagName.uppercase())
-                sdkF = sdkF.customTag(alphabet, values)
+                sdkF = sdkF.customTag(SingleLetterTag.lowercase(alphabet), values)
             } catch (e: Exception) {
-                // Ignore unknown tags for now
             }
         }
         return sdkF
@@ -183,7 +176,7 @@ class NostrClient(
         return withContext(Dispatchers.IO) {
             try {
                 val sdkFilter = mapFilter(filter)
-                val events = client.fetchEvents(listOf(sdkFilter), Timestamp.fromSecs(timeoutMs.toULong() / 1000u))
+                val events = client.fetchEvents(listOf(sdkFilter), java.time.Duration.ofMillis(timeoutMs))
                 events.map { mapSdkEvent(it) }
             } catch (e: Exception) {
                 Log.w(TAG, "Fetch events failed: ${e.message}")
@@ -229,11 +222,11 @@ class NostrClient(
             try {
                 var builder = EventBuilder.textNote(content)
                 tags.forEach { tagVector ->
-                    builder = builder.tag(Tag.fromVector(tagVector))
+                    builder = builder.tag(Tag.parse(tagVector))
                 }
-                val result = client.sendEventBuilder(builder)
+                val output = client.sendEventBuilder(builder)
                 // Fetch the event from database to return it
-                val event = client.database().eventById(result.id)
+                val event = client.database().eventById(output.id)
                 event?.let { mapSdkEvent(it) }
             } catch (e: Exception) {
                 Log.w(TAG, "Publish note failed: ${e.message}")
@@ -247,7 +240,7 @@ class NostrClient(
         return withContext(Dispatchers.IO) {
             try {
                 val id = EventId.parse(eventId)
-                val builder = EventBuilder.reaction(id, emoji)
+                val builder = EventBuilder.reaction(id, Kind(1u), emoji)
                 client.sendEventBuilder(builder)
                 true
             } catch (e: Exception) {
@@ -261,7 +254,7 @@ class NostrClient(
         return withContext(Dispatchers.IO) {
             try {
                 val id = EventId.parse(eventId)
-                val builder = EventBuilder.repost(id, null)
+                val builder = EventBuilder.repost(id, Kind(1u))
                 client.sendEventBuilder(builder)
                 true
             } catch (e: Exception) {

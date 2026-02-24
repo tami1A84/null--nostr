@@ -17,7 +17,7 @@ object NostrKeyUtils {
     fun parsePrivateKey(input: String): String? {
         return try {
             val keys = Keys.parse(input)
-            keys.secretKey().asHex()
+            keys.secretKey().toHex()
         } catch (e: Exception) {
             null
         }
@@ -29,7 +29,7 @@ object NostrKeyUtils {
     fun derivePublicKey(privateKeyHex: String): String? {
         return try {
             val keys = Keys.parse(privateKeyHex)
-            keys.publicKey().asHex()
+            keys.publicKey().toHex()
         } catch (e: Exception) {
             null
         }
