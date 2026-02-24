@@ -15,6 +15,8 @@ interface UseTimelineReturn {
   followingPosts: Post[]
   profiles: Record<string, Profile>
   loading: boolean
+  loadingRecommended: boolean
+  recommendedReady: boolean
   loadError: boolean
   loadingMore: boolean
   timelineMode: TimelineMode
@@ -50,12 +52,14 @@ interface UseTimelineReturn {
  * Custom hook for timeline functionality
  * Manages timeline state, loading, and user interactions
  */
-export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptions): UseTimelineReturn {
+export function useTimeline({ pubkey, initialMode = 'following' }: UseTimelineOptions): UseTimelineReturn {
   // Separate state for each timeline mode
   const [globalPosts, setGlobalPosts] = useState<Post[]>([])
   const [followingPosts, setFollowingPosts] = useState<Post[]>([])
   const [profiles, setProfiles] = useState<Record<string, Profile>>({})
   const [loading, setLoading] = useState(true)
+  const [loadingRecommended, setLoadingRecommended] = useState(false)
+  const [recommendedReady, setRecommendedReady] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
 
@@ -121,8 +125,12 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
 
   // Recommended timeline load (global timeline)
   const loadRecommendedTimeline = useCallback(async () => {
-    setLoading(true)
+    if (loadingRecommended) return
+    setLoadingRecommended(true)
     setLoadError(false)
+
+    const isPrimaryView = timelineMode === 'global' && globalPosts.length === 0
+    if (isPrimaryView) setLoading(true)
 
     try {
       const { fetchEvents, getReadRelays, fetchProfilesBatch, getAllCachedProfiles } = await import('@/lib/nostr')
@@ -228,6 +236,10 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
 
       setGlobalPosts(finalPosts as Post[])
 
+      if (timelineMode !== 'global') {
+        setRecommendedReady(true)
+      }
+
       // Step 5: Fetch profiles for the timeline
       const authors = new Set<string>()
       allPosts.forEach(p => {
@@ -240,24 +252,32 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
         setProfiles(prev => ({ ...prev, ...profileMap }))
       }
 
+      setLoadingRecommended(false)
       setLoading(false)
       initialLoadDone.current = true
     } catch (e) {
       console.error('Failed to load recommended timeline:', e)
-      setLoadError(true)
+      if (isPrimaryView) setLoadError(true)
+      setLoadingRecommended(false)
       setLoading(false)
       initialLoadDone.current = true
     }
-  }, [followList, mutedPubkeys])
+  }, [followList, mutedPubkeys, timelineMode, globalPosts.length, loadingRecommended])
 
   // Load following timeline
   const loadFollowingTimeline = useCallback(async () => {
-    if (followList.length === 0) {
-      setFollowingPosts([])
-      return
+    setFollowListLoading(true)
+    if (timelineMode === 'following' && followingPosts.length === 0) {
+      setLoading(true)
     }
 
-    setFollowListLoading(true)
+    if (followList.length === 0) {
+      setFollowingPosts([])
+      setFollowListLoading(false)
+      setLoading(false)
+      initialLoadDone.current = true
+      return
+    }
 
     try {
       const { fetchEvents, getReadRelays, fetchProfilesBatch } = await import('@/lib/nostr')
@@ -271,6 +291,7 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
 
       const sortedPosts = notes.sort((a: any, b: any) => b.created_at - a.created_at) as Post[]
       setFollowingPosts(sortedPosts)
+      initialLoadDone.current = true
 
       // Fetch profiles
       const authors = new Set(sortedPosts.map((p: any) => p.pubkey))
@@ -282,8 +303,9 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
       console.error('Failed to load following timeline:', e)
     } finally {
       setFollowListLoading(false)
+      setLoading(false)
     }
-  }, [followList])
+  }, [followList, timelineMode, followingPosts.length])
 
   // Main loadTimeline function
   const loadTimeline = useCallback(async () => {
@@ -305,6 +327,10 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
       globalScrollRef.current = currentScroll
     } else {
       followingScrollRef.current = currentScroll
+    }
+
+    if (newMode === 'global') {
+      setRecommendedReady(false)
     }
 
     setTimelineMode(newMode)
@@ -439,8 +465,12 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
 
   // Effects
   useEffect(() => {
-    loadRecommendedTimeline()
-  }, [loadRecommendedTimeline])
+    if (timelineMode === 'following') {
+      loadFollowingTimeline()
+    } else {
+      loadRecommendedTimeline()
+    }
+  }, []) // Initial load
 
   useEffect(() => {
     if (pubkey) {
@@ -449,12 +479,19 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
     }
   }, [pubkey, loadMuteList, loadFollowList])
 
-  // Prefetch following timeline
+  // Prefetch recommended timeline in background
   useEffect(() => {
-    if (followList.length > 0 && !followingPrefetched) {
-      loadFollowingTimeline().then(() => setFollowingPrefetched(true))
+    if (initialLoadDone.current && globalPosts.length === 0 && !loadingRecommended && !recommendedReady) {
+      loadRecommendedTimeline()
     }
-  }, [followList, followingPrefetched, loadFollowingTimeline])
+  }, [initialLoadDone.current, globalPosts.length, loadingRecommended, recommendedReady, loadRecommendedTimeline])
+
+  // Load following timeline when follow list becomes available
+  useEffect(() => {
+    if (followList.length > 0 && followingPosts.length === 0 && !loading) {
+      loadFollowingTimeline()
+    }
+  }, [followList, followingPosts.length, loading, loadFollowingTimeline])
 
   return {
     // State
@@ -463,6 +500,8 @@ export function useTimeline({ pubkey, initialMode = 'global' }: UseTimelineOptio
     followingPosts,
     profiles,
     loading,
+    loadingRecommended,
+    recommendedReady,
     loadError,
     loadingMore,
     timelineMode,
