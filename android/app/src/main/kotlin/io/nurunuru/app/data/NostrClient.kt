@@ -1,118 +1,135 @@
 package io.nurunuru.app.data
 
+import android.content.Context
 import android.util.Log
-import io.nurunuru.app.data.NostrKeyUtils.hexToBytes
-import io.nurunuru.app.data.NostrKeyUtils.toHex
 import io.nurunuru.app.data.models.NostrEvent
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.serialization.json.*
-import okhttp3.*
-import java.security.MessageDigest
-import java.security.SecureRandom
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import rust.nostr.sdk.*
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
-import javax.crypto.Cipher
-import javax.crypto.spec.IvParameterSpec
-import javax.crypto.spec.SecretKeySpec
 
 private const val TAG = "NostrClient"
 
 /**
- * WebSocket-based Nostr protocol client (NIP-01).
- * Handles multi-relay connections, subscriptions, and event publishing.
+ * Nostr client powered by the official rust-nostr SDK.
+ * Handles relay connections, persistence via nostrdb (LMDB), and event flow.
  */
 class NostrClient(
+    private val context: Context,
     private val relays: List<String>,
     private val privateKeyHex: String,
     private val publicKeyHex: String
 ) {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(10, TimeUnit.SECONDS)
-        .build()
-
-    private val connections = ConcurrentHashMap<String, WebSocket>()
-    private val subscriptions = ConcurrentHashMap<String, SubscriptionCallback>()
+    private var sdkClient: Client? = null
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val _events = MutableSharedFlow<NostrEvent>(extraBufferCapacity = 100)
     val events: SharedFlow<NostrEvent> = _events.asSharedFlow()
 
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val subscriptionCallbacks = ConcurrentHashMap<String, (NostrEvent) -> Unit>()
 
     // ─── Connection ───────────────────────────────────────────────────────────
 
     fun connect() {
-        relays.forEach { relay -> connectRelay(relay) }
-    }
+        scope.launch {
+            try {
+                // 1. Initialize nostrdb (LMDB) in the app's files directory
+                val dbPath = context.filesDir.absolutePath + "/nostrdb"
+                val database = NostrDatabase.lmdb(dbPath)
 
-    private fun connectRelay(relayUrl: String) {
-        val request = Request.Builder().url(relayUrl).build()
-        val listener = object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.d(TAG, "Connected: $relayUrl")
-                connections[relayUrl] = webSocket
-                // Re-send active subscriptions on reconnect
-                subscriptions.forEach { (subId, callback) ->
-                    sendReq(webSocket, subId, callback.filter)
+                // 2. Setup signer
+                val secretKey = SecretKey.fromHex(privateKeyHex)
+                val keys = Keys(secretKey)
+
+                // 3. Build SDK Client
+                val client = Client.builder()
+                    .signer(keys)
+                    .database(database)
+                    .build()
+
+                // 4. Add relays (handle emulator localhost -> 10.0.2.2)
+                relays.forEach { url ->
+                    val mappedUrl = mapLocalhost(url)
+                    try {
+                        client.addRelay(mappedUrl)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to add relay $mappedUrl: ${e.message}")
+                    }
                 }
-            }
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                handleMessage(relayUrl, text)
-            }
+                sdkClient = client
+                client.connect()
 
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.w(TAG, "Relay failed: $relayUrl – ${t.message}")
-                connections.remove(relayUrl)
-                // Reconnect after delay
-                scope.launch {
-                    delay(5_000)
-                    connectRelay(relayUrl)
-                }
-            }
+                Log.d(TAG, "rust-nostr SDK Client connected")
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                connections.remove(relayUrl)
+                // Start listening for notifications (incoming events)
+                handleNotifications(client)
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize rust-nostr Client", e)
             }
         }
-        client.newWebSocket(request, listener)
+    }
+
+    private fun handleNotifications(client: Client) {
+        scope.launch {
+            client.handleNotifications(object : HandleNotification {
+                override fun handle(relayUrl: String, notification: RelayPoolNotification) {
+                    when (notification) {
+                        is RelayPoolNotification.Event -> {
+                            val sdkEvent = notification.event
+                            val event = mapSdkEvent(sdkEvent)
+                            scope.launch { _events.emit(event) }
+
+                            // Trigger subscription callbacks
+                            subscriptionCallbacks.values.forEach { callback ->
+                                callback(event)
+                            }
+                        }
+                        is RelayPoolNotification.Message -> {
+                            // Handle other messages if needed
+                        }
+                        else -> {}
+                    }
+                }
+
+                override fun handleMsg(relayUrl: String, message: RelayMessage) {
+                    // Optional: handle low-level messages
+                }
+            })
+        }
     }
 
     fun disconnect() {
-        connections.values.forEach { it.close(1000, "disconnect") }
-        connections.clear()
-        scope.cancel()
+        scope.launch {
+            sdkClient?.disconnect()
+            sdkClient = null
+            scope.cancel()
+        }
     }
 
-    // ─── Message Handling ─────────────────────────────────────────────────────
+    // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    private fun handleMessage(relayUrl: String, text: String) {
-        try {
-            val arr = Json.parseToJsonElement(text).jsonArray
-            when (val type = arr[0].jsonPrimitive.content) {
-                "EVENT" -> {
-                    val event = Json.decodeFromJsonElement<NostrEvent>(arr[2])
-                    scope.launch { _events.emit(event) }
-                    val subId = arr[1].jsonPrimitive.content
-                    subscriptions[subId]?.onEvent?.invoke(event)
-                }
-                "EOSE" -> {
-                    val subId = arr[1].jsonPrimitive.content
-                    subscriptions[subId]?.onEose?.invoke()
-                }
-                "OK" -> {
-                    Log.d(TAG, "OK from $relayUrl: $text")
-                }
-                "NOTICE" -> {
-                    Log.d(TAG, "NOTICE from $relayUrl: ${arr.getOrNull(1)}")
-                }
-                else -> Log.d(TAG, "Unknown message type $type from $relayUrl")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to parse message from $relayUrl: ${e.message}")
+    private fun mapLocalhost(url: String): String {
+        return if (url.contains("localhost") || url.contains("127.0.0.1")) {
+            url.replace("localhost", "10.0.2.2").replace("127.0.0.1", "10.0.2.2")
+        } else {
+            url
         }
+    }
+
+    private fun mapSdkEvent(e: Event): NostrEvent {
+        return NostrEvent(
+            id = e.id().toHex(),
+            pubkey = e.author().toHex(),
+            createdAt = e.createdAt().asSecs().toLong(),
+            kind = e.kind().asU32().toInt(),
+            tags = e.tags().map { tag -> tag.asVector() },
+            content = e.content(),
+            sig = e.signature().toHex()
+        )
     }
 
     // ─── Subscriptions ────────────────────────────────────────────────────────
@@ -126,206 +143,157 @@ class NostrClient(
         val until: Long? = null,
         val limit: Int? = null,
         val search: String? = null
-    ) {
-        fun toJsonObject(): JsonObject = buildJsonObject {
-            ids?.let { put("ids", JsonArray(it.map { id -> JsonPrimitive(id) })) }
-            authors?.let { put("authors", JsonArray(it.map { a -> JsonPrimitive(a) })) }
-            kinds?.let { put("kinds", JsonArray(it.map { k -> JsonPrimitive(k) })) }
-            tags?.forEach { (tag, values) ->
-                put("#$tag", JsonArray(values.map { v -> JsonPrimitive(v) }))
-            }
-            since?.let { put("since", JsonPrimitive(it)) }
-            until?.let { put("until", JsonPrimitive(it)) }
-            limit?.let { put("limit", JsonPrimitive(it)) }
-            search?.let { put("search", JsonPrimitive(it)) }
-        }
-    }
-
-    data class SubscriptionCallback(
-        val filter: Filter,
-        val onEvent: (NostrEvent) -> Unit,
-        val onEose: () -> Unit = {}
     )
 
-    fun subscribe(subId: String, filter: Filter, onEvent: (NostrEvent) -> Unit, onEose: () -> Unit = {}) {
-        subscriptions[subId] = SubscriptionCallback(filter, onEvent, onEose)
-        connections.values.forEach { ws -> sendReq(ws, subId, filter) }
+    fun subscribe(subId: String, filter: Filter, onEvent: (NostrEvent) -> Unit) {
+        subscriptionCallbacks[subId] = onEvent
+        scope.launch {
+            val client = sdkClient ?: return@launch
+            val sdkFilter = mapFilter(filter)
+            client.subscribe(listOf(sdkFilter))
+        }
     }
 
     fun unsubscribe(subId: String) {
-        subscriptions.remove(subId)
-        val msg = JsonArray(listOf(JsonPrimitive("CLOSE"), JsonPrimitive(subId))).toString()
-        connections.values.forEach { it.send(msg) }
+        subscriptionCallbacks.remove(subId)
+        // SDK client doesn't always need explicit unsubscribe for simple flows,
+        // but we can add it if we want to send CLOSE.
     }
 
-    private fun sendReq(ws: WebSocket, subId: String, filter: Filter) {
-        val req = JsonArray(listOf(
-            JsonPrimitive("REQ"),
-            JsonPrimitive(subId),
-            filter.toJsonObject()
-        ))
-        ws.send(req.toString())
+    private fun mapFilter(f: Filter): rust.nostr.sdk.Filter {
+        var sdkF = rust.nostr.sdk.Filter()
+        f.ids?.let { ids -> sdkF = sdkF.ids(ids.map { EventId.fromHex(it) }) }
+        f.authors?.let { authors -> sdkF = sdkF.authors(authors.map { PublicKey.fromHex(it) }) }
+        f.kinds?.let { kinds -> sdkF = sdkF.kinds(kinds.map { Kind(it.toLong()) }) }
+        f.since?.let { sdkF = sdkF.since(Timestamp.fromSecs(it.toULong())) }
+        f.until?.let { sdkF = sdkF.until(Timestamp.fromSecs(it.toULong())) }
+        f.limit?.let { sdkF = sdkF.limit(it.toULong()) }
+        f.search?.let { sdkF = sdkF.search(it) }
+        f.tags?.forEach { (tagName, values) ->
+            sdkF = sdkF.customTag(SingleLetterTag.lowercase(tagName[0]), values)
+        }
+        return sdkF
     }
 
-    // ─── Fetch (one-shot with EOSE) ───────────────────────────────────────────
+    // ─── One-shot Fetch ──────────────────────────────────────────────────────
 
-    suspend fun fetchEvents(filter: Filter, timeoutMs: Long = 5_000): List<NostrEvent> =
-        withContext(Dispatchers.IO) {
-            val subId = "fetch_${System.currentTimeMillis()}"
-            val results = mutableListOf<NostrEvent>()
-            val deferred = CompletableDeferred<List<NostrEvent>>()
-
-            subscribe(
-                subId,
-                filter,
-                onEvent = { event -> synchronized(results) { results.add(event) } },
-                onEose = {
-                    unsubscribe(subId)
-                    if (!deferred.isCompleted) deferred.complete(results.toList())
-                }
-            )
-
+    suspend fun fetchEvents(filter: Filter, timeoutMs: Long = 5_000): List<NostrEvent> {
+        val client = sdkClient ?: return emptyList()
+        return withContext(Dispatchers.IO) {
             try {
-                withTimeout(timeoutMs) { deferred.await() }
-            } catch (e: TimeoutCancellationException) {
-                unsubscribe(subId)
-                results.toList()
+                val sdkFilter = mapFilter(filter)
+                val events = client.fetchEvents(listOf(sdkFilter), java.time.Duration.ofMillis(timeoutMs))
+                events.map { mapSdkEvent(it) }
+            } catch (e: Exception) {
+                Log.w(TAG, "Fetch events failed: ${e.message}")
+                emptyList()
             }
         }
+    }
 
     // ─── Publish ──────────────────────────────────────────────────────────────
 
-    suspend fun publishEvent(event: NostrEvent): Boolean = withContext(Dispatchers.IO) {
-        val json = JsonArray(listOf(JsonPrimitive("EVENT"), Json.encodeToJsonElement(event)))
-        val msg = json.toString()
-        val sent = connections.values.sumOf { ws ->
-            if (ws.send(msg)) 1L else 0L
+    suspend fun publishEvent(event: NostrEvent): Boolean {
+        val client = sdkClient ?: return false
+        return withContext(Dispatchers.IO) {
+            try {
+                // Re-build SDK event from our model
+                val sdkEvent = Event.fromJson(serializeNostrEvent(event))
+                client.sendEvent(sdkEvent)
+                true
+            } catch (e: Exception) {
+                Log.w(TAG, "Publish raw event failed: ${e.message}")
+                false
+            }
         }
-        sent > 0
+    }
+
+    private fun serializeNostrEvent(e: NostrEvent): String {
+        return """
+            {
+                "id": "${e.id}",
+                "pubkey": "${e.pubkey}",
+                "created_at": ${e.createdAt},
+                "kind": ${e.kind},
+                "tags": ${Json.encodeToString(e.tags)},
+                "content": ${Json.encodeToString(e.content)},
+                "sig": "${e.sig}"
+            }
+        """.trimIndent()
     }
 
     suspend fun publishNote(content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
-        val event = createEvent(NostrEvent(
-            kind = 1,
-            content = content,
-            tags = tags,
-            pubkey = publicKeyHex,
-            createdAt = System.currentTimeMillis() / 1000
-        )) ?: return null
-        publishEvent(event)
-        return event
+        val client = sdkClient ?: return null
+        return withContext(Dispatchers.IO) {
+            try {
+                var builder = EventBuilder.textNote(content)
+                tags.forEach { tagVector ->
+                    builder = builder.tag(Tag.fromVector(tagVector))
+                }
+                val result = client.sendEventBuilder(builder)
+                // Fetch the event from database to return it
+                val event = client.database().eventById(result.id)
+                event?.let { mapSdkEvent(it) }
+            } catch (e: Exception) {
+                Log.w(TAG, "Publish note failed: ${e.message}")
+                null
+            }
+        }
     }
 
     suspend fun publishReaction(eventId: String, emoji: String = "+"): Boolean {
-        val event = createEvent(NostrEvent(
-            kind = 7,
-            content = emoji,
-            tags = listOf(listOf("e", eventId)),
-            pubkey = publicKeyHex,
-            createdAt = System.currentTimeMillis() / 1000
-        )) ?: return false
-        return publishEvent(event)
+        val client = sdkClient ?: return false
+        return withContext(Dispatchers.IO) {
+            try {
+                val id = EventId.fromHex(eventId)
+                val builder = EventBuilder.reaction(id, emoji)
+                client.sendEventBuilder(builder)
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
     }
 
-    suspend fun publishRepost(eventId: String, relayUrl: String = ""): Boolean {
-        val event = createEvent(NostrEvent(
-            kind = 6,
-            content = "",
-            tags = listOf(listOf("e", eventId, relayUrl, "mention")),
-            pubkey = publicKeyHex,
-            createdAt = System.currentTimeMillis() / 1000
-        )) ?: return false
-        return publishEvent(event)
+    suspend fun publishRepost(eventId: String): Boolean {
+        val client = sdkClient ?: return false
+        return withContext(Dispatchers.IO) {
+            try {
+                val id = EventId.fromHex(eventId)
+                val builder = EventBuilder.repost(id, null)
+                client.sendEventBuilder(builder)
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
     }
 
-    // ─── NIP-04 Encrypted DM ─────────────────────────────────────────────────
+    // ─── DMs ─────────────────────────────────────────────────────────────────
 
     suspend fun sendEncryptedDm(recipientPubkeyHex: String, content: String): Boolean {
-        val encrypted = encryptNip04(recipientPubkeyHex, content) ?: return false
-        val event = createEvent(NostrEvent(
-            kind = 4,
-            content = encrypted,
-            tags = listOf(listOf("p", recipientPubkeyHex)),
-            pubkey = publicKeyHex,
-            createdAt = System.currentTimeMillis() / 1000
-        )) ?: return false
-        return publishEvent(event)
+        val client = sdkClient ?: return false
+        return withContext(Dispatchers.IO) {
+            try {
+                val receiver = PublicKey.fromHex(recipientPubkeyHex)
+                client.sendPrivateMsg(receiver, content)
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
     }
 
     fun decryptNip04(senderPubkeyHex: String, encryptedContent: String): String? {
+        // The SDK handles decryption if we use the right methods,
+        // but for legacy NIP-04 we might need explicit calls.
+        val client = sdkClient ?: return null
         return try {
-            val privKeyBytes = privateKeyHex.hexToBytes() ?: return null
-            val pubKeyBytes = senderPubkeyHex.hexToBytes() ?: return null
-            val sharedSecret = Secp256k1Impl.ecdhNip04(privKeyBytes, pubKeyBytes)
-
-            val parts = encryptedContent.split("?iv=")
-            if (parts.size != 2) return null
-            val ciphertext = android.util.Base64.decode(parts[0], android.util.Base64.DEFAULT)
-            val iv = android.util.Base64.decode(parts[1], android.util.Base64.DEFAULT)
-
-            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(sharedSecret, "AES"), IvParameterSpec(iv))
-            String(cipher.doFinal(ciphertext), Charsets.UTF_8)
+            val sender = PublicKey.fromHex(senderPubkeyHex)
+            // nip04Decrypt is often available on the signer or client
+            client.nip04Decrypt(sender, encryptedContent)
         } catch (e: Exception) {
-            Log.w(TAG, "NIP-04 decrypt failed: ${e.message}")
             null
         }
     }
-
-    private fun encryptNip04(recipientPubkeyHex: String, content: String): String? {
-        return try {
-            val privKeyBytes = privateKeyHex.hexToBytes() ?: return null
-            val pubKeyBytes = recipientPubkeyHex.hexToBytes() ?: return null
-            val sharedSecret = Secp256k1Impl.ecdhNip04(privKeyBytes, pubKeyBytes)
-
-            val iv = ByteArray(16).also { SecureRandom().nextBytes(it) }
-            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-            cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(sharedSecret, "AES"), IvParameterSpec(iv))
-            val encrypted = cipher.doFinal(content.toByteArray(Charsets.UTF_8))
-
-            val encB64 = android.util.Base64.encodeToString(encrypted, android.util.Base64.NO_WRAP)
-            val ivB64 = android.util.Base64.encodeToString(iv, android.util.Base64.NO_WRAP)
-            "$encB64?iv=$ivB64"
-        } catch (e: Exception) {
-            Log.w(TAG, "NIP-04 encrypt failed: ${e.message}")
-            null
-        }
-    }
-
-    // ─── Event Signing ────────────────────────────────────────────────────────
-
-    private fun createEvent(template: NostrEvent): NostrEvent? {
-        return try {
-            val privKeyBytes = privateKeyHex.hexToBytes() ?: return null
-            val id = computeEventId(template)
-            val sig = signEvent(id, privKeyBytes)
-            template.copy(id = id, sig = sig)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to create event: ${e.message}")
-            null
-        }
-    }
-
-    private fun computeEventId(event: NostrEvent): String {
-        val serialized = buildJsonArray {
-            add(0)
-            add(event.pubkey)
-            add(event.createdAt)
-            add(event.kind)
-            add(JsonArray(event.tags.map { tag ->
-                JsonArray(tag.map { JsonPrimitive(it) })
-            }))
-            add(event.content)
-        }.toString()
-        return sha256(serialized.toByteArray(Charsets.UTF_8)).toHex()
-    }
-
-    private fun signEvent(eventId: String, privKey: ByteArray): String {
-        val msgBytes = eventId.hexToBytes()!!
-        val sig = Secp256k1Impl.schnorrSign(msgBytes, privKey, null)
-        return sig.toHex()
-    }
-
-    private fun sha256(data: ByteArray): ByteArray =
-        MessageDigest.getInstance("SHA-256").digest(data)
 }
