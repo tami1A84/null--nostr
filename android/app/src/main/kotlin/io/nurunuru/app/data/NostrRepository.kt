@@ -170,10 +170,10 @@ class NostrRepository(
         return try {
             val description = event.getTagValue("description") ?: return 0L
             val zapRequest = json.parseToJsonElement(description).jsonObject
-            val tagsArr = zapRequest["tags"] as? JsonArray ?: return 0L
+            val tagsArr = zapRequest["tags"] as? kotlinx.serialization.json.JsonArray ?: return 0L
             val amountTag = tagsArr.firstOrNull {
-                it is JsonArray && it.firstOrNull()?.jsonPrimitive?.content == "amount"
-            } as? JsonArray
+                it is kotlinx.serialization.json.JsonArray && it.firstOrNull()?.jsonPrimitive?.content == "amount"
+            } as? kotlinx.serialization.json.JsonArray
             amountTag?.getOrNull(1)?.jsonPrimitive?.content?.toLong() ?: 0L
         } catch (e: Exception) {
             0L

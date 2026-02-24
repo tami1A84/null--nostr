@@ -76,24 +76,16 @@ class NostrClient(
     private fun handleNotifications(client: Client) {
         scope.launch {
             client.handleNotifications(object : HandleNotification {
-                override fun handle(relayUrl: RelayUrl, notification: RelayPoolNotification) {
-                    when (notification) {
-                        is RelayPoolNotification.Event -> {
-                            // In some SDK versions, the event is accessible via a method
-                            // We use asJson as a workaround if field access fails
-                            try {
-                                val event = mapSdkEvent(notification.asEvent()!!)
-                                scope.launch { _events.emit(event) }
-                                subscriptionCallbacks.values.forEach { it(event) }
-                            } catch (e: Exception) {
-                                // Fallback or ignore
-                            }
-                        }
-                        else -> {}
+                override suspend fun handle(relayUrl: RelayUrl, notification: RelayPoolNotification) {
+                    // Note: If RelayPoolNotification is still unresolved, try RelayNotification or Notification
+                    if (notification is RelayPoolNotification.Event) {
+                        val event = mapSdkEvent(notification.event)
+                        scope.launch { _events.emit(event) }
+                        subscriptionCallbacks.values.forEach { it(event) }
                     }
                 }
 
-                override fun handleMsg(relayUrl: RelayUrl, message: RelayMessage) {
+                override suspend fun handleMsg(relayUrl: RelayUrl, msg: RelayMessage) {
                 }
             })
         }
@@ -140,7 +132,7 @@ class NostrClient(
         scope.launch {
             val client = sdkClient ?: return@launch
             val sdkFilter = mapFilter(filter)
-            client.subscribe(listOf(sdkFilter))
+            client.subscribe(sdkFilter)
         }
     }
 
@@ -176,8 +168,8 @@ class NostrClient(
         return withContext(Dispatchers.IO) {
             try {
                 val sdkFilter = mapFilter(filter)
-                val events = client.fetchEvents(listOf(sdkFilter), java.time.Duration.ofMillis(timeoutMs))
-                events.map { mapSdkEvent(it) }
+                val events = client.fetchEvents(sdkFilter, java.time.Duration.ofMillis(timeoutMs))
+                events.all().map { mapSdkEvent(it) }
             } catch (e: Exception) {
                 Log.w(TAG, "Fetch events failed: ${e.message}")
                 emptyList()
@@ -220,10 +212,8 @@ class NostrClient(
         val client = sdkClient ?: return null
         return withContext(Dispatchers.IO) {
             try {
-                var builder = EventBuilder.textNote(content)
-                tags.forEach { tagVector ->
-                    builder = builder.tag(Tag.parse(tagVector))
-                }
+                val sdkTags = tags.map { Tag.parse(it) }
+                val builder = EventBuilder.textNote(content).tags(sdkTags)
                 val output = client.sendEventBuilder(builder)
                 // Fetch the event from database to return it
                 val event = client.database().eventById(output.id)
@@ -240,7 +230,7 @@ class NostrClient(
         return withContext(Dispatchers.IO) {
             try {
                 val id = EventId.parse(eventId)
-                val builder = EventBuilder.reaction(id, Kind(1u), emoji)
+                val builder = EventBuilder(Kind(7u), emoji).tags(listOf(Tag.parse(listOf("e", id.asHex()))))
                 client.sendEventBuilder(builder)
                 true
             } catch (e: Exception) {
@@ -254,7 +244,7 @@ class NostrClient(
         return withContext(Dispatchers.IO) {
             try {
                 val id = EventId.parse(eventId)
-                val builder = EventBuilder.repost(id, Kind(1u))
+                val builder = EventBuilder(Kind(6u), "").tags(listOf(Tag.parse(listOf("e", id.asHex()))))
                 client.sendEventBuilder(builder)
                 true
             } catch (e: Exception) {
@@ -282,7 +272,7 @@ class NostrClient(
         val client = sdkClient ?: return null
         return try {
             val sender = PublicKey.parse(senderPubkeyHex)
-            client.nip04Decrypt(sender, encryptedContent)
+            client.signer().nip04Decrypt(sender, encryptedContent)
         } catch (e: Exception) {
             null
         }
