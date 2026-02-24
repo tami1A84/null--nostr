@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import io.nurunuru.app.data.models.DmConversation
 import io.nurunuru.app.data.models.DmMessage
@@ -142,13 +144,16 @@ private fun ConversationItem(
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(conversation.partnerPubkey),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1
                 )
                 Text(
                     text = formatTime(conversation.lastMessageTime),
@@ -219,22 +224,19 @@ private fun ConversationScreen(
         ) {
             // Messages
             Box(modifier = Modifier.weight(1f)) {
-                when {
-                    isLoading -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = LineGreen)
-                        }
+                if (isLoading) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = LineGreen)
                     }
-                    else -> {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(messages, key = { it.event.id }) { message ->
-                                MessageBubble(message = message)
-                            }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(messages, key = { it.event.id }) { message ->
+                            MessageBubble(message = message)
                         }
                     }
                 }
@@ -290,27 +292,28 @@ private fun ConversationScreen(
                     }
 
                     BasicTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(nuruColors.bgTertiary, RoundedCornerShape(20.dp))
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurface
-                    ),
-                    cursorBrush = SolidColor(LineGreen),
-                    maxLines = 5,
-                    decorationBox = { innerTextField ->
-                        Box {
-                            if (inputText.isEmpty()) {
-                                Text("メッセージ...", color = nuruColors.textTertiary,
-                                    style = MaterialTheme.typography.bodyMedium)
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(nuruColors.bgTertiary, RoundedCornerShape(20.dp))
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        cursorBrush = SolidColor(LineGreen),
+                        maxLines = 5,
+                        decorationBox = { innerTextField ->
+                            Box {
+                                if (inputText.isEmpty()) {
+                                    Text("メッセージ...", color = nuruColors.textTertiary,
+                                        style = MaterialTheme.typography.bodyMedium)
+                                }
+                                innerTextField()
                             }
-                            innerTextField()
                         }
-                    }
-                )
+                    )
+
                     IconButton(
                         onClick = {
                             if (inputText.isNotBlank() && !isSending) {
@@ -325,14 +328,15 @@ private fun ConversationScreen(
                         },
                         enabled = inputText.isNotBlank() && !isSending
                     ) {
-                    if (isSending) {
-                        CircularProgressIndicator(Modifier.size(20.dp), color = LineGreen, strokeWidth = 2.dp)
-                    } else {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Send,
-                            contentDescription = "送信",
-                            tint = if (inputText.isNotBlank()) LineGreen else nuruColors.textTertiary
-                        )
+                        if (isSending) {
+                            CircularProgressIndicator(Modifier.size(20.dp), color = LineGreen, strokeWidth = 2.dp)
+                        } else {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "送信",
+                                tint = if (inputText.isNotBlank()) LineGreen else nuruColors.textTertiary
+                            )
+                        }
                     }
                 }
             }

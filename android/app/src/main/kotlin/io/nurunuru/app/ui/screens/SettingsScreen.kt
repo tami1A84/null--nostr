@@ -14,8 +14,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.models.DEFAULT_RELAYS
 import io.nurunuru.app.data.prefs.AppPreferences
@@ -72,7 +74,7 @@ fun SettingsScreen(
             // Login Status Section
             item {
                 Surface(
-                    color = nuruColors.bgSecondary,
+                    color = MaterialTheme.colorScheme.surface,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -107,8 +109,8 @@ fun SettingsScreen(
                     singleLine = true,
                     leadingIcon = { Icon(Icons.Outlined.Search, null, tint = nuruColors.textTertiary) },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = nuruColors.bgSecondary,
-                        unfocusedContainerColor = nuruColors.bgSecondary,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                         focusedBorderColor = LineGreen
                     )
                 )
@@ -271,12 +273,12 @@ private fun MiniAppRow(app: MiniAppData, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Surface(
-            color = nuruColors.bgSecondary,
+            color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.size(56.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(app.icon, null, tint = nuruColors.textSecondary, modifier = Modifier.size(28.dp))
+                Icon(app.icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
             }
         }
         Column(modifier = Modifier.weight(1f)) {

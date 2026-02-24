@@ -268,6 +268,7 @@ fun PostModal(
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
+            }
 
             // Character count
             Row(
