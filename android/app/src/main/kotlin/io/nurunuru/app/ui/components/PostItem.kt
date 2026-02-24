@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.outlined.ChatBubble
@@ -16,14 +17,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import io.nurunuru.app.data.models.ScoredPost
+import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import java.text.SimpleDateFormat
@@ -94,13 +96,49 @@ fun PostItem(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 // Content
-                PostContent(content = post.event.content)
+                PostContent(post = post)
 
-                // Images
-                extractImages(post.event.content).let { images ->
-                    if (images.isNotEmpty()) {
+                // Video / Images
+                if (post.event.kind == NostrKind.VIDEO_LOOP) {
+                    val videoUrl = post.event.getTagValue("url") ?: post.event.content
+                    val isVerified = post.event.getTagValue("verification-level") == "verified_web"
+
+                    if (videoUrl.isNotBlank()) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        ImageGrid(images = images)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(300.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.Black)
+                        ) {
+                            VideoPlayer(videoUrl = videoUrl, modifier = Modifier.fillMaxSize())
+
+                            if (isVerified) {
+                                Surface(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(8.dp),
+                                    color = Color.Black.copy(alpha = 0.6f),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "✓ Verified Web",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Images
+                    extractImages(post.event.content).let { images ->
+                        if (images.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            ImageGrid(images = images)
+                        }
                     }
                 }
 
@@ -133,6 +171,13 @@ fun PostItem(
                         onClick = onLike,
                         tint = if (post.isLiked) Color(0xFFFF6B6B) else nuruColors.textTertiary
                     )
+                    // Zap
+                    ActionButton(
+                        icon = Icons.Default.Bolt,
+                        count = (post.zapAmount / 1000).toInt(),
+                        onClick = { /* TODO: Zap modal */ },
+                        tint = nuruColors.zapColor
+                    )
                     // Spacer for layout balance
                     Spacer(modifier = Modifier.width(8.dp))
                 }
@@ -148,33 +193,67 @@ fun PostItem(
 }
 
 @Composable
-private fun PostContent(content: String) {
+private fun PostContent(post: ScoredPost) {
     val nuruColors = LocalNuruColors.current
+    val content = post.event.content
     val cleanContent = removeImageUrls(content).trim()
     if (cleanContent.isBlank()) return
 
+    // Extract custom emojis
+    val emojis = post.event.tags
+        .filter { it.getOrNull(0) == "emoji" }
+        .mapNotNull {
+            val shortcode = it.getOrNull(1)
+            val url = it.getOrNull(2)
+            if (shortcode != null && url != null) shortcode to url else null
+        }.toMap()
+
+    val inlineContent = mutableMapOf<String, InlineTextContent>()
+
     val annotated = buildAnnotatedString {
-        val parts = cleanContent.split(Regex("(#\\w+|@\\w+|nostr:\\w+)"))
-        val matches = Regex("(#\\w+|@\\w+|nostr:\\w+)").findAll(cleanContent).toList()
-        var idx = 0
-        for (i in parts.indices) {
-            append(parts[i])
-            if (i < matches.size) {
-                val match = matches[i].value
-                when {
-                    match.startsWith("#") -> withStyle(SpanStyle(color = nuruColors.lineGreen, fontWeight = FontWeight.Medium)) {
-                        append(match)
+        var currentText = cleanContent
+        val regex = Regex("(:\\w+:|#\\w+|@\\w+|nostr:\\w+)")
+        var lastIdx = 0
+
+        regex.findAll(cleanContent).forEach { match ->
+            append(cleanContent.substring(lastIdx, match.range.first))
+            val value = match.value
+
+            if (value.startsWith(":") && value.endsWith(":")) {
+                val shortcode = value.removeSurrounding(":")
+                val url = emojis[shortcode]
+                if (url != null) {
+                    val id = "emoji_$shortcode"
+                    inlineContent[id] = InlineTextContent(
+                        Placeholder(20.sp, 20.sp, PlaceholderVerticalAlign.Center)
+                    ) {
+                        AsyncImage(
+                            model = url,
+                            contentDescription = value,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
-                    else -> withStyle(SpanStyle(color = nuruColors.lineGreen)) {
-                        append(match)
-                    }
+                    appendInlineContent(id, value)
+                } else {
+                    append(value)
+                }
+            } else if (value.startsWith("#")) {
+                withStyle(SpanStyle(color = nuruColors.lineGreen, fontWeight = FontWeight.Medium)) {
+                    append(value)
+                }
+            } else {
+                withStyle(SpanStyle(color = nuruColors.lineGreen)) {
+                    append(value)
                 }
             }
+            lastIdx = match.range.last + 1
         }
+        append(cleanContent.substring(lastIdx))
     }
 
     Text(
         text = annotated,
+        inlineContent = inlineContent,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onBackground,
         lineHeight = 22.sp

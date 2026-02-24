@@ -63,7 +63,11 @@ dependencies {
 
     // Official rust-nostr SDK
     implementation(libs.rust.nostr.sdk)
-    implementation(libs.jna)
+    implementation("net.java.dev.jna:jna:5.15.0@aar")
+
+    // Media playback (Kind 34236)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
 
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)

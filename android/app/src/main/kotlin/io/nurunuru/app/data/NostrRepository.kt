@@ -24,7 +24,7 @@ class NostrRepository(
     /** Fetch global timeline (recent text notes). */
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
         val filter = NostrClient.Filter(
-            kinds = listOf(NostrKind.TEXT_NOTE),
+            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
             limit = limit,
             since = System.currentTimeMillis() / 1000 - 3600 // last hour
         )
@@ -38,7 +38,7 @@ class NostrRepository(
         if (followList.isEmpty()) return fetchGlobalTimeline(limit)
 
         val filter = NostrClient.Filter(
-            kinds = listOf(NostrKind.TEXT_NOTE),
+            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
             authors = followList.take(500),
             limit = limit,
             since = System.currentTimeMillis() / 1000 - 86400 // last 24h
@@ -151,6 +151,37 @@ class NostrRepository(
             .filterKeys { it.isNotEmpty() }
     }
 
+    suspend fun fetchZaps(eventIds: List<String>): Map<String, Long> {
+        if (eventIds.isEmpty()) return emptyMap()
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.ZAP_RECEIPT),
+            tags = mapOf("e" to eventIds),
+            limit = 500
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 3_000)
+
+        val zapAmounts = mutableMapOf<String, Long>()
+        events.forEach { event ->
+            val targetEventId = event.getTagValue("e") ?: return@forEach
+            val amount = parseZapAmount(event)
+            zapAmounts[targetEventId] = (zapAmounts[targetEventId] ?: 0L) + amount
+        }
+        return zapAmounts
+    }
+
+    private fun parseZapAmount(event: NostrEvent): Long {
+        return try {
+            val description = event.getTagValue("description") ?: return 0L
+            val zapRequest = json.parseToJsonElement(description).jsonObject
+            val amountTag = zapRequest["tags"]?.jsonArray?.firstOrNull {
+                it.jsonArray.firstOrNull()?.jsonPrimitive?.content == "amount"
+            }
+            amountTag?.jsonArray?.getOrNull(1)?.jsonPrimitive?.content?.toLong() ?: 0L
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
     // ─── DMs ─────────────────────────────────────────────────────────────────
 
     suspend fun fetchDmConversations(pubkeyHex: String): List<DmConversation> {
@@ -249,15 +280,22 @@ class NostrRepository(
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> {
-        val textNotes = events.filter { it.kind == NostrKind.TEXT_NOTE }
+        val sortedEvents = events.filter { it.kind == NostrKind.TEXT_NOTE || it.kind == NostrKind.VIDEO_LOOP }
             .sortedByDescending { it.createdAt }
-        if (textNotes.isEmpty()) return emptyList()
+        if (sortedEvents.isEmpty()) return emptyList()
 
-        val profiles = fetchProfiles(textNotes.map { it.pubkey }.distinct())
-        return textNotes.map { event ->
+        val ids = sortedEvents.map { it.id }
+        val profiles = fetchProfiles(sortedEvents.map { it.pubkey }.distinct())
+
+        val reactions = fetchReactions(ids)
+        val zaps = fetchZaps(ids)
+
+        return sortedEvents.map { event ->
             ScoredPost(
                 event = event,
-                profile = profiles[event.pubkey]
+                profile = profiles[event.pubkey],
+                likeCount = reactions[event.id] ?: 0,
+                zapAmount = zaps[event.id] ?: 0L
             )
         }
     }
