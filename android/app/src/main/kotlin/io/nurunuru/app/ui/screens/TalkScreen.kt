@@ -1,5 +1,7 @@
 package io.nurunuru.app.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,8 +12,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.outlined.Image
@@ -20,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -36,6 +37,11 @@ import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.TalkViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+
+private val IMAGE_REGEX = Regex(
+    "https?://[^\\s]+\\.(?:jpg|jpeg|png|gif|webp|avif)(\\?[^\\s]*)?",
+    RegexOption.IGNORE_CASE
+)
 
 @Composable
 fun TalkScreen(viewModel: TalkViewModel) {
@@ -444,11 +450,6 @@ private fun MessageBubble(message: DmMessage) {
         }
     }
 }
-
-private val IMAGE_REGEX = Regex(
-    "https?://[^\\s]+\\.(?:jpg|jpeg|png|gif|webp|avif)(\\?[^\\s]*)?",
-    RegexOption.IGNORE_CASE
-)
 
 private fun formatTime(unixSec: Long): String {
     val now = System.currentTimeMillis() / 1000

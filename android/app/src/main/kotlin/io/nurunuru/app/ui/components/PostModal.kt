@@ -57,9 +57,9 @@ fun PostModal(
     val focusRequester = remember { FocusRequester() }
     val remaining = MAX_NOTE_LENGTH - text.text.length
     val canPost = (text.text.isNotBlank() || selectedImages.isNotEmpty()) && remaining >= 0
-    // Hoist sheetState so we can animate hide before removing from composition
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+
     fun dismissSheet() {
         scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
     }
@@ -69,7 +69,7 @@ fun PostModal(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss, // swipe-down: framework already animating, just update state
+        onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         sheetState = sheetState
@@ -149,7 +149,7 @@ fun PostModal(
                             decorationBox = { innerTextField ->
                                 Box {
                                     if (contentWarning.isEmpty()) {
-                                        Text("警告の理由（ネタバレなど）", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFF9800).copy(alpha = 0.5f))
+                                        Text("警告の理由", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFF9800).copy(alpha = 0.5f))
                                     }
                                     innerTextField()
                                 }
@@ -238,17 +238,12 @@ fun PostModal(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Video (Placeholder/Mock as in web desktop hiding it)
                 IconButton(onClick = { /* TODO: Video recorder */ }) {
                     Icon(Icons.Outlined.Videocam, "動画", tint = nuruColors.textTertiary)
                 }
-
-                // Image
                 IconButton(onClick = { imagePickerLauncher.launch("image/*") }) {
                     Icon(Icons.Outlined.Image, "画像", tint = nuruColors.textTertiary)
                 }
-
-                // CW
                 IconButton(onClick = { showCWInput = !showCWInput }) {
                     Icon(
                         Icons.Outlined.Warning,
@@ -256,17 +251,12 @@ fun PostModal(
                         tint = if (showCWInput) Color(0xFFFF9800) else nuruColors.textTertiary
                     )
                 }
-
-                // Emoji
                 IconButton(onClick = { /* TODO: Emoji picker */ }) {
                     Icon(Icons.Outlined.EmojiEmotions, "絵文字", tint = nuruColors.textTertiary)
                 }
-
-                // STT
                 IconButton(onClick = { /* TODO: STT */ }) {
                     Icon(Icons.Outlined.Mic, "音声入力", tint = nuruColors.textTertiary)
                 }
-
                 Spacer(modifier = Modifier.weight(1f))
             }
 
