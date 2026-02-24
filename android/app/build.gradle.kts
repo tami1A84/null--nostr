@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.paparazzi)
 }
 
 android {
@@ -59,6 +60,14 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
     implementation(libs.androidx.appcompat)
+
+    // Official rust-nostr SDK
+    implementation(libs.rust.nostr.sdk)
+    implementation("net.java.dev.jna:jna:5.15.0@aar")
+
+    // Media playback (Kind 34236)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
 
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)

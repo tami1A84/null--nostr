@@ -44,6 +44,7 @@ data class ScoredPost(
     val score: Double = 0.0,
     val profile: UserProfile? = null,
     val likeCount: Int = 0,
+    val zapAmount: Long = 0L,
     val repostCount: Int = 0,
     val replyCount: Int = 0,
     val isLiked: Boolean = false,
@@ -88,4 +89,5 @@ object NostrKind {
     const val LONG_FORM = 30023
     const val SEALED_DM = 13
     const val DM_GIFT_WRAP = 1059
+    const val VIDEO_LOOP = 34236
 }

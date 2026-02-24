@@ -60,6 +60,7 @@ fun MainScreen(
     // Create shared NostrClient and Repository
     val nostrClient = remember {
         NostrClient(
+            context = app,
             relays = app.prefs.relays.toList(),
             privateKeyHex = privateKeyHex,
             publicKeyHex = pubkeyHex
