@@ -17,7 +17,7 @@ object NostrKeyUtils {
     fun parsePrivateKey(input: String): String? {
         return try {
             val keys = Keys.parse(input)
-            keys.secretKey().toHex()
+            keys.secretKey().asHex()
         } catch (e: Exception) {
             null
         }
@@ -28,9 +28,8 @@ object NostrKeyUtils {
      */
     fun derivePublicKey(privateKeyHex: String): String? {
         return try {
-            val secretKey = SecretKey.fromHex(privateKeyHex)
-            val keys = Keys(secretKey)
-            keys.publicKey().toHex()
+            val keys = Keys.parse(privateKeyHex)
+            keys.publicKey().asHex()
         } catch (e: Exception) {
             null
         }
@@ -39,7 +38,7 @@ object NostrKeyUtils {
     /** Encode public key as npub bech32. */
     fun encodeNpub(pubkeyHex: String): String? {
         return try {
-            val publicKey = PublicKey.fromHex(pubkeyHex)
+            val publicKey = PublicKey.parse(pubkeyHex)
             publicKey.toBech32()
         } catch (e: Exception) {
             null
@@ -49,7 +48,7 @@ object NostrKeyUtils {
     /** Encode private key as nsec bech32. */
     fun encodeNsec(privkeyHex: String): String? {
         return try {
-            val secretKey = SecretKey.fromHex(privkeyHex)
+            val secretKey = SecretKey.parse(privkeyHex)
             secretKey.toBech32()
         } catch (e: Exception) {
             null

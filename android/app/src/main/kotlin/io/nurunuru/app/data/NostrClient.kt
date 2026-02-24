@@ -40,11 +40,10 @@ class NostrClient(
                 val database = NostrDatabase.lmdb(dbPath)
 
                 // 2. Setup signer
-                val secretKey = SecretKey.fromHex(privateKeyHex)
-                val keys = Keys(secretKey)
+                val keys = Keys.parse(privateKeyHex)
 
                 // 3. Build SDK Client
-                val client = Client.builder()
+                val client = ClientBuilder()
                     .signer(keys)
                     .database(database)
                     .build()
@@ -76,7 +75,7 @@ class NostrClient(
     private fun handleNotifications(client: Client) {
         scope.launch {
             client.handleNotifications(object : HandleNotification {
-                override fun handle(relayUrl: String, notification: RelayPoolNotification) {
+                override fun handle(notification: RelayPoolNotification) {
                     when (notification) {
                         is RelayPoolNotification.Event -> {
                             val sdkEvent = notification.event
@@ -88,14 +87,11 @@ class NostrClient(
                                 callback(event)
                             }
                         }
-                        is RelayPoolNotification.Message -> {
-                            // Handle other messages if needed
-                        }
                         else -> {}
                     }
                 }
 
-                override fun handleMsg(relayUrl: String, message: RelayMessage) {
+                override fun handleMsg(message: RelayMessage) {
                     // Optional: handle low-level messages
                 }
             })
@@ -122,13 +118,13 @@ class NostrClient(
 
     private fun mapSdkEvent(e: Event): NostrEvent {
         return NostrEvent(
-            id = e.id().toHex(),
-            pubkey = e.author().toHex(),
+            id = e.id().asHex(),
+            pubkey = e.author().asHex(),
             createdAt = e.createdAt().asSecs().toLong(),
-            kind = e.kind().asU32().toInt(),
-            tags = e.tags().map { tag -> tag.asVector() },
+            kind = e.kind().asLong().toInt(),
+            tags = e.tags().toList().map { it.asVector().toList() },
             content = e.content(),
-            sig = e.signature().toHex()
+            sig = e.signature().asHex()
         )
     }
 
@@ -162,15 +158,20 @@ class NostrClient(
 
     private fun mapFilter(f: Filter): rust.nostr.sdk.Filter {
         var sdkF = rust.nostr.sdk.Filter()
-        f.ids?.let { ids -> sdkF = sdkF.ids(ids.map { EventId.fromHex(it) }) }
-        f.authors?.let { authors -> sdkF = sdkF.authors(authors.map { PublicKey.fromHex(it) }) }
-        f.kinds?.let { kinds -> sdkF = sdkF.kinds(kinds.map { Kind(it.toLong()) }) }
+        f.ids?.let { ids -> sdkF = sdkF.ids(ids.map { EventId.parse(it) }) }
+        f.authors?.let { authors -> sdkF = sdkF.authors(authors.map { PublicKey.parse(it) }) }
+        f.kinds?.let { kinds -> sdkF = sdkF.kinds(kinds.map { Kind(it.toULong()) }) }
         f.since?.let { sdkF = sdkF.since(Timestamp.fromSecs(it.toULong())) }
         f.until?.let { sdkF = sdkF.until(Timestamp.fromSecs(it.toULong())) }
         f.limit?.let { sdkF = sdkF.limit(it.toULong()) }
         f.search?.let { sdkF = sdkF.search(it) }
         f.tags?.forEach { (tagName, values) ->
-            sdkF = sdkF.customTag(SingleLetterTag.lowercase(tagName[0]), values)
+            try {
+                val alphabet = Alphabet.valueOf(tagName.uppercase())
+                sdkF = sdkF.customTag(alphabet, values)
+            } catch (e: Exception) {
+                // Ignore unknown tags for now
+            }
         }
         return sdkF
     }
@@ -182,7 +183,7 @@ class NostrClient(
         return withContext(Dispatchers.IO) {
             try {
                 val sdkFilter = mapFilter(filter)
-                val events = client.fetchEvents(listOf(sdkFilter), java.time.Duration.ofMillis(timeoutMs))
+                val events = client.fetchEvents(listOf(sdkFilter), Timestamp.fromSecs(timeoutMs.toULong() / 1000u))
                 events.map { mapSdkEvent(it) }
             } catch (e: Exception) {
                 Log.w(TAG, "Fetch events failed: ${e.message}")
@@ -245,7 +246,7 @@ class NostrClient(
         val client = sdkClient ?: return false
         return withContext(Dispatchers.IO) {
             try {
-                val id = EventId.fromHex(eventId)
+                val id = EventId.parse(eventId)
                 val builder = EventBuilder.reaction(id, emoji)
                 client.sendEventBuilder(builder)
                 true
@@ -259,7 +260,7 @@ class NostrClient(
         val client = sdkClient ?: return false
         return withContext(Dispatchers.IO) {
             try {
-                val id = EventId.fromHex(eventId)
+                val id = EventId.parse(eventId)
                 val builder = EventBuilder.repost(id, null)
                 client.sendEventBuilder(builder)
                 true
@@ -275,8 +276,8 @@ class NostrClient(
         val client = sdkClient ?: return false
         return withContext(Dispatchers.IO) {
             try {
-                val receiver = PublicKey.fromHex(recipientPubkeyHex)
-                client.sendPrivateMsg(receiver, content)
+                val receiver = PublicKey.parse(recipientPubkeyHex)
+                client.sendPrivateMsg(receiver, content, emptyList())
                 true
             } catch (e: Exception) {
                 false
@@ -285,12 +286,9 @@ class NostrClient(
     }
 
     fun decryptNip04(senderPubkeyHex: String, encryptedContent: String): String? {
-        // The SDK handles decryption if we use the right methods,
-        // but for legacy NIP-04 we might need explicit calls.
         val client = sdkClient ?: return null
         return try {
-            val sender = PublicKey.fromHex(senderPubkeyHex)
-            // nip04Decrypt is often available on the signer or client
+            val sender = PublicKey.parse(senderPubkeyHex)
             client.nip04Decrypt(sender, encryptedContent)
         } catch (e: Exception) {
             null

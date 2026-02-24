@@ -173,10 +173,11 @@ class NostrRepository(
         return try {
             val description = event.getTagValue("description") ?: return 0L
             val zapRequest = json.parseToJsonElement(description).jsonObject
-            val amountTag = zapRequest["tags"]?.jsonArray?.firstOrNull {
-                it.jsonArray.firstOrNull()?.jsonPrimitive?.content == "amount"
+            val tags = zapRequest["tags"] as? JsonArray ?: return 0L
+            val amountTag = tags.mapNotNull { it as? JsonArray }.firstOrNull {
+                it.firstOrNull()?.jsonPrimitive?.content == "amount"
             }
-            amountTag?.jsonArray?.getOrNull(1)?.jsonPrimitive?.content?.toLong() ?: 0L
+            amountTag?.getOrNull(1)?.jsonPrimitive?.content?.toLong() ?: 0L
         } catch (e: Exception) {
             0L
         }
