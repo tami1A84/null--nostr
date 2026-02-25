@@ -24,7 +24,8 @@ data class HomeUiState(
     val badges: List<io.nurunuru.app.data.models.NostrEvent> = emptyList(),
     val isFollowing: Boolean = false,
     val followList: List<String> = emptyList(),
-    val followProfiles: Map<String, UserProfile> = emptyMap()
+    val followProfiles: Map<String, UserProfile> = emptyMap(),
+    val uploadServer: String = "nostr.build"
 ) {
     val isOwnProfile: Boolean
         get() = viewingPubkey == null
@@ -40,6 +41,7 @@ class HomeViewModel(
 
     init {
         loadMyProfile()
+        _uiState.update { it.copy(uploadServer = repository.getUploadServer()) }
     }
 
     fun loadMyProfile() {
@@ -283,6 +285,11 @@ class HomeViewModel(
         } catch (e: Exception) {
             null
         }
+    }
+
+    fun setUploadServer(server: String) {
+        repository.setUploadServer(server)
+        _uiState.update { it.copy(uploadServer = server) }
     }
 
     fun clearError() {

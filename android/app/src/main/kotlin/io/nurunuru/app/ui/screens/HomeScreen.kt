@@ -149,22 +149,19 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                             Text(
                                                 text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(profile?.pubkey ?: ""),
                                                 fontWeight = FontWeight.Bold,
-                                                fontSize = 20.sp,
+                                                fontSize = 18.sp,
                                                 color = TextPrimary,
                                                 maxLines = 1
                                             )
                                             if (uiState.isOwnProfile) {
-                                                IconButton(
-                                                    onClick = { showEditProfile = true },
-                                                    modifier = Modifier.size(24.dp)
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.Edit,
-                                                        contentDescription = "編集",
-                                                        tint = TextTertiary,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
+                                                Icon(
+                                                    Icons.Default.Edit,
+                                                    contentDescription = "編集",
+                                                    tint = TextTertiary,
+                                                    modifier = Modifier
+                                                        .size(16.dp)
+                                                        .clickable { showEditProfile = true }
+                                                )
                                             }
                                         }
 
@@ -276,15 +273,15 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                         }
 
                         // Meta Info (LN, Website, Birthday)
-                        Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (!profile?.lud16.isNullOrBlank()) {
                                 MetaInfoItem(NuruIcons.Zap(false), profile!!.lud16!!)
                             }
                             if (!profile?.website.isNullOrBlank()) {
-                                MetaInfoItem(Icons.Default.Language, profile!!.website!!, color = LineGreen)
+                                MetaInfoItem(NuruIcons.Website, profile!!.website!!, color = LineGreen)
                             }
                             if (!profile?.birthday.isNullOrBlank()) {
-                                MetaInfoItem(Icons.Default.Cake, profile!!.birthday!!)
+                                MetaInfoItem(NuruIcons.Cake, profile!!.birthday!!)
                             }
                         }
 
@@ -463,6 +460,7 @@ fun EditProfileModal(
     onSave: (UserProfile) -> Unit,
     viewModel: HomeViewModel
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     var name by remember { mutableStateOf(profile.name ?: "") }
     var about by remember { mutableStateOf(profile.about ?: "") }
     var picture by remember { mutableStateOf(profile.picture ?: "") }
@@ -523,6 +521,27 @@ fun EditProfileModal(
 
             Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 ProfileEditField("名前", name, { name = it }, "表示名")
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("アップロード先", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("nostr.build", "https://blossom.nostr.build").forEach { server ->
+                            FilterChip(
+                                selected = uiState.uploadServer == server,
+                                onClick = { viewModel.setUploadServer(server) },
+                                label = { Text(if (server == "nostr.build") "nostr.build" else "Blossom", fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LineGreen,
+                                    selectedLabelColor = Color.White,
+                                    containerColor = BgSecondary,
+                                    labelColor = TextSecondary
+                                ),
+                                border = null,
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                        }
+                    }
+                }
 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("アイコン画像", style = MaterialTheme.typography.labelMedium, color = TextSecondary)

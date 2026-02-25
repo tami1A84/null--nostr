@@ -45,6 +45,86 @@ object NuruIcons {
         }.build()
     }
 
+    val Website: ImageVector = ImageVector.Builder(
+        name = "Website",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.Black),
+        strokeLineWidth = 1.8f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <circle cx="12" cy="12" r="10"/>
+        moveTo(22f, 12f)
+        arcToRelative(10f, 10f, 0f, true, true, -20f, 0f)
+        arcToRelative(10f, 10f, 0f, true, true, 20f, 0f)
+        close()
+        // <line x1="2" y1="12" x2="22" y2="12"/>
+        moveTo(2f, 12f)
+        horizontalLineTo(22f)
+        // <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        moveTo(12f, 2f)
+        arcToRelative(15.3f, 15.3f, 0f, false, true, 4f, 10f)
+        arcToRelative(15.3f, 15.3f, 0f, false, true, -4f, 10f)
+        arcToRelative(15.3f, 15.3f, 0f, false, true, -4f, -10f)
+        arcToRelative(15.3f, 15.3f, 0f, false, true, 4f, -10f)
+        close()
+    }.build()
+
+    val Cake: ImageVector = ImageVector.Builder(
+        name = "Cake",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.Black),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <path d="M20 21v-8a2 2 0 00-2-2H6a2 2 0 00-2 2v8"/>
+        moveTo(20f, 21f)
+        verticalLineToRelative(-8f)
+        arcToRelative(2f, 2f, 0f, false, false, -2f, -2f)
+        horizontalLineTo(6f)
+        arcToRelative(2f, 2f, 0f, false, false, -2f, 2f)
+        verticalLineToRelative(8f)
+        // <path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/>
+        moveTo(4f, 16f)
+        reflectiveCurveToRelative(0.5f, -1f, 2f, -1f)
+        reflectiveCurveToRelative(2.5f, 2f, 4f, 2f)
+        reflectiveCurveToRelative(2.5f, -2f, 4f, -2f)
+        reflectiveCurveToRelative(2.5f, 2f, 4f, 2f)
+        reflectiveCurveToRelative(2f, -1f, 2f, -1f)
+        // <path d="M2 21h20"/>
+        moveTo(2f, 21f)
+        horizontalLineTo(22f)
+        // <path d="M7 8v2"/>
+        moveTo(7f, 8f)
+        verticalLineToRelative(2f)
+        // <path d="M12 8v2"/>
+        moveTo(12f, 8f)
+        verticalLineToRelative(2f)
+        // <path d="M17 8v2"/>
+        moveTo(17f, 8f)
+        verticalLineToRelative(2f)
+        // <path d="M7 4h.01"/>
+        moveTo(7f, 4f)
+        horizontalLineTo(7.01f)
+        // <path d="M12 4h.01"/>
+        moveTo(12f, 4f)
+        horizontalLineTo(12.01f)
+        // <path d="M17 4h.01"/>
+        moveTo(17f, 4f)
+        horizontalLineTo(17.01f)
+    }.build()
+
     val Repost: ImageVector = ImageVector.Builder(
         name = "Repost",
         defaultWidth = 24.dp,

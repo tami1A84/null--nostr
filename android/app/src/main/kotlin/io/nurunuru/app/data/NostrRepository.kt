@@ -445,8 +445,17 @@ class NostrRepository(
         )
     }
 
+    fun getUploadServer(): String = prefs.uploadServer
+    fun setUploadServer(server: String) { prefs.uploadServer = server }
+
     suspend fun uploadImage(fileBytes: ByteArray, mimeType: String): String? {
-        return ImageUploadUtils.uploadToNostrBuild(fileBytes, mimeType, client.getSigner())
+        val server = prefs.uploadServer
+        return if (server == "nostr.build") {
+            ImageUploadUtils.uploadToNostrBuild(fileBytes, mimeType, client.getSigner())
+        } else {
+            // Assume Blossom URL
+            ImageUploadUtils.uploadToBlossom(fileBytes, mimeType, client.getSigner()!!, server)
+        }
     }
 
     suspend fun updateProfile(profile: UserProfile): Boolean {

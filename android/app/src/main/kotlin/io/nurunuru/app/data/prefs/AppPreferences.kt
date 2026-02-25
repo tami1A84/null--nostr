@@ -38,6 +38,14 @@ class AppPreferences(context: Context) {
         get() = prefs.getStringSet(KEY_RELAYS, DEFAULT_RELAYS.toSet()) ?: DEFAULT_RELAYS.toSet()
         set(value) = prefs.edit().putStringSet(KEY_RELAYS, value).apply()
 
+    var uploadServer: String
+        get() = prefs.getString(KEY_UPLOAD_SERVER, "nostr.build") ?: "nostr.build"
+        set(value) = prefs.edit().putString(KEY_UPLOAD_SERVER, value).apply()
+
+    var blossomUrl: String
+        get() = prefs.getString(KEY_BLOSSOM_URL, "https://blossom.nostr.build") ?: "https://blossom.nostr.build"
+        set(value) = prefs.edit().putString(KEY_BLOSSOM_URL, value).apply()
+
     val isLoggedIn: Boolean
         get() = privateKeyHex != null && publicKeyHex != null
 
@@ -49,5 +57,7 @@ class AppPreferences(context: Context) {
         private const val KEY_PRIVATE_KEY_HEX = "private_key_hex"
         private const val KEY_PUBLIC_KEY_HEX = "public_key_hex"
         private const val KEY_RELAYS = "relays"
+        private const val KEY_UPLOAD_SERVER = "upload_server"
+        private const val KEY_BLOSSOM_URL = "blossom_url"
     }
 }
