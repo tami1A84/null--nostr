@@ -19,6 +19,7 @@ data class TimelineUiState(
     val searchQuery: String = "",
     val searchResults: List<ScoredPost> = emptyList(),
     val isSearching: Boolean = false,
+    val followList: List<String> = emptyList(),
     val birdwatchNotes: Map<String, List<io.nurunuru.app.data.models.NostrEvent>> = emptyMap()
 )
 
@@ -31,7 +32,19 @@ class TimelineViewModel(
     val uiState: StateFlow<TimelineUiState> = _uiState.asStateFlow()
 
     init {
+        loadFollowList()
         loadTimeline()
+    }
+
+    private fun loadFollowList() {
+        viewModelScope.launch {
+            try {
+                val follows = repository.fetchFollowList(pubkeyHex)
+                _uiState.update { it.copy(followList = follows) }
+            } catch (e: Exception) {
+                // Ignore or handle
+            }
+        }
     }
 
     fun loadTimeline() {

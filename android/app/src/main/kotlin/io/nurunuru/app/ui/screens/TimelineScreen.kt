@@ -20,6 +20,8 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -58,21 +60,25 @@ fun TimelineScreen(
 
     Scaffold(
         topBar = {
-            Column(
-                modifier = Modifier.background(MaterialTheme.colorScheme.background.copy(alpha = 0.7f))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.7f))
+                    .blur(if (android.os.Build.VERSION.SDK_INT >= 31) 20.dp else 0.dp)
             ) {
-                // Tab bar: Global / Following
-                TopAppBar(
-                    windowInsets = WindowInsets.statusBars,
-                    title = {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .background(nuruColors.bgSecondary.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                                .padding(4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
+                Column {
+                    // Tab bar: Global / Following
+                    TopAppBar(
+                        windowInsets = WindowInsets.statusBars,
+                        title = {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .background(nuruColors.bgSecondary.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                                    .padding(4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
                             // Pill-style tabs
                             Button(
                                 onClick = { viewModel.switchFeed(FeedType.GLOBAL) },
@@ -153,7 +159,8 @@ fun TimelineScreen(
                     )
                 }
 
-                HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+                    HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+                }
             }
         },
         floatingActionButton = {
