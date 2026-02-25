@@ -1,6 +1,7 @@
 package io.nurunuru.app.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -63,7 +65,7 @@ fun TimelineScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.7f))
+                    .background(Color.Black.copy(alpha = 0.85f))
                     .blur(if (android.os.Build.VERSION.SDK_INT >= 31) 20.dp else 0.dp)
             ) {
                 Column {
@@ -74,7 +76,7 @@ fun TimelineScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxHeight()
-                                    .background(nuruColors.bgSecondary.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                                    .background(nuruColors.bgSecondary, RoundedCornerShape(20.dp))
                                     .padding(4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -185,7 +187,38 @@ fun TimelineScreen(
             when {
                 uiState.isLoading && displayPosts.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = LineGreen)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                repeat(3) { index ->
+                                    val infiniteTransition = rememberInfiniteTransition()
+                                    val dotAlpha by infiniteTransition.animateFloat(
+                                        initialValue = 0.5f,
+                                        targetValue = 1f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(600, delayMillis = index * 200),
+                                            repeatMode = RepeatMode.Reverse
+                                        )
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .background(LineGreen, RoundedCornerShape(4.dp))
+                                            .graphicsLayer { alpha = dotAlpha }
+                                    )
+                                }
+                            }
+                            Text(
+                                "読み込んでいます...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = nuruColors.textSecondary
+                            )
+                        }
                     }
                 }
                 uiState.error != null && displayPosts.isEmpty() -> {
@@ -235,35 +268,27 @@ fun TimelineScreen(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.padding(20.dp)
+                            modifier = Modifier.padding(24.dp)
                         ) {
                             if (uiState.feedType == FeedType.FOLLOWING) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                        .background(nuruColors.bgSecondary, RoundedCornerShape(32.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("👥", fontSize = 32.sp)
-                                }
+                                Text("👥", fontSize = 48.sp, modifier = Modifier.padding(bottom = 12.dp), alpha = 0.6f)
                                 Text(
                                     if (uiState.followList.isEmpty()) "まだ誰もフォローしていません" else "フォロー中のユーザーの投稿がありません",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = nuruColors.textTertiary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = nuruColors.textSecondary,
                                     textAlign = TextAlign.Center,
-                                    modifier = Modifier.widthIn(max = 280.dp)
+                                    lineHeight = 20.sp
                                 )
                                 if (uiState.followList.isEmpty()) {
-                                    Spacer(Modifier.height(8.dp))
+                                    Spacer(Modifier.height(24.dp))
                                     Surface(
                                         color = nuruColors.bgSecondary,
-                                        shape = RoundedCornerShape(8.dp)
+                                        shape = RoundedCornerShape(12.dp)
                                     ) {
                                         Text(
                                             "💡 プロフィールページでユーザーをフォローしてみましょう",
                                             style = MaterialTheme.typography.bodySmall,
-                                            fontSize = 10.sp,
+                                            fontSize = 12.sp,
                                             color = nuruColors.textTertiary,
                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                                         )
@@ -271,12 +296,13 @@ fun TimelineScreen(
                                 }
                             } else {
                                 // Global/Recommend empty state (empty-friendly style)
-                                Text("📭", fontSize = 48.sp)
+                                Text("📭", fontSize = 48.sp, modifier = Modifier.padding(bottom = 12.dp), alpha = 0.6f)
                                 Text(
                                     "まだ投稿がありません\n新しい投稿がまもなく届くかもしれません",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = nuruColors.textSecondary,
-                                    textAlign = TextAlign.Center
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 20.sp
                                 )
                             }
                         }
@@ -286,7 +312,6 @@ fun TimelineScreen(
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                         items(displayPosts, key = { it.event.id }) { post ->
                             Surface(
-                                modifier = Modifier.padding(horizontal = 12.dp),
                                 color = MaterialTheme.colorScheme.background
                             ) {
                                 PostItem(

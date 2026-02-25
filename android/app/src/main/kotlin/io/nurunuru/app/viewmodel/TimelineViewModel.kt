@@ -15,7 +15,7 @@ data class TimelineUiState(
     val isLoading: Boolean = false,
     val isRefreshing: Boolean = false,
     val error: String? = null,
-    val feedType: FeedType = FeedType.GLOBAL,
+    val feedType: FeedType = FeedType.FOLLOWING,
     val searchQuery: String = "",
     val searchResults: List<ScoredPost> = emptyList(),
     val isSearching: Boolean = false,

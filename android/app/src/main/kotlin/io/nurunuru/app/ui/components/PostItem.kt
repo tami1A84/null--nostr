@@ -630,7 +630,7 @@ private fun ActionButton(
             imageVector = icon,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(20.dp)
         )
         if (count > 0) {
             Text(
