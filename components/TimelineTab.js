@@ -1770,11 +1770,9 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                 </button>
               </>
             ) : timelineMode === 'following' ? (
-              <>
-                <div className="w-16 h-16 bg-[var(--bg-secondary)] rounded-full flex items-center justify-center mb-4 text-2xl">
-                  👥
-                </div>
-                <p className="text-[var(--text-tertiary)] max-w-xs mx-auto">
+              <div className="empty-friendly">
+                <div className="empty-friendly-icon">📭</div>
+                <p className="empty-friendly-text">
                   {followList.length === 0 ? 'まだ誰もフォローしていません' : 'フォロー中のユーザーの投稿がありません'}
                 </p>
                 {followList.length === 0 && (
@@ -1789,7 +1787,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                      しばらくお待ちいただくか、更新してみてください
                    </p>
                 )}
-              </>
+              </div>
             ) : (
               <div className="empty-friendly">
                 <div className="empty-friendly-icon">📭</div>

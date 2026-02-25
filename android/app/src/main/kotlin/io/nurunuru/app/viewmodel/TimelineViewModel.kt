@@ -93,7 +93,7 @@ class TimelineViewModel(
 
     fun switchFeed(feedType: FeedType) {
         if (_uiState.value.feedType == feedType) return
-        _uiState.update { it.copy(feedType = feedType, posts = emptyList()) }
+        _uiState.update { it.copy(feedType = feedType) }
         loadTimeline()
     }
 

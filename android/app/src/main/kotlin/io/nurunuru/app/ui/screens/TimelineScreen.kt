@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -16,7 +17,6 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
@@ -37,15 +37,15 @@ fun TimelineScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
-    val scope = rememberCoroutineScope()
 
     var showPostModal by remember { mutableStateOf(false) }
     var searchText by remember { mutableStateOf("") }
     var showSearch by remember { mutableStateOf(false) }
 
     // Pager state for Recommended (0) and Following (1)
+    // Default to Following (index 1)
     val pagerState = rememberPagerState(
-        initialPage = if (uiState.feedType == FeedType.GLOBAL) 0 else 1
+        initialPage = 1
     ) { 2 }
 
     // Sync Pager -> ViewModel
@@ -69,8 +69,7 @@ fun TimelineScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.85f))
-                    .blur(if (android.os.Build.VERSION.SDK_INT >= 31) 20.dp else 0.dp)
+                    .background(nuruColors.bgPrimary)
             ) {
                 TimelineHeader(
                     feedType = uiState.feedType,
@@ -91,12 +90,13 @@ fun TimelineScreen(
             FloatingActionButton(
                 onClick = { showPostModal = true },
                 containerColor = LineGreen,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                contentColor = Color.White,
+                shape = CircleShape
             ) {
                 Icon(Icons.Default.Add, contentDescription = "投稿する")
             }
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = nuruColors.bgPrimary
     ) { padding ->
         HorizontalPager(
             state = pagerState,
@@ -190,20 +190,13 @@ private fun TimelineContent(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(displayPosts, key = { it.event.id }) { post ->
-                        Surface(
-                            color = MaterialTheme.colorScheme.background
-                        ) {
-                            PostItem(
-                                post = post,
-                                onLike = { viewModel.likePost(post.event.id) },
-                                onRepost = { viewModel.repostPost(post.event.id) },
-                                onProfileClick = { /* TODO: navigate to profile */ },
-                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
-                            )
-                        }
-                    }
-                    item {
-                        Spacer(modifier = Modifier.height(80.dp))
+                        PostItem(
+                            post = post,
+                            onLike = { viewModel.likePost(post.event.id) },
+                            onRepost = { viewModel.repostPost(post.event.id) },
+                            onProfileClick = { /* TODO: navigate to profile */ },
+                            birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
+                        )
                     }
                 }
             }

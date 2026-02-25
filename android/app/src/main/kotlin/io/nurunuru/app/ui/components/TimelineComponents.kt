@@ -226,14 +226,14 @@ fun TimelineEmptyState(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(24.dp)
         ) {
+            Text(
+                "📭",
+                fontSize = 48.sp,
+                modifier = Modifier
+                    .padding(bottom = 12.dp)
+                    .graphicsLayer { alpha = 0.6f }
+            )
             if (feedType == FeedType.FOLLOWING) {
-                Text(
-                    "👥",
-                    fontSize = 48.sp,
-                    modifier = Modifier
-                        .padding(bottom = 12.dp)
-                        .graphicsLayer { alpha = 0.6f }
-                )
                 Text(
                     if (isFollowListEmpty) "まだ誰もフォローしていません" else "フォロー中のユーザーの投稿がありません",
                     style = MaterialTheme.typography.bodySmall,
@@ -257,13 +257,6 @@ fun TimelineEmptyState(
                     }
                 }
             } else {
-                Text(
-                    "📭",
-                    fontSize = 48.sp,
-                    modifier = Modifier
-                        .padding(bottom = 12.dp)
-                        .graphicsLayer { alpha = 0.6f }
-                )
                 Text(
                     "まだ投稿がありません\n新しい投稿がまもなく届くかもしれません",
                     style = MaterialTheme.typography.bodySmall,
