@@ -42,8 +42,7 @@ import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.ui.components.PostItem
 import io.nurunuru.app.ui.components.UserAvatar
-import io.nurunuru.app.ui.theme.LineGreen
-import io.nurunuru.app.ui.theme.LocalNuruColors
+import io.nurunuru.app.ui.theme.*
 import io.nurunuru.app.viewmodel.HomeViewModel
 import kotlinx.coroutines.launch
 
@@ -69,7 +68,7 @@ fun HomeScreen(viewModel: HomeViewModel) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Color.Black) // Fixed background as per web
             .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
         LazyColumn(
@@ -84,7 +83,7 @@ fun HomeScreen(viewModel: HomeViewModel) {
                         .height(112.dp)
                         .background(nuruColors.lineGreen)
                 ) {
-                    if (profile?.banner != null) {
+                    if (profile?.banner != null && profile.banner.isNotBlank()) {
                         AsyncImage(
                             model = profile.banner,
                             contentDescription = null,
@@ -100,79 +99,20 @@ fun HomeScreen(viewModel: HomeViewModel) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .offset(y = (-48).dp)
                         .padding(horizontal = 16.dp)
+                        .offset(y = (-48).dp)
                 ) {
+                    // Content Card
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .padding(top = 40.dp) // Leave space for half of avatar
                             .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surface)
+                            .background(Color.Black) // Match background color
+                            .border(0.5.dp, nuruColors.border, RoundedCornerShape(16.dp)) // Border for separation
                             .padding(16.dp)
                     ) {
-                        // Avatar and Action Button
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(80.dp)
-                                    .offset(y = (-40).dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .padding(4.dp)
-                            ) {
-                                UserAvatar(
-                                    pictureUrl = profile?.picture,
-                                    displayName = profile?.displayedName ?: "",
-                                    size = 72.dp
-                                )
-                            }
-
-                            if (uiState.isOwnProfile) {
-                                IconButton(
-                                    onClick = { showEditProfile = true },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Edit,
-                                        contentDescription = "編集",
-                                        tint = nuruColors.textTertiary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            } else {
-                                Button(
-                                    onClick = {
-                                        if (uiState.isFollowing) {
-                                            viewModel.unfollowUser(uiState.viewingPubkey!!)
-                                        } else {
-                                            viewModel.followUser(uiState.viewingPubkey!!)
-                                        }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (uiState.isFollowing) Color.Transparent else nuruColors.lineGreen,
-                                        contentColor = if (uiState.isFollowing) MaterialTheme.colorScheme.onBackground else Color.White
-                                    ),
-                                    border = if (uiState.isFollowing) androidx.compose.foundation.BorderStroke(1.dp, nuruColors.border) else null,
-                                    shape = RoundedCornerShape(20.dp),
-                                    modifier = Modifier.height(32.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
-                                ) {
-                                    Text(
-                                        if (uiState.isFollowing) "解除" else "フォロー",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height((-32).dp))
+                        Spacer(modifier = Modifier.height(24.dp)) // Content starts after avatar row
 
                         // Name
                         Row(
@@ -185,7 +125,7 @@ fun HomeScreen(viewModel: HomeViewModel) {
                                 ),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
-                                color = MaterialTheme.colorScheme.onBackground,
+                                color = TextPrimary,
                                 maxLines = 1
                             )
                         }
@@ -333,7 +273,7 @@ fun HomeScreen(viewModel: HomeViewModel) {
                                 text = uiState.followCount.toString(),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onBackground
+                                color = TextPrimary
                             )
                             Text(
                                 text = "フォロー中",
@@ -342,11 +282,76 @@ fun HomeScreen(viewModel: HomeViewModel) {
                             )
                         }
                     }
+
+                    // Floating Avatar and Action Button - Placed on top to avoid clipping
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black)
+                                .padding(4.dp)
+                        ) {
+                            UserAvatar(
+                                pictureUrl = profile?.picture,
+                                displayName = profile?.displayedName ?: "",
+                                size = 72.dp
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 48.dp) // Align with card content start
+                        ) {
+                            if (uiState.isOwnProfile) {
+                                IconButton(
+                                    onClick = { showEditProfile = true },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "編集",
+                                        tint = nuruColors.textTertiary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        if (uiState.isFollowing) {
+                                            viewModel.unfollowUser(uiState.viewingPubkey!!)
+                                        } else {
+                                            viewModel.followUser(uiState.viewingPubkey!!)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (uiState.isFollowing) Color.Transparent else nuruColors.lineGreen,
+                                        contentColor = if (uiState.isFollowing) Color.White else Color.White
+                                    ),
+                                    border = if (uiState.isFollowing) androidx.compose.foundation.BorderStroke(1.dp, nuruColors.border) else null,
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier.height(32.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                ) {
+                                    Text(
+                                        if (uiState.isFollowing) "解除" else "フォロー",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
             item {
-                Spacer(modifier = Modifier.height((-32).dp))
+                Spacer(modifier = Modifier.height((-40).dp))
             }
 
             // Tabs
@@ -429,7 +434,7 @@ fun HomeScreen(viewModel: HomeViewModel) {
         PullToRefreshContainer(
             state = pullRefreshState,
             modifier = Modifier.align(Alignment.TopCenter),
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = BgSecondary,
             contentColor = LineGreen
         )
     }
@@ -521,7 +526,7 @@ fun EditProfileModal(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Black, // Fixed BG
         dragHandle = null
     ) {
         Column(
@@ -538,9 +543,9 @@ fun EditProfileModal(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onDismiss) {
-                    Text("キャンセル", color = nuruColors.textSecondary, fontSize = 14.sp)
+                    Text("キャンセル", color = TextSecondary, fontSize = 14.sp)
                 }
-                Text("プロフィール編集", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
+                Text("プロフィール編集", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
                 TextButton(
                     onClick = {
                         onSave(profile.copy(
@@ -577,38 +582,38 @@ fun EditProfileModal(
 
                 // Picture
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("アイコン画像", style = MaterialTheme.typography.labelMedium, color = nuruColors.textSecondary)
+                    Text("アイコン画像", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.weight(1f)) {
-                            NuruTextField(value = picture, onValueChange = { picture = it }, placeholder = "https://...")
+                            NuruTextField(value = picture, onValueChange = { picture = it }, placeholder = "https://...", singleLine = true)
                         }
                         IconButton(
                             onClick = { imageLauncher.launch("image/*") },
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(nuruColors.bgTertiary)
+                                .background(BgTertiary)
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
 
                 // Banner
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("バナー画像", style = MaterialTheme.typography.labelMedium, color = nuruColors.textSecondary)
+                    Text("バナー画像", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.weight(1f)) {
-                            NuruTextField(value = banner, onValueChange = { banner = it }, placeholder = "https://...")
+                            NuruTextField(value = banner, onValueChange = { banner = it }, placeholder = "https://...", singleLine = true)
                         }
                         IconButton(
                             onClick = { bannerLauncher.launch("image/*") },
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(nuruColors.bgTertiary)
+                                .background(BgTertiary)
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
@@ -643,7 +648,7 @@ fun ProfileEditField(
     minLines: Int = 1
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = LocalNuruColors.current.textSecondary)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = TextSecondary)
         NuruTextField(value = value, onValueChange = onValueChange, placeholder = placeholder, minLines = minLines)
     }
 }
@@ -654,29 +659,32 @@ fun NuruTextField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
-    minLines: Int = 1
+    minLines: Int = 1,
+    singleLine: Boolean = false
 ) {
     val nuruColors = LocalNuruColors.current
     TextField(
         value = value,
         onValueChange = onValueChange,
-        placeholder = { Text(placeholder, color = nuruColors.textTertiary, fontSize = 14.sp) },
+        placeholder = { Text(placeholder, color = TextTertiary, fontSize = 14.sp) },
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .border(0.5.dp, nuruColors.border, RoundedCornerShape(8.dp)),
         colors = TextFieldDefaults.colors(
-            focusedContainerColor = nuruColors.bgTertiary,
-            unfocusedContainerColor = Color(0xFF1C1C1E), // BgSecondary-ish
+            focusedContainerColor = BgTertiary,
+            unfocusedContainerColor = BgSecondary,
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent,
-            cursorColor = nuruColors.lineGreen,
-            focusedTextColor = MaterialTheme.colorScheme.onBackground,
-            unfocusedTextColor = MaterialTheme.colorScheme.onBackground
+            cursorColor = LineGreen,
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary
         ),
         textStyle = TextStyle(fontSize = 14.sp),
-        minLines = minLines
+        minLines = minLines,
+        singleLine = singleLine,
+        maxLines = if (singleLine) 1 else Int.MAX_VALUE
     )
 }
 
@@ -691,16 +699,17 @@ fun FollowListModal(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = Color.Black
     ) {
         Column(modifier = Modifier.fillMaxWidth().heightIn(min = 400.dp)) {
             Text(
                 "フォロー中",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
+                color = TextPrimary,
                 modifier = Modifier.padding(16.dp)
             )
-            HorizontalDivider(color = LocalNuruColors.current.border, thickness = 0.5.dp)
+            HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
 
             LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 items(pubkeys) { pk ->
@@ -715,7 +724,7 @@ fun FollowListModal(
                         UserAvatar(pictureUrl = p?.picture, displayName = p?.displayedName ?: "", size = 40.dp)
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(p?.displayedName ?: NostrKeyUtils.shortenPubkey(pk), fontWeight = FontWeight.Bold)
+                            Text(p?.displayedName ?: NostrKeyUtils.shortenPubkey(pk), fontWeight = FontWeight.Bold, color = TextPrimary)
                             if (p?.nip05 != null) Text(p.nip05, style = MaterialTheme.typography.bodySmall, color = LineGreen)
                         }
                         Button(
@@ -729,7 +738,7 @@ fun FollowListModal(
                             Text("解除", fontSize = 12.sp)
                         }
                     }
-                    HorizontalDivider(color = LocalNuruColors.current.border, thickness = 0.5.dp)
+                    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
                 }
             }
         }
@@ -755,16 +764,16 @@ private fun SkeletonPostItem() {
             modifier = Modifier
                 .size(42.dp)
                 .clip(CircleShape)
-                .background(nuruColors.bgTertiary)
+                .background(BgTertiary)
         )
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(Modifier.width(100.dp).height(12.dp).background(nuruColors.bgTertiary, RoundedCornerShape(4.dp)))
-            Box(Modifier.fillMaxWidth().height(12.dp).background(nuruColors.bgTertiary, RoundedCornerShape(4.dp)))
-            Box(Modifier.width(200.dp).height(12.dp).background(nuruColors.bgTertiary, RoundedCornerShape(4.dp)))
+            Box(Modifier.width(100.dp).height(12.dp).background(BgTertiary, RoundedCornerShape(4.dp)))
+            Box(Modifier.fillMaxWidth().height(12.dp).background(BgTertiary, RoundedCornerShape(4.dp)))
+            Box(Modifier.width(200.dp).height(12.dp).background(BgTertiary, RoundedCornerShape(4.dp)))
         }
     }
-    HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
 }
