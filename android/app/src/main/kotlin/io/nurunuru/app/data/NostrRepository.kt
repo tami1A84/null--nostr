@@ -501,8 +501,8 @@ class NostrRepository(
     private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> {
         if (events.isEmpty()) return emptyList()
 
+        val myPubkey = prefs.publicKeyHex
         val processedItems = mutableListOf<Pair<NostrEvent, NostrEvent?>>() // Original, Repost(optional)
-
         val pubkeysToFetch = mutableSetOf<String>()
 
         for (event in events) {
@@ -513,11 +513,7 @@ class NostrRepository(
                     pubkeysToFetch.add(original.pubkey)
                     pubkeysToFetch.add(event.pubkey)
                 } catch (e: Exception) {
-                    // If content is empty, we might try to fetch it but for now skip or use stub
-                    val eTag = event.getTagValue("e")
-                    if (eTag != null) {
-                        // In a real app, we'd batch fetch these missing original events
-                    }
+                    // skip or handle missing content
                 }
             } else {
                 processedItems.add(event to null)
@@ -530,18 +526,36 @@ class NostrRepository(
         val profiles = fetchProfiles(pubkeysToFetch.toList())
         val ids = processedItems.map { it.first.id }
 
-        val reactions = fetchReactions(ids)
+        // Fetch reactions and check if I liked
+        val reactionsFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.REACTION),
+            tags = mapOf("e" to ids),
+            limit = 500
+        )
+        val reactionEvents = client.fetchEvents(reactionsFilter, 3000)
+        val reactionCounts = reactionEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
+        val myLikes = if (myPubkey != null) reactionEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
+
+        // Fetch reposts and check if I reposted
+        val repostsFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.REPOST),
+            tags = mapOf("e" to ids),
+            limit = 500
+        )
+        val repostEvents = client.fetchEvents(repostsFilter, 3000)
+        val repostCounts = repostEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
+        val myReposts = if (myPubkey != null) repostEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
+
         val zaps = fetchZaps(ids)
 
-        val posts = processedItems.map { (event, repost) ->
-            val likeCount = reactions[event.id] ?: 0
+        return processedItems.map { (event, repost) ->
+            val likeCount = reactionCounts[event.id] ?: 0
+            val repostCount = repostCounts[event.id] ?: 0
             val zapAmount = zaps[event.id] ?: 0L
 
-            // Simple scoring matching web weights
-            // zap: 100 (per 1000 sats roughly), like: 5
-            val engagementScore = (zapAmount / 1000.0) * 100.0 + likeCount * 5.0
+            // Scoring matching web weights: Zap (100), Repost (25), Like (5)
+            val engagementScore = (zapAmount / 1000.0) * 100.0 + likeCount * 5.0 + repostCount * 25.0
 
-            // Time decay (linear over 24h for simplicity)
             val ageHours = (System.currentTimeMillis() / 1000 - event.createdAt) / 3600.0
             val timeMultiplier = (24.0 - ageHours.coerceIn(0.0, 24.0)) / 24.0
 
@@ -549,14 +563,14 @@ class NostrRepository(
                 event = event,
                 profile = profiles[event.pubkey],
                 likeCount = likeCount,
+                repostCount = repostCount,
                 zapAmount = zapAmount,
                 score = engagementScore * timeMultiplier,
+                isLiked = myLikes.contains(event.id),
+                isReposted = myReposts.contains(event.id),
                 repostedBy = if (repost != null) profiles[repost.pubkey] else null,
                 repostTime = repost?.createdAt
             )
-        }
-
-        // Sort by repostTime (if available) or event time
-        return posts.sortedByDescending { it.repostTime ?: it.event.createdAt }
+        }.sortedByDescending { it.repostTime ?: it.event.createdAt }
     }
 }

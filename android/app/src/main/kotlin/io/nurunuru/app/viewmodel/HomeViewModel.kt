@@ -256,6 +256,19 @@ class HomeViewModel(
         }
     }
 
+    fun publishNote(content: String, cw: String? = null) {
+        viewModelScope.launch {
+            try {
+                val event = repository.publishNote(content, contentWarning = cw)
+                if (event != null) {
+                    refresh()
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "投稿に失敗しました") }
+            }
+        }
+    }
+
     suspend fun uploadImage(fileBytes: ByteArray, mimeType: String): String? {
         return try {
             repository.uploadImage(fileBytes, mimeType)
