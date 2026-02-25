@@ -1,6 +1,9 @@
 package io.nurunuru.app.ui.screens
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -87,50 +90,62 @@ fun MainScreen(
             // but coordinate through MainScreen's contentWindowInsets.
         },
         bottomBar = {
-            NavigationBar(
-                modifier = Modifier.height(56.dp),
-                containerColor = Color(0xFF0A0A0A), // Pure black matching globals.css
-                tonalElevation = 0.dp,
-                windowInsets = WindowInsets.navigationBars
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                color = Color(0xFF0A0A0A),
+                tonalElevation = 0.dp
             ) {
-                BottomTab.entries.forEach { tab ->
-                    val isSelected = activeTab == tab
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = {
-                            if (activeTab == tab) {
-                                // Tap same tab = refresh
-                                when (tab) {
-                                    BottomTab.TIMELINE -> timelineVM.refresh()
-                                    BottomTab.TALK -> talkVM.loadConversations()
-                                    BottomTab.HOME -> homeVM.refresh()
-                                    BottomTab.MINIAPP -> {}
-                                }
-                            }
-                            activeTab = tab
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = tab.getIcon(isSelected),
-                                contentDescription = tab.label,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = tab.label,
-                                fontSize = 10.sp,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = LineGreen,
-                            selectedTextColor = LineGreen,
-                            unselectedIconColor = nuruColors.textTertiary,
-                            unselectedTextColor = nuruColors.textTertiary,
-                            indicatorColor = Color.Transparent // No background pill to match web
-                        )
+                Column {
+                    // Top border for the nav bar to match web style
+                    androidx.compose.material3.HorizontalDivider(
+                        color = io.nurunuru.app.ui.theme.BorderColor,
+                        thickness = 0.5.dp
                     )
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        BottomTab.entries.forEach { tab ->
+                            val isSelected = activeTab == tab
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null // No ripple for a cleaner look matching web
+                                    ) {
+                                        if (activeTab == tab) {
+                                            when (tab) {
+                                                BottomTab.TIMELINE -> timelineVM.refresh()
+                                                BottomTab.TALK -> talkVM.loadConversations()
+                                                BottomTab.HOME -> homeVM.refresh()
+                                                BottomTab.MINIAPP -> {}
+                                            }
+                                        }
+                                        activeTab = tab
+                                    },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = tab.getIcon(isSelected),
+                                    contentDescription = tab.label,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = if (isSelected) LineGreen else nuruColors.textTertiary
+                                )
+                                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = tab.label,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (isSelected) LineGreen else nuruColors.textTertiary
+                                )
+                            }
+                        }
+                    }
                 }
             }
         },

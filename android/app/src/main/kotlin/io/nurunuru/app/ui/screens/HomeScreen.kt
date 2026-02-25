@@ -127,26 +127,13 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                     .fillMaxWidth()
                                     .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 0.dp)
                             ) {
-                                // Avatar and Name section
+                                // Header Row (Actions and Name)
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.Top
                                 ) {
-                                    // Avatar with border - Overlapping the banner
-                                    Box(
-                                        modifier = Modifier
-                                            .offset(y = (-40).dp)
-                                            .size(80.dp)
-                                            .clip(CircleShape)
-                                            .background(bgPrimary)
-                                            .padding(4.dp)
-                                    ) {
-                                        UserAvatar(
-                                            pictureUrl = profile?.picture,
-                                            displayName = profile?.displayedName ?: "",
-                                            size = 72.dp
-                                        )
-                                    }
+                                    // Empty space where the avatar overlaps from above
+                                    Spacer(modifier = Modifier.size(80.dp))
 
                                     Spacer(modifier = Modifier.width(12.dp))
 
@@ -315,6 +302,23 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                     )
                                 }
                             }
+                        }
+
+                        // Avatar - Positioned outside Surface to prevent clipping
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 32.dp) // 16 (outer padding) + 16 (inner padding)
+                                .offset(y = 24.dp) // 64 (surface padding top) - 40 (overlap) = 24
+                                .size(80.dp)
+                                .clip(CircleShape)
+                                .background(bgPrimary)
+                                .padding(4.dp)
+                        ) {
+                            UserAvatar(
+                                pictureUrl = profile?.picture,
+                                displayName = profile?.displayedName ?: "",
+                                size = 72.dp
+                            )
                         }
                     }
                 }
