@@ -155,6 +155,8 @@ fun MainScreen(
                 BottomTab.TALK -> TalkScreen(viewModel = talkVM)
                 BottomTab.TIMELINE -> TimelineScreen(
                     viewModel = timelineVM,
+                    repository = repository,
+                    myPubkey = pubkeyHex,
                     myPictureUrl = myProfile?.picture,
                     myDisplayName = myProfile?.displayedName ?: ""
                 )

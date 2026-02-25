@@ -35,6 +35,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 @Composable
 fun TimelineScreen(
     viewModel: TimelineViewModel,
+    repository: io.nurunuru.app.data.NostrRepository,
+    myPubkey: String,
     myPictureUrl: String?,
     myDisplayName: String
 ) {
@@ -42,8 +44,8 @@ fun TimelineScreen(
     val nuruColors = LocalNuruColors.current
 
     var showPostModal by remember { mutableStateOf(false) }
-    var searchText by remember { mutableStateOf("") }
-    var showSearch by remember { mutableStateOf(false) }
+    var showSearchModal by remember { mutableStateOf(false) }
+    var showNotificationsModal by remember { mutableStateOf(false) }
 
     // Pager state for Recommended (0) and Following (1)
     // Default to Following (index 1)
@@ -69,25 +71,13 @@ fun TimelineScreen(
 
     Scaffold(
         topBar = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(nuruColors.bgPrimary)
-            ) {
-                TimelineHeader(
-                    feedType = uiState.feedType,
-                    onFeedTypeChange = { viewModel.switchFeed(it) },
-                    showSearch = showSearch,
-                    onShowSearchChange = { showSearch = it },
-                    searchText = searchText,
-                    onSearchTextChange = {
-                        searchText = it
-                        if (it.length >= 2) viewModel.search(it)
-                        else if (it.isEmpty()) viewModel.clearSearch()
-                    },
-                    onNotificationsClick = { /* TODO: Notifications */ }
-                )
-            }
+            TimelineHeader(
+                feedType = uiState.feedType,
+                onFeedTypeChange = { viewModel.switchFeed(it) },
+                showRecommendedDot = uiState.hasNewRecommendations,
+                onSearchClick = { showSearchModal = true },
+                onNotificationsClick = { showNotificationsModal = true }
+            )
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -112,9 +102,7 @@ fun TimelineScreen(
             // But we simplify by using common logic for now
             TimelineContent(
                 viewModel = viewModel,
-                feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING,
-                searchText = searchText,
-                isSearching = uiState.isSearching
+                feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING
             )
         }
     }
@@ -130,15 +118,30 @@ fun TimelineScreen(
             }
         )
     }
+
+    if (showSearchModal) {
+        SearchModal(
+            viewModel = viewModel,
+            onClose = { showSearchModal = false; viewModel.clearSearch() },
+            onProfileClick = { /* TODO */ }
+        )
+    }
+
+    if (showNotificationsModal) {
+        NotificationModal(
+            repository = repository,
+            myPubkey = myPubkey,
+            onClose = { showNotificationsModal = false },
+            onProfileClick = { /* TODO */ }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimelineContent(
     viewModel: TimelineViewModel,
-    feedType: FeedType,
-    searchText: String,
-    isSearching: Boolean
+    feedType: FeedType
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
@@ -159,12 +162,9 @@ private fun TimelineContent(
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(pullRefreshState.nestedScrollConnection)
+            .background(nuruColors.bgPrimary)
     ) {
-        val displayPosts = if (searchText.isNotBlank()) {
-            uiState.searchResults
-        } else {
-            if (feedType == FeedType.GLOBAL) uiState.globalPosts else uiState.followingPosts
-        }
+        val displayPosts = if (feedType == FeedType.GLOBAL) uiState.globalPosts else uiState.followingPosts
 
         val isLoading = if (feedType == FeedType.GLOBAL) uiState.isGlobalLoading else uiState.isFollowingLoading
         val error = if (feedType == FeedType.GLOBAL) uiState.globalError else uiState.followingError
@@ -178,11 +178,6 @@ private fun TimelineContent(
                     if (feedType == FeedType.GLOBAL) viewModel.loadGlobalTimeline()
                     else viewModel.loadFollowingTimeline()
                 })
-            }
-            displayPosts.isEmpty() && searchText.isNotBlank() && !isSearching -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("「$searchText」の検索結果がありません", color = nuruColors.textTertiary)
-                }
             }
             displayPosts.isEmpty() && !isLoading -> {
                 TimelineEmptyState(

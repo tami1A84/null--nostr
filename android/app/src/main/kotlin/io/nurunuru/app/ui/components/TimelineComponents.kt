@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.FeedType
@@ -28,15 +29,13 @@ import io.nurunuru.app.viewmodel.FeedType
 fun TimelineHeader(
     feedType: FeedType,
     onFeedTypeChange: (FeedType) -> Unit,
-    showSearch: Boolean,
-    onShowSearchChange: (Boolean) -> Unit,
-    searchText: String,
-    onSearchTextChange: (String) -> Unit,
+    showRecommendedDot: Boolean = false,
+    onSearchClick: () -> Unit,
     onNotificationsClick: () -> Unit
 ) {
     val nuruColors = LocalNuruColors.current
 
-    Column {
+    Column(modifier = Modifier.background(nuruColors.bgPrimary)) {
         TopAppBar(
             windowInsets = WindowInsets.statusBars,
             title = {
@@ -52,6 +51,7 @@ fun TimelineHeader(
                     TimelineTabButton(
                         text = "おすすめ",
                         selected = feedType == FeedType.GLOBAL,
+                        showDot = showRecommendedDot,
                         onClick = { onFeedTypeChange(FeedType.GLOBAL) }
                     )
 
@@ -63,23 +63,20 @@ fun TimelineHeader(
                 }
             },
             actions = {
-                IconButton(onClick = {
-                    onShowSearchChange(!showSearch)
-                    if (showSearch) {
-                        onSearchTextChange("")
-                    }
-                }) {
+                IconButton(onClick = onSearchClick) {
                     Icon(
-                        imageVector = if (showSearch) Icons.Outlined.Close else Icons.Default.Search,
+                        imageVector = NuruIcons.Search,
                         contentDescription = "検索",
-                        tint = MaterialTheme.colorScheme.onSurface
+                        tint = nuruColors.textSecondary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
                 IconButton(onClick = onNotificationsClick) {
                     Icon(
-                        imageVector = Icons.Outlined.Notifications,
+                        imageVector = NuruIcons.Notifications,
                         contentDescription = "通知",
-                        tint = MaterialTheme.colorScheme.onSurface
+                        tint = nuruColors.textSecondary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             },
@@ -88,24 +85,6 @@ fun TimelineHeader(
                 scrolledContainerColor = Color.Transparent
             )
         )
-
-        // Search bar
-        AnimatedVisibility(visible = showSearch) {
-            OutlinedTextField(
-                value = searchText,
-                onValueChange = onSearchTextChange,
-                placeholder = { Text("ノートを検索...") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = LineGreen,
-                    cursorColor = LineGreen
-                ),
-                shape = RoundedCornerShape(12.dp)
-            )
-        }
 
         HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
     }

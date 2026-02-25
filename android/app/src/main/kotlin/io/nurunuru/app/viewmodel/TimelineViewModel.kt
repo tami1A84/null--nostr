@@ -23,6 +23,7 @@ data class TimelineUiState(
     val searchQuery: String = "",
     val searchResults: List<ScoredPost> = emptyList(),
     val isSearching: Boolean = false,
+    val hasNewRecommendations: Boolean = false,
     val followList: List<String> = emptyList(),
     val birdwatchNotes: Map<String, List<io.nurunuru.app.data.models.NostrEvent>> = emptyMap()
 )
@@ -60,7 +61,13 @@ class TimelineViewModel(
             _uiState.update { it.copy(isGlobalLoading = true, globalError = null) }
             try {
                 val posts = repository.fetchGlobalTimeline(50)
-                _uiState.update { it.copy(globalPosts = posts, isGlobalLoading = false) }
+                _uiState.update { state ->
+                    state.copy(
+                        globalPosts = posts,
+                        isGlobalLoading = false,
+                        hasNewRecommendations = state.feedType != FeedType.GLOBAL
+                    )
+                }
                 fetchBirdwatchForPosts(posts)
             } catch (e: Exception) {
                 _uiState.update { it.copy(globalError = "おすすめの読み込みに失敗しました", isGlobalLoading = false) }
@@ -93,7 +100,13 @@ class TimelineViewModel(
             _uiState.update { it.copy(isGlobalRefreshing = true, globalError = null) }
             try {
                 val posts = repository.fetchGlobalTimeline(50)
-                _uiState.update { it.copy(globalPosts = posts, isGlobalRefreshing = false) }
+                _uiState.update { state ->
+                    state.copy(
+                        globalPosts = posts,
+                        isGlobalRefreshing = false,
+                        hasNewRecommendations = state.feedType != FeedType.GLOBAL
+                    )
+                }
                 fetchBirdwatchForPosts(posts)
             } catch (e: Exception) {
                 _uiState.update { it.copy(globalError = "更新に失敗しました", isGlobalRefreshing = false) }
@@ -132,7 +145,12 @@ class TimelineViewModel(
 
     fun switchFeed(feedType: FeedType) {
         if (_uiState.value.feedType == feedType) return
-        _uiState.update { it.copy(feedType = feedType) }
+        _uiState.update {
+            it.copy(
+                feedType = feedType,
+                hasNewRecommendations = if (feedType == FeedType.GLOBAL) false else it.hasNewRecommendations
+            )
+        }
         // Feeds are loaded independently in init and keep their state,
         // but we might want to refresh when switching if they are empty
         if (feedType == FeedType.GLOBAL && _uiState.value.globalPosts.isEmpty()) {
