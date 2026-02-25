@@ -182,4 +182,37 @@ object NuruIcons {
             close()
         }.build()
     }
+
+    val Edit: ImageVector = ImageVector.Builder(
+        name = "Edit",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7
+        moveTo(11f, 4f)
+        horizontalLineTo(4f)
+        arcToRelative(2f, 2f, 0f, false, false, -2f, 2f)
+        verticalLineToRelative(14f)
+        arcToRelative(2f, 2f, 0f, false, false, 2f, 2f)
+        horizontalLineToRelative(14f)
+        arcToRelative(2f, 2f, 0f, false, false, 2f, -2f)
+        verticalLineToRelative(-7f)
+
+        // M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z
+        moveTo(18.5f, 2.5f)
+        arcToRelative(2.121f, 2.121f, 0f, false, true, 3f, 3f)
+        lineTo(12f, 15f)
+        lineToRelative(-4f, 1f)
+        lineToRelative(1f, -4f)
+        lineToRelative(9.5f, -9.5f)
+        close()
+    }.build()
 }
