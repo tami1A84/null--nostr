@@ -80,7 +80,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(horizontal = 28.dp, vertical = 16.dp), // Increased horizontal padding for card look
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Login Status Section
@@ -163,9 +163,13 @@ fun SettingsScreen(
             }
 
             items(apps) { app ->
-                MiniAppRow(app = app) {
-                    if (app.id == "relay") {
-                        showRelaySettings = true
+                Surface(
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    MiniAppRow(app = app) {
+                        if (app.id == "relay") {
+                            showRelaySettings = true
+                        }
                     }
                 }
             }

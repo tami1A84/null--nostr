@@ -90,9 +90,14 @@ fun MainScreen(
     }
 
     Scaffold(
+        topBar = {
+            // Each screen should ideally handle its own top bar to manage internal state
+            // but we need to coordinate insets.
+            // We'll let child screens provide their top bars or keep them internal for now
+            // but coordinate through MainScreen's contentWindowInsets.
+        },
         bottomBar = {
             NavigationBar(
-                modifier = Modifier.height(56.dp),
                 containerColor = Color(0xFF0A0A0A), // Pure black matching globals.css
                 tonalElevation = 0.dp,
                 windowInsets = WindowInsets.navigationBars
@@ -137,7 +142,8 @@ fun MainScreen(
                 }
             }
         },
-        containerColor = Color(0xFF0A0A0A)
+        containerColor = Color(0xFF0A0A0A),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0) // Don't consume insets here, let child screens handle them
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             when (activeTab) {

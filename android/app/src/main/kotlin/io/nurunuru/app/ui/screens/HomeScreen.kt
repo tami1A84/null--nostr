@@ -111,9 +111,10 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                             }
                         }
 
-                        // The Rounded Sheet
+                        // The Rounded Sheet (Card look)
                         Surface(
                             modifier = Modifier
+                                .padding(horizontal = 12.dp)
                                 .fillMaxWidth()
                                 .padding(top = 96.dp),
                             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
@@ -195,7 +196,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
 
                         Box(
                             modifier = Modifier
-                                .padding(top = 64.dp, start = 16.dp)
+                                .padding(top = 64.dp, start = 24.dp)
                                 .size(88.dp)
                                 .clip(CircleShape)
                                 .background(bgPrimary)
@@ -212,171 +213,193 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
 
                 // Profile Details
                 item {
-                    Column(
+                    Surface(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(top = 12.dp)
+                            .padding(horizontal = 12.dp)
+                            .fillMaxWidth(),
+                        color = bgPrimary
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        Column(
                             modifier = Modifier
-                                .clickable {
-                                    profile?.pubkey?.let {
-                                        clipboardManager.setText(AnnotatedString(NostrKeyUtils.encodeNpub(it) ?: it))
-                                    }
-                                }
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .padding(top = 12.dp)
                         ) {
-                            Text(
-                                text = NostrKeyUtils.shortenPubkey(profile?.pubkey ?: "", 12),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextTertiary,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                            )
-                            Icon(
-                                Icons.Default.ContentCopy,
-                                contentDescription = "コピー",
-                                tint = TextTertiary,
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
-
-                        if (!profile?.about.isNullOrBlank()) {
-                            Text(
-                                text = profile!!.about!!,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary,
-                                modifier = Modifier.padding(top = 12.dp),
-                                lineHeight = 18.sp
-                            )
-                        }
-
-                        Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (!profile?.lud16.isNullOrBlank()) {
-                                MetaInfoItem(NuruIcons.Zap(false), profile!!.lud16!!)
-                            }
-                            if (!profile?.website.isNullOrBlank()) {
-                                MetaInfoItem(NuruIcons.Website, profile!!.website!!, color = LineGreen)
-                            }
-                            if (!profile?.birthday.isNullOrBlank()) {
-                                MetaInfoItem(NuruIcons.Cake, profile!!.birthday!!)
-                            }
-                        }
-
-                        if (uiState.badges.isNotEmpty()) {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.padding(top = 12.dp)
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier
+                                    .clickable {
+                                        profile?.pubkey?.let {
+                                            clipboardManager.setText(AnnotatedString(NostrKeyUtils.encodeNpub(it) ?: it))
+                                        }
+                                    }
                             ) {
-                                uiState.badges.take(3).forEach { badge ->
-                                    val thumb = badge.getTagValue("thumb") ?: badge.getTagValue("image")
-                                    if (thumb != null) {
-                                        AsyncImage(
-                                            model = thumb,
-                                            contentDescription = badge.getTagValue("name"),
-                                            modifier = Modifier
-                                                .size(24.dp)
-                                                .clip(RoundedCornerShape(4.dp))
-                                        )
+                                Text(
+                                    text = NostrKeyUtils.shortenPubkey(profile?.pubkey ?: "", 12),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextTertiary,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                )
+                                Icon(
+                                    Icons.Default.ContentCopy,
+                                    contentDescription = "コピー",
+                                    tint = TextTertiary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+
+                            if (!profile?.about.isNullOrBlank()) {
+                                Text(
+                                    text = profile!!.about!!,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary,
+                                    modifier = Modifier.padding(top = 12.dp),
+                                    lineHeight = 18.sp
+                                )
+                            }
+
+                            Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (!profile?.lud16.isNullOrBlank()) {
+                                    MetaInfoItem(NuruIcons.Zap(false), profile!!.lud16!!)
+                                }
+                                if (!profile?.website.isNullOrBlank()) {
+                                    MetaInfoItem(NuruIcons.Website, profile!!.website!!, color = LineGreen)
+                                }
+                                if (!profile?.birthday.isNullOrBlank()) {
+                                    MetaInfoItem(NuruIcons.Cake, profile!!.birthday!!)
+                                }
+                            }
+
+                            if (uiState.badges.isNotEmpty()) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(top = 12.dp)
+                                ) {
+                                    uiState.badges.take(3).forEach { badge ->
+                                        val thumb = badge.getTagValue("thumb") ?: badge.getTagValue("image")
+                                        if (thumb != null) {
+                                            AsyncImage(
+                                                model = thumb,
+                                                contentDescription = badge.getTagValue("name"),
+                                                modifier = Modifier
+                                                    .size(24.dp)
+                                                    .clip(RoundedCornerShape(4.dp))
+                                            )
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        Row(
-                            modifier = Modifier
-                                .padding(top = 16.dp)
-                                .clickable {
-                                    viewModel.loadFollowProfiles()
-                                    showFollowList = true
-                                },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(Icons.Default.People, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
-                            Text(
-                                text = uiState.followCount.toString(),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "フォロー中",
-                                fontSize = 14.sp,
-                                color = TextSecondary
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .padding(top = 16.dp, bottom = 12.dp)
+                                    .clickable {
+                                        viewModel.loadFollowProfiles()
+                                        showFollowList = true
+                                    },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Default.People, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                Text(
+                                    text = uiState.followCount.toString(),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "フォロー中",
+                                    fontSize = 14.sp,
+                                    color = TextSecondary
+                                )
+                            }
                         }
                     }
                 }
 
                 // Tabs
                 item {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        TabRow(
-                            selectedTabIndex = uiState.activeTab,
-                            containerColor = bgPrimary,
-                            contentColor = LineGreen,
-                            indicator = { tabPositions ->
-                                TabRowDefaults.SecondaryIndicator(
-                                    modifier = Modifier.tabIndicatorOffset(tabPositions[uiState.activeTab]),
-                                    color = LineGreen,
-                                    height = 2.dp
+                    Surface(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .fillMaxWidth(),
+                        color = bgPrimary
+                    ) {
+                        Column {
+                            TabRow(
+                                selectedTabIndex = uiState.activeTab,
+                                containerColor = bgPrimary,
+                                contentColor = LineGreen,
+                                indicator = { tabPositions ->
+                                    TabRowDefaults.SecondaryIndicator(
+                                        modifier = Modifier.tabIndicatorOffset(tabPositions[uiState.activeTab]),
+                                        color = LineGreen,
+                                        height = 2.dp
+                                    )
+                                },
+                                divider = {},
+                                modifier = Modifier.fillMaxWidth().height(48.dp)
+                            ) {
+                                Tab(
+                                    selected = uiState.activeTab == 0,
+                                    onClick = { viewModel.setActiveTab(0) },
+                                    text = {
+                                        Text(
+                                            "投稿 (${uiState.posts.size})",
+                                            color = if (uiState.activeTab == 0) LineGreen else TextTertiary,
+                                            fontWeight = if (uiState.activeTab == 0) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 14.sp
+                                        )
+                                    }
                                 )
-                            },
-                            divider = {},
-                            modifier = Modifier.fillMaxWidth().height(48.dp)
-                        ) {
-                            Tab(
-                                selected = uiState.activeTab == 0,
-                                onClick = { viewModel.setActiveTab(0) },
-                                text = {
-                                    Text(
-                                        "投稿 (${uiState.posts.size})",
-                                        color = if (uiState.activeTab == 0) LineGreen else TextTertiary,
-                                        fontWeight = if (uiState.activeTab == 0) FontWeight.Bold else FontWeight.Normal,
-                                        fontSize = 14.sp
-                                    )
-                                }
-                            )
-                            Tab(
-                                selected = uiState.activeTab == 1,
-                                onClick = { viewModel.setActiveTab(1) },
-                                text = {
-                                    Text(
-                                        "いいね (${uiState.likedPosts.size})",
-                                        color = if (uiState.activeTab == 1) LineGreen else TextTertiary,
-                                        fontWeight = if (uiState.activeTab == 1) FontWeight.Bold else FontWeight.Normal,
-                                        fontSize = 14.sp
-                                    )
-                                }
-                            )
+                                Tab(
+                                    selected = uiState.activeTab == 1,
+                                    onClick = { viewModel.setActiveTab(1) },
+                                    text = {
+                                        Text(
+                                            "いいね (${uiState.likedPosts.size})",
+                                            color = if (uiState.activeTab == 1) LineGreen else TextTertiary,
+                                            fontWeight = if (uiState.activeTab == 1) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                )
+                            }
+                            HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
                         }
-                        HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
                     }
                 }
 
                 if (uiState.isLoading) {
-                    items(5) { SkeletonPostItem() }
+                    items(5) {
+                        Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
+                            SkeletonPostItem()
+                        }
+                    }
                 } else {
                     val displayPosts = if (uiState.activeTab == 0) uiState.posts else uiState.likedPosts
                     if (displayPosts.isEmpty()) {
                         item {
-                            Box(Modifier.fillMaxWidth().padding(64.dp), contentAlignment = Alignment.Center) {
-                                Text(if (uiState.activeTab == 0) "投稿がありません" else "いいねがありません", color = TextTertiary)
+                            Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
+                                Box(Modifier.fillMaxWidth().padding(64.dp), contentAlignment = Alignment.Center) {
+                                    Text(if (uiState.activeTab == 0) "投稿がありません" else "いいねがありません", color = TextTertiary)
+                                }
                             }
                         }
                     } else {
                         items(displayPosts, key = { (if (uiState.activeTab == 1) "like_" else "") + it.event.id }) { post ->
-                            PostItem(
-                                post = post,
-                                onLike = { viewModel.likePost(post.event.id) },
-                                onRepost = { viewModel.repostPost(post.event.id) },
-                                onProfileClick = { viewModel.loadProfile(it) },
-                                onDelete = { viewModel.deletePost(post.event.id) },
-                                isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
-                                isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false
-                            )
+                            Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
+                                PostItem(
+                                    post = post,
+                                    onLike = { viewModel.likePost(post.event.id) },
+                                    onRepost = { viewModel.repostPost(post.event.id) },
+                                    onProfileClick = { viewModel.loadProfile(it) },
+                                    onDelete = { viewModel.deletePost(post.event.id) },
+                                    isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
+                                    isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false
+                                )
+                            }
                         }
                     }
                 }
@@ -436,13 +459,18 @@ private fun formatNip05(nip05: String): String = when {
 
 @Composable
 private fun SkeletonPostItem() {
-    Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.size(42.dp).clip(CircleShape).background(BgTertiary))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.width(100.dp).height(12.dp).background(BgTertiary, RoundedCornerShape(4.dp)))
-            Box(Modifier.fillMaxWidth().height(12.dp).background(BgTertiary, RoundedCornerShape(4.dp)))
-            Box(Modifier.width(200.dp).height(12.dp).background(BgTertiary, RoundedCornerShape(4.dp)))
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(Modifier.size(42.dp).clip(CircleShape).background(BgTertiary))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.width(100.dp).height(12.dp).background(BgTertiary, RoundedCornerShape(4.dp)))
+                Box(Modifier.fillMaxWidth().height(12.dp).background(BgTertiary, RoundedCornerShape(4.dp)))
+                Box(Modifier.width(200.dp).height(12.dp).background(BgTertiary, RoundedCornerShape(4.dp)))
+            }
         }
+        HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
     }
-    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
 }
