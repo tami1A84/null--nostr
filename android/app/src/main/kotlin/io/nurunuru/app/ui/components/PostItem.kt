@@ -48,7 +48,7 @@ fun PostItem(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.Black)
+            .background(nuruColors.bgPrimary)
     ) {
         PostIndicators(post = post)
 

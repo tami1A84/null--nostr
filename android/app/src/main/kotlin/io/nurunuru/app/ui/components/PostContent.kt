@@ -11,7 +11,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -123,7 +121,6 @@ fun PostHeader(
                 modifier = Modifier.clickable { onProfileClick(post.event.pubkey) }
             )
 
-            // Verification badge (Green checkmark + NIP-05 address)
             if (internalVerified && profile?.nip05 != null) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -145,7 +142,6 @@ fun PostHeader(
                 }
             }
 
-            // Badges (NIP-58)
             post.badges.take(3).forEach { badgeUrl ->
                 AsyncImage(
                     model = badgeUrl,
@@ -157,7 +153,6 @@ fun PostHeader(
             }
         }
 
-        // Time and Menu
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = formatPostTimestamp(post.event.createdAt),
@@ -206,7 +201,6 @@ fun PostContent(post: ScoredPost) {
     val cleanContent = removeImageUrls(content).trim()
     if (cleanContent.isBlank()) return
 
-    // Extract custom emojis
     val emojis = post.event.tags
         .filter { it.getOrNull(0) == "emoji" }
         .mapNotNull {
@@ -302,7 +296,6 @@ fun PostMedia(post: ScoredPost) {
                     }
                 }
 
-                // 6.3s LOOP badge
                 Surface(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -321,74 +314,11 @@ fun PostMedia(post: ScoredPost) {
             }
         }
     } else {
-        // Images
         extractPostImages(post.event.content).let { images ->
             if (images.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 PostImageGrid(images = images)
             }
-        }
-    }
-}
-
-@Composable
-fun PostActions(
-    post: ScoredPost,
-    onLike: () -> Unit,
-    onRepost: () -> Unit
-) {
-    val nuruColors = LocalNuruColors.current
-    val context = LocalContext.current
-    val profile = post.profile
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(32.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Like (Thumbs up as per web)
-        ActionButton(
-            icon = NuruIcons.Like(post.isLiked),
-            count = post.likeCount,
-            onClick = onLike,
-            tint = if (post.isLiked) nuruColors.lineGreen else nuruColors.textTertiary,
-            animate = post.isLiked
-        )
-        // Repost
-        ActionButton(
-            icon = NuruIcons.Repost,
-            count = post.repostCount,
-            onClick = onRepost,
-            tint = if (post.isReposted) nuruColors.lineGreen else nuruColors.textTertiary,
-            animate = post.isReposted
-        )
-        // Zap
-        ActionButton(
-            icon = NuruIcons.Zap(false),
-            count = (post.zapAmount / 1000).toInt(),
-            onClick = {
-                if (profile?.lud16 != null) {
-                    android.widget.Toast.makeText(context, "⚡ Zap送信: ${profile.lud16}", android.widget.Toast.LENGTH_SHORT).show()
-                } else {
-                    android.widget.Toast.makeText(context, "Lightningアドレスが設定されていません", android.widget.Toast.LENGTH_SHORT).show()
-                }
-            },
-            tint = nuruColors.textTertiary,
-            animate = false // TODO: Trigger animation on successful zap
-        )
-
-        // Client tag (via)
-        val client = post.event.getTagValue("client")
-        if (client != null) {
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = "via $client",
-                style = MaterialTheme.typography.labelSmall,
-                color = nuruColors.textTertiary.copy(alpha = 0.6f),
-                fontSize = 10.sp
-            )
-        } else {
-            Spacer(modifier = Modifier.width(8.dp))
         }
     }
 }
@@ -431,57 +361,8 @@ fun BirdwatchDisplay(notes: List<io.nurunuru.app.data.models.NostrEvent>) {
 }
 
 @Composable
-private fun ActionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    count: Int,
-    onClick: () -> Unit,
-    tint: Color,
-    animate: Boolean = false
-) {
-    val scale = remember { Animatable(1f) }
-
-    LaunchedEffect(animate) {
-        if (animate) {
-            scale.animateTo(
-                targetValue = 1.3f,
-                animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
-            )
-            scale.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
-            )
-        }
-    }
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier
-                .size(20.dp)
-                .graphicsLayer {
-                    scaleX = scale.value
-                    scaleY = scale.value
-                }
-        )
-        if (count > 0) {
-            Text(
-                text = formatCount(count),
-                style = MaterialTheme.typography.bodySmall,
-                color = tint
-            )
-        }
-    }
-}
-
-@Composable
-private fun PostImageGrid(images: List<String>) {
-    val context = LocalContext.current
+fun PostImageGrid(images: List<String>) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showAll by remember { mutableStateOf(false) }
     val maxVisible = 4
     val visibleImages = if (showAll) images else images.take(maxVisible)
@@ -565,20 +446,19 @@ private fun PostImageGrid(images: List<String>) {
     }
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
+// Helpers
 private val POST_IMAGE_REGEX = Regex(
     "https?://[^\\s]+\\.(?:jpg|jpeg|png|gif|webp|avif)(\\?[^\\s]*)?",
     RegexOption.IGNORE_CASE
 )
 
-private fun extractPostImages(content: String): List<String> =
+fun extractPostImages(content: String): List<String> =
     POST_IMAGE_REGEX.findAll(content).map { it.value }.distinct().toList()
 
-private fun removeImageUrls(content: String): String =
+fun removeImageUrls(content: String): String =
     POST_IMAGE_REGEX.replace(content, "").trim()
 
-private fun formatPostTimestamp(unixSec: Long): String {
+fun formatPostTimestamp(unixSec: Long): String {
     val now = System.currentTimeMillis() / 1000
     val diff = now - unixSec
     return when {
@@ -593,12 +473,7 @@ private fun formatPostTimestamp(unixSec: Long): String {
     }
 }
 
-private fun formatCount(count: Int): String = when {
-    count >= 1000 -> "${count / 1000}K"
-    else -> count.toString()
-}
-
-private fun formatNip05(nip05: String): String = when {
+fun formatNip05(nip05: String): String = when {
     nip05.startsWith("_@") -> nip05.drop(1)
     !nip05.contains("@") -> "@$nip05"
     else -> nip05

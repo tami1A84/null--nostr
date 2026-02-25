@@ -111,27 +111,6 @@ fun TimelineHeader(
     }
 }
 
-@Composable
-private fun TimelineTabButton(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val nuruColors = LocalNuruColors.current
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected) LineGreen else Color.Transparent,
-            contentColor = if (selected) Color.White else nuruColors.textTertiary
-        ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-        modifier = Modifier.height(32.dp),
-        shape = RoundedCornerShape(16.dp),
-        elevation = null
-    ) {
-        Text(text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-    }
-}
 
 @Composable
 fun TimelineLoadingState(

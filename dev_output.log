@@ -4,80 +4,82 @@
 
  ⚠ Port 3000 is in use, trying 3001 instead.
  ⚠ Port 3001 is in use, trying 3002 instead.
+ ⚠ Port 3002 is in use, trying 3003 instead.
   ▲ Next.js 14.2.35
-  - Local:        http://localhost:3002
+  - Local:        http://localhost:3003
 
  ✓ Starting...
- ✓ Ready in 3.5s
+ ✓ Ready in 7.4s
  ○ Compiling / ...
- ✓ Compiled / in 13.7s (661 modules)
- GET / 200 in 15217ms
- GET / 200 in 41ms
- GET / 200 in 31ms
- GET / 200 in 60ms
- GET / 200 in 15ms
- GET / 200 in 40ms
- GET / 200 in 28ms
- GET / 200 in 31ms
- GET / 200 in 47ms
- GET / 200 in 35ms
- GET / 200 in 31ms
- GET / 200 in 12ms
- HEAD / 200 in 23ms
- GET / 200 in 34ms
- GET / 200 in 35ms
- GET / 200 in 41ms
+ ✓ Compiled / in 13.3s (661 modules)
+ GET / 200 in 14220ms
+ GET / 200 in 203ms
  ○ Compiling /_not-found ...
- ✓ Compiled /_not-found in 1136ms (664 modules)
- GET /api/dm/?pubkey=a000000000000000000000000000000000000000000000000000000000000001&limit=50 404 in 1398ms
- GET /api/dm/?pubkey=a000000000000000000000000000000000000000000000000000000000000001&limit=50 404 in 105ms
- ○ Compiling /api/nip05 ...
- ✓ Compiled /api/nip05 in 504ms (355 modules)
- GET /api/nip05/?domain=www.summerbeauty.club&name=_ 200 in 773ms
- GET /api/nip05/?domain=littleright-human.github.io&name=littleright 200 in 4883ms
- GET /api/nip05/?domain=kojira.io&name=_ 200 in 4879ms
- GET /api/nip05/?domain=comcomponent.com&name=komurasoft 200 in 4861ms
- GET /api/nip05/?domain=stok33.github.io&name=_ 200 in 4863ms
- GET /api/nip05/?domain=balloon-jp.vercel.app&name=3333 200 in 4120ms
- GET /api/nip05/?domain=tgkzmdd.work&name=caz0617 200 in 4869ms
- GET / 200 in 416ms
- GET / 200 in 52ms
- GET /api/dm/?pubkey=a000000000000000000000000000000000000000000000000000000000000001&limit=50 404 in 40ms
- GET /api/dm/?pubkey=a000000000000000000000000000000000000000000000000000000000000001&limit=50 404 in 21ms
- GET / 200 in 68ms
- GET / 200 in 46ms
- GET /api/dm/?pubkey=a000000000000000000000000000000000000000000000000000000000000001&limit=50 404 in 33ms
- GET /api/dm/?pubkey=a000000000000000000000000000000000000000000000000000000000000001&limit=50 404 in 30ms
- GET /api/nip05/?domain=kojira.io&name=_ 200 in 113ms
- GET /api/nip05/?domain=littleright-human.github.io&name=littleright 200 in 136ms
- GET /api/nip05/?domain=stok33.github.io&name=_ 200 in 145ms
- GET /api/nip05/?domain=comcomponent.com&name=komurasoft 200 in 149ms
- GET /api/nip05/?domain=www.summerbeauty.club&name=_ 200 in 162ms
- GET /api/nip05/?domain=balloon-jp.vercel.app&name=3333 200 in 147ms
- GET /api/nip05/?domain=shiocml.github.io&name=_ 200 in 134ms
- GET /api/nip05/?domain=caramelpen.github.io&name=duketogo 200 in 140ms
- GET /api/nip05/?domain=balloon-jp.vercel.app&name=jihou 200 in 64ms
- GET /api/nip05/?domain=compile-error.net&name=buzzword 200 in 177ms
- GET /api/nip05/?domain=balloon-jp.vercel.app&name=kamado 200 in 267ms
- GET /api/nip05/?domain=tsukemonogIt.github.io&name=tm 200 in 111ms
- GET /api/nip05/?domain=tsukemonogit.github.io&name=myRoom 200 in 119ms
- GET /api/nip05/?domain=compile-error.net&name=hotpostrank 200 in 181ms
- GET /api/nip05/?domain=nicoanime.com&name=_ 200 in 230ms
- GET /api/nip05/?domain=balloon-jp.vercel.app&name=sujahta 200 in 82ms
- GET /api/nip05/?domain=balloon-jp.vercel.app&name=503 200 in 72ms
- GET /api/nip05/?domain=yukimikudayo.github.io&name=yukimikudayo 200 in 130ms
- GET /api/nip05/?domain=mitsugu.github.io&name=orzbruford 200 in 136ms
- GET /api/nip05/?domain=studio.teatwo.dev&name=_ 200 in 140ms
- GET /api/nip05/?domain=tgkzmdd.work&name=caz0617 200 in 698ms
- GET /api/nip05/?domain=balloon-jp.vercel.app&name=anko 200 in 49ms
- GET /api/nip05/?domain=e01819d64d9744343d0e81eac6cdbc37d63385cea56cf0ee470881be20504efd&name=_ 502 in 21ms
- GET /api/nip05/?domain=tsukemonogit.github.io&name=iroiro 200 in 29ms
- GET /api/nip05/?domain=balloon-jp.vercel.app&name=mogmog 200 in 65ms
- GET /api/nip05/?domain=compile-error.net&name=golang-news 200 in 46ms
- GET /api/nip05/?domain=crayfish-ghost.github.io&name=yodogawa 200 in 135ms
- GET /api/nip05/?domain=e01819d64d9744343d0e81eac6cdbc37d63385cea56cf0ee470881be20504efd&name=_ 502 in 13ms
- GET /api/nip05/?domain=compile-error.net&name=markov 200 in 48ms
- GET /api/nip05/?domain=nostrplebs.com&name=satoshiboi 200 in 438ms
- GET /api/nip05/?domain=iris.to&name=shckor 200 in 677ms
- GET /api/nip05/?domain=e01819d64d9744343d0e81eac6cdbc37d63385cea56cf0ee470881be20504efd&name=_ 502 in 74ms
- GET /api/nip05/?domain=e01819d64d9744343d0e81eac6cdbc37d63385cea56cf0ee470881be20504efd&name=_ 502 in 21ms
+ ✓ Compiled /api/nip05 in 11.2s (694 modules)
+ GET / 200 in 549ms
+ GET / 200 in 47ms
+ GET / 200 in 10ms
+ GET /api/dm/?pubkey=a000000000000000000000000000000000000000000000000000000000000001&limit=50 404 in 47ms
+ GET /api/dm/?pubkey=a000000000000000000000000000000000000000000000000000000000000001&limit=50 404 in 28ms
+ GET /api/nip05/?domain=kojira.io&name=_ 200 in 161ms
+ GET /api/nip05/?domain=yoshikunijujo.github.io&name=YoshikuniJujo 200 in 176ms
+ GET /api/nip05/?domain=www.summerbeauty.club&name=_ 200 in 192ms
+ GET /api/nip05/?domain=stok33.github.io&name=_ 200 in 202ms
+ GET /api/nip05/?domain=comcomponent.com&name=komurasoft 200 in 271ms
+ GET /api/nip05/?domain=littleright-human.github.io&name=littleright 200 in 295ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=3333 200 in 214ms
+ GET /api/nip05/?domain=tsukemonogIt.github.io&name=tm 200 in 153ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=mogmog 200 in 149ms
+ GET /api/nip05/?domain=tsukemonogit.github.io&name=iroiro 200 in 31ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=kamado 200 in 56ms
+ GET /api/nip05/?domain=nikolat.github.io&name=unyu 200 in 130ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=anko 200 in 381ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=jihou 200 in 82ms
+ GET /api/nip05/?domain=caramelpen.github.io&name=duketogo 200 in 138ms
+ GET /api/nip05/?domain=compile-error.net&name=buzzword 200 in 176ms
+ GET /api/nip05/?domain=tsukemonogit.github.io&name=myRoom 200 in 31ms
+ GET /api/nip05/?domain=compile-error.net&name=hotpostrank 200 in 101ms
+ GET /api/nip05/?domain=yabu.me&name=_ 200 in 517ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=sujahta 200 in 75ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=503 200 in 61ms
+ GET /api/nip05/?domain=yukimikudayo.github.io&name=yukimikudayo 200 in 128ms
+ GET /api/nip05/?domain=iris.to&name=shckor 200 in 177ms
+ GET /api/nip05/?domain=nicoanime.com&name=_ 200 in 334ms
+ GET /api/nip05/?domain=tgkzmdd.work&name=caz0617 200 in 688ms
+ GET /api/nip05/?domain=crayfish-ghost.github.io&name=yodogawa 200 in 151ms
+ GET /api/nip05/?domain=studio.teatwo.dev&name=_ 200 in 270ms
+ GET /api/nip05/?domain=nostrplebs.com&name=satoshiboi 200 in 1969ms
+ GET /api/nip05/?domain=mitsugu.github.io&name=orzbruford 200 in 2013ms
+ GET / 200 in 54ms
+ GET / 200 in 90ms
+ GET /api/dm/?pubkey=a000000000000000000000000000000000000000000000000000000000000001&limit=50 404 in 65ms
+ GET /api/dm/?pubkey=a000000000000000000000000000000000000000000000000000000000000001&limit=50 404 in 36ms
+ GET /api/nip05/?domain=littleright-human.github.io&name=littleright 200 in 119ms
+ GET /api/nip05/?domain=kojira.io&name=_ 200 in 121ms
+ GET /api/nip05/?domain=stok33.github.io&name=_ 200 in 114ms
+ GET /api/nip05/?domain=comcomponent.com&name=komurasoft 200 in 129ms
+ GET /api/nip05/?domain=www.summerbeauty.club&name=_ 200 in 152ms
+ GET /api/nip05/?domain=yoshikunijujo.github.io&name=YoshikuniJujo 200 in 224ms
+ GET /api/nip05/?domain=tsukemonogIt.github.io&name=tm 200 in 78ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=anko 200 in 175ms
+ GET /api/nip05/?domain=nikolat.github.io&name=unyu 200 in 187ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=3333 200 in 185ms
+ GET /api/nip05/?domain=tsukemonogit.github.io&name=iroiro 200 in 58ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=mogmog 200 in 91ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=kamado 200 in 81ms
+ GET /api/nip05/?domain=compile-error.net&name=buzzword 200 in 163ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=jihou 200 in 147ms
+ GET /api/nip05/?domain=caramelpen.github.io&name=duketogo 200 in 137ms
+ GET /api/nip05/?domain=tsukemonogit.github.io&name=myRoom 200 in 46ms
+ GET /api/nip05/?domain=compile-error.net&name=hotpostrank 200 in 93ms
+ GET /api/nip05/?domain=nicoanime.com&name=_ 200 in 197ms
+ GET /api/nip05/?domain=yabu.me&name=_ 200 in 525ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=sujahta 200 in 72ms
+ GET /api/nip05/?domain=yukimikudayo.github.io&name=yukimikudayo 200 in 124ms
+ GET /api/nip05/?domain=iris.to&name=shckor 200 in 148ms
+ GET /api/nip05/?domain=studio.teatwo.dev&name=_ 200 in 97ms
+ GET /api/nip05/?domain=balloon-jp.vercel.app&name=503 200 in 105ms
+ GET /api/nip05/?domain=crayfish-ghost.github.io&name=yodogawa 200 in 93ms
+ GET /api/nip05/?domain=tgkzmdd.work&name=caz0617 200 in 697ms
+ GET /api/nip05/?domain=mitsugu.github.io&name=orzbruford 200 in 179ms
+ GET /api/nip05/?domain=nostrplebs.com&name=satoshiboi 200 in 450ms

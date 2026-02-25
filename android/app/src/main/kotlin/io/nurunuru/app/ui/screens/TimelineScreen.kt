@@ -1,5 +1,7 @@
 package io.nurunuru.app.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import io.nurunuru.app.ui.components.*
@@ -147,8 +150,9 @@ private fun TimelineContent(
             viewModel.refresh()
         }
     }
-    LaunchedEffect(uiState.isRefreshing) {
-        if (!uiState.isRefreshing) pullRefreshState.endRefresh()
+    val isRefreshing = if (feedType == FeedType.GLOBAL) uiState.isGlobalRefreshing else uiState.isFollowingRefreshing
+    LaunchedEffect(isRefreshing) {
+        if (!isRefreshing) pullRefreshState.endRefresh()
     }
 
     Box(
@@ -156,29 +160,31 @@ private fun TimelineContent(
             .fillMaxSize()
             .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
-        // Only display posts relevant to the current feed type if searching is not active
         val displayPosts = if (searchText.isNotBlank()) {
             uiState.searchResults
         } else {
-            // Note: TimelineViewModel currently loads only one list at a time.
-            // For a better Pager experience, we should ideally have separate lists in UI state.
-            // But if feedType matches uiState.feedType, we show uiState.posts.
-            if (feedType == uiState.feedType) uiState.posts else emptyList()
+            if (feedType == FeedType.GLOBAL) uiState.globalPosts else uiState.followingPosts
         }
 
+        val isLoading = if (feedType == FeedType.GLOBAL) uiState.isGlobalLoading else uiState.isFollowingLoading
+        val error = if (feedType == FeedType.GLOBAL) uiState.globalError else uiState.followingError
+
         when {
-            uiState.isLoading && displayPosts.isEmpty() && feedType == uiState.feedType -> {
+            isLoading && displayPosts.isEmpty() -> {
                 TimelineLoadingState()
             }
-            uiState.error != null && displayPosts.isEmpty() && feedType == uiState.feedType -> {
-                TimelineErrorState(onRetry = { viewModel.loadTimeline() })
+            error != null && displayPosts.isEmpty() -> {
+                TimelineErrorState(onRetry = {
+                    if (feedType == FeedType.GLOBAL) viewModel.loadGlobalTimeline()
+                    else viewModel.loadFollowingTimeline()
+                })
             }
             displayPosts.isEmpty() && searchText.isNotBlank() && !isSearching -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("「$searchText」の検索結果がありません", color = nuruColors.textTertiary)
                 }
             }
-            displayPosts.isEmpty() && !uiState.isLoading && feedType == uiState.feedType -> {
+            displayPosts.isEmpty() && !isLoading -> {
                 TimelineEmptyState(
                     feedType = feedType,
                     isFollowListEmpty = uiState.followList.isEmpty()
