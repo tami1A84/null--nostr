@@ -22,7 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.nurunuru.app.ui.components.PostItem
 import io.nurunuru.app.ui.components.PostModal
 import io.nurunuru.app.ui.theme.LineGreen
@@ -56,30 +58,49 @@ fun TimelineScreen(
 
     Scaffold(
         topBar = {
-            Column {
+            Column(
+                modifier = Modifier.background(MaterialTheme.colorScheme.background.copy(alpha = 0.7f))
+            ) {
                 // Tab bar: Global / Following
                 TopAppBar(
                     windowInsets = WindowInsets.statusBars,
                     title = {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            FilterChip(
-                                selected = uiState.feedType == FeedType.GLOBAL,
+                        Row(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .background(nuruColors.bgSecondary.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                                .padding(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            // Pill-style tabs
+                            Button(
                                 onClick = { viewModel.switchFeed(FeedType.GLOBAL) },
-                                label = { Text("おすすめ") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LineGreen,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                                )
-                            )
-                            FilterChip(
-                                selected = uiState.feedType == FeedType.FOLLOWING,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (uiState.feedType == FeedType.GLOBAL) LineGreen else Color.Transparent,
+                                    contentColor = if (uiState.feedType == FeedType.GLOBAL) Color.White else nuruColors.textTertiary
+                                ),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                                modifier = Modifier.height(32.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                elevation = null
+                            ) {
+                                Text("おすすめ", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
                                 onClick = { viewModel.switchFeed(FeedType.FOLLOWING) },
-                                label = { Text("フォロー") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LineGreen,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                                )
-                            )
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (uiState.feedType == FeedType.FOLLOWING) LineGreen else Color.Transparent,
+                                    contentColor = if (uiState.feedType == FeedType.FOLLOWING) Color.White else nuruColors.textTertiary
+                                ),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                                modifier = Modifier.height(32.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                elevation = null
+                            ) {
+                                Text("フォロー", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     },
                     actions = {
@@ -105,7 +126,8 @@ fun TimelineScreen(
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent
                     )
                 )
 
@@ -163,14 +185,36 @@ fun TimelineScreen(
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(20.dp)
                         ) {
-                            Text(uiState.error!!, color = nuruColors.textTertiary)
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .background(nuruColors.bgSecondary, RoundedCornerShape(32.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("🌐", fontSize = 32.sp)
+                            }
+                            Text(
+                                "接続エラー",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Text(
+                                "通信状態を確認して、もう一度お試しください",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = nuruColors.textSecondary,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(Modifier.height(8.dp))
                             Button(
                                 onClick = { viewModel.loadTimeline() },
-                                colors = ButtonDefaults.buttonColors(containerColor = LineGreen)
+                                colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
+                                shape = RoundedCornerShape(20.dp)
                             ) {
-                                Text("再読み込み")
+                                Text("再試行", fontSize = 14.sp)
                             }
                         }
                     }
@@ -178,6 +222,57 @@ fun TimelineScreen(
                 displayPosts.isEmpty() && searchText.isNotBlank() && !uiState.isSearching -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("「$searchText」の検索結果がありません", color = nuruColors.textTertiary)
+                    }
+                }
+                displayPosts.isEmpty() && !uiState.isLoading -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(20.dp)
+                        ) {
+                            if (uiState.feedType == FeedType.FOLLOWING) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .background(nuruColors.bgSecondary, RoundedCornerShape(32.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("👥", fontSize = 32.sp)
+                                }
+                                Text(
+                                    if (uiState.followList.isEmpty()) "まだ誰もフォローしていません" else "フォロー中のユーザーの投稿がありません",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = nuruColors.textTertiary,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.widthIn(max = 280.dp)
+                                )
+                                if (uiState.followList.isEmpty()) {
+                                    Spacer(Modifier.height(8.dp))
+                                    Surface(
+                                        color = nuruColors.bgSecondary,
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            "💡 プロフィールページでユーザーをフォローしてみましょう",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 10.sp,
+                                            color = nuruColors.textTertiary,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                // Global/Recommend empty state (empty-friendly style)
+                                Text("📭", fontSize = 48.sp)
+                                Text(
+                                    "まだ投稿がありません\n新しい投稿がまもなく届くかもしれません",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = nuruColors.textSecondary,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
                     }
                 }
                 else -> {

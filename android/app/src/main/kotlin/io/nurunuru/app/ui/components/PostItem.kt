@@ -69,7 +69,7 @@ fun PostItem(
             .fillMaxWidth()
             .background(Color.Black)
     ) {
-        // Repost Indicator
+        // Repost/Reply Indicator
         if (post.repostedBy != null) {
             Row(
                 modifier = Modifier
@@ -89,6 +89,40 @@ fun PostItem(
                     style = MaterialTheme.typography.labelSmall,
                     color = nuruColors.textTertiary
                 )
+            }
+        } else if (post.event.getTagValue("e") != null) {
+            val replyPubkey = post.event.getTagValue("p")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 48.dp, top = 8.dp, end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = NuruIcons.Talk(false),
+                    contentDescription = null,
+                    tint = nuruColors.textTertiary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                if (replyPubkey != null) {
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(SpanStyle(color = nuruColors.lineGreen)) {
+                                append("@${NostrKeyUtils.shortenPubkey(replyPubkey)}")
+                            }
+                            append(" への返信")
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = nuruColors.textTertiary
+                    )
+                } else {
+                    Text(
+                        text = "返信",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = nuruColors.textTertiary
+                    )
+                }
             }
         }
 
@@ -361,8 +395,20 @@ fun PostItem(
                         },
                         tint = nuruColors.textTertiary
                     )
-                    // Spacer for layout balance
-                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // Client tag (via)
+                    val client = post.event.getTagValue("client")
+                    if (client != null) {
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "via $client",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = nuruColors.textTertiary.copy(alpha = 0.6f),
+                            fontSize = 10.sp
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
                 }
             }
         }
