@@ -5,13 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Repeat
-import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +27,7 @@ import coil.compose.AsyncImage
 import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.data.NostrKeyUtils
+import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import java.text.SimpleDateFormat
 import java.util.*
@@ -69,7 +66,7 @@ fun PostItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Repeat,
+                    imageVector = NuruIcons.Repost,
                     contentDescription = null,
                     tint = nuruColors.textTertiary,
                     modifier = Modifier.size(14.dp)
@@ -295,14 +292,14 @@ fun PostItem(
                 ) {
                     // Like (Thumbs up as per web)
                     ActionButton(
-                        icon = if (post.isLiked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                        icon = NuruIcons.Like(post.isLiked),
                         count = post.likeCount,
                         onClick = onLike,
                         tint = if (post.isLiked) nuruColors.lineGreen else nuruColors.textTertiary
                     )
                     // Repost
                     ActionButton(
-                        icon = Icons.Outlined.Repeat,
+                        icon = NuruIcons.Repost,
                         count = post.repostCount,
                         onClick = onRepost,
                         tint = if (post.isReposted) nuruColors.lineGreen else nuruColors.textTertiary
@@ -310,7 +307,7 @@ fun PostItem(
                     // Zap
                     val context = LocalContext.current
                     ActionButton(
-                        icon = Icons.Default.Bolt,
+                        icon = NuruIcons.Zap(false),
                         count = (post.zapAmount / 1000).toInt(),
                         onClick = {
                             if (profile?.lud16 != null) {

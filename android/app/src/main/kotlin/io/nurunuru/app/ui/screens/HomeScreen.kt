@@ -39,6 +39,7 @@ import coil.compose.AsyncImage
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.ui.components.PostItem
+import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.components.PostModal
 import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.*
@@ -277,7 +278,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                         // Meta Info (LN, Website, Birthday)
                         Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             if (!profile?.lud16.isNullOrBlank()) {
-                                MetaInfoItem(Icons.Default.Bolt, profile!!.lud16!!)
+                                MetaInfoItem(NuruIcons.Zap(false), profile!!.lud16!!)
                             }
                             if (!profile?.website.isNullOrBlank()) {
                                 MetaInfoItem(Icons.Default.Link, profile!!.website!!, color = LineGreen)

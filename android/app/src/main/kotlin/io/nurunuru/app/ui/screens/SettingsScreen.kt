@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.models.DEFAULT_RELAYS
 import io.nurunuru.app.data.prefs.AppPreferences
+import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -149,7 +150,7 @@ fun SettingsScreen(
                 MiniAppData("emoji", "カスタム絵文字", "投稿やリアクションに使える絵文字を管理", "entertainment", Icons.Outlined.EmojiEmotions),
                 MiniAppData("badge", "プロフィールバッジ", "プロフィールに表示するバッジを設定", "entertainment", Icons.Outlined.Badge),
                 MiniAppData("scheduler", "調整くん", "オフ会や会議の予定を簡単に調整", "entertainment", Icons.Outlined.CalendarMonth),
-                MiniAppData("zap", "Zap設定", "デフォルトのZap金額をクイック設定", "tools", Icons.Default.Bolt),
+                MiniAppData("zap", "Zap設定", "デフォルトのZap金額をクイック設定", "tools", NuruIcons.Zap(false)),
                 MiniAppData("relay", "リレー設定", "最適なリレーを自動設定", "tools", Icons.Outlined.Language),
                 MiniAppData("upload", "アップロード設定", "画像のアップロード先サーバーを選択", "tools", Icons.Outlined.CloudUpload),
                 MiniAppData("mute", "ミュートリスト", "不快なユーザーを非表示に管理", "tools", Icons.Outlined.Block),
