@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.*
@@ -31,6 +32,7 @@ import coil.compose.AsyncImage
 import io.nurunuru.app.data.models.DmConversation
 import io.nurunuru.app.data.models.DmMessage
 import io.nurunuru.app.data.NostrKeyUtils
+import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -72,6 +74,7 @@ private fun ConversationListScreen(
     isLoading: Boolean
 ) {
     val nuruColors = LocalNuruColors.current
+    var showNewChatDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -84,6 +87,22 @@ private fun ConversationListScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                 },
+                actions = {
+                    IconButton(
+                        onClick = { showNewChatDialog = true },
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .size(32.dp)
+                            .background(LineGreen, CircleShape)
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "新規トーク",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 )
@@ -91,6 +110,16 @@ private fun ConversationListScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
+        if (showNewChatDialog) {
+            NewChatDialog(
+                onDismiss = { showNewChatDialog = false },
+                onStartChat = { pubkey ->
+                    showNewChatDialog = false
+                    viewModel.openConversation(pubkey)
+                }
+            )
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -103,9 +132,33 @@ private fun ConversationListScreen(
                     }
                 }
                 conversations.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .background(nuruColors.bgTertiary, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = NuruIcons.Talk(filled = false),
+                                contentDescription = null,
+                                modifier = Modifier.size(40.dp),
+                                tint = nuruColors.textTertiary
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            "まだトークがありません",
+                            "トークがありません",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = nuruColors.textSecondary
+                        )
+                        Text(
+                            "右上の＋から始めましょう",
+                            style = MaterialTheme.typography.bodySmall,
                             color = nuruColors.textTertiary
                         )
                     }
@@ -114,7 +167,6 @@ private fun ConversationListScreen(
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
                         items(conversations, key = { it.partnerPubkey }) { conversation ->
                             Surface(
-                                modifier = Modifier.padding(horizontal = 12.dp),
                                 color = MaterialTheme.colorScheme.background
                             ) {
                                 Column {
@@ -122,7 +174,11 @@ private fun ConversationListScreen(
                                         conversation = conversation,
                                         onClick = { viewModel.openConversation(conversation.partnerPubkey) }
                                     )
-                                    HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                        color = nuruColors.border,
+                                        thickness = 0.5.dp
+                                    )
                                 }
                             }
                         }
@@ -176,7 +232,7 @@ private fun ConversationItem(
                 )
             }
             Text(
-                text = conversation.lastMessage.ifBlank { "暗号化メッセージ" },
+                text = conversation.lastMessage.ifBlank { "メッセージなし" },
                 style = MaterialTheme.typography.bodySmall,
                 color = nuruColors.textTertiary,
                 maxLines = 1
@@ -251,12 +307,7 @@ private fun ConversationScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(messages, key = { it.event.id }) { message ->
-                            Surface(
-                                modifier = Modifier.padding(horizontal = 12.dp),
-                                color = MaterialTheme.colorScheme.background
-                            ) {
-                                MessageBubble(message = message)
-                            }
+                            MessageBubble(message = message)
                         }
                     }
                 }
@@ -465,10 +516,93 @@ private fun MessageBubble(message: DmMessage) {
     }
 }
 
+@Composable
+private fun NewChatDialog(
+    onDismiss: () -> Unit,
+    onStartChat: (String) -> Unit
+) {
+    val nuruColors = LocalNuruColors.current
+    var pubkeyInput by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "新しいトーク",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "相手の公開鍵",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = nuruColors.textSecondary
+                )
+                BasicTextField(
+                    value = pubkeyInput,
+                    onValueChange = { pubkeyInput = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(nuruColors.bgTertiary, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    ),
+                    cursorBrush = SolidColor(LineGreen),
+                    decorationBox = { innerTextField ->
+                        Box {
+                            if (pubkeyInput.isEmpty()) {
+                                Text(
+                                    "npub1... または hex",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = nuruColors.textTertiary
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val pubkey = pubkeyInput.trim()
+                    if (pubkey.isNotBlank()) {
+                        val hex = NostrKeyUtils.parsePublicKey(pubkey)
+                        if (hex != null) {
+                            onStartChat(hex)
+                        } else {
+                            // If parsing fails, just try as is (could be raw hex already if parse fails for some reason)
+                            onStartChat(pubkey)
+                        }
+                    }
+                },
+                enabled = pubkeyInput.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = LineGreen)
+            ) {
+                Text("開始", color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル", color = nuruColors.textSecondary)
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
 private fun formatTime(unixSec: Long): String {
     val now = System.currentTimeMillis() / 1000
     val diff = now - unixSec
     return when {
+        diff < 60 -> "たった今"
         diff < 3600 -> "${diff / 60}分前"
         diff < 86400 -> "${diff / 3600}時間前"
         else -> SimpleDateFormat("M/d HH:mm", Locale.JAPAN).format(Date(unixSec * 1000))

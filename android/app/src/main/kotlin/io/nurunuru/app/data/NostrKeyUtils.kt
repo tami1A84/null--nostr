@@ -24,6 +24,18 @@ object NostrKeyUtils {
     }
 
     /**
+     * Parse a public key from npub bech32 or hex string.
+     * Returns hex public key or null on error.
+     */
+    fun parsePublicKey(input: String): String? {
+        return try {
+            PublicKey.parse(input).toHex()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
      * Derive public key hex from private key hex using rust-nostr.
      */
     fun derivePublicKey(privateKeyHex: String): String? {
