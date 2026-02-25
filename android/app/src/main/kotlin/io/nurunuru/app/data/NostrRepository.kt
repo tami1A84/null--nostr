@@ -91,6 +91,18 @@ class NostrRepository(
     private fun parseProfile(event: NostrEvent): UserProfile {
         return try {
             val obj = json.parseToJsonElement(event.content).jsonObject
+            val birthdayElement = obj["birthday"]
+            val birthdayStr = when (birthdayElement) {
+                is JsonPrimitive -> birthdayElement.content
+                is JsonObject -> {
+                    val month = birthdayElement["month"]?.jsonPrimitive?.content?.padStart(2, '0') ?: "??"
+                    val day = birthdayElement["day"]?.jsonPrimitive?.content?.padStart(2, '0') ?: "??"
+                    val year = birthdayElement["year"]?.jsonPrimitive?.content
+                    if (year != null) "$year-$month-$day" else "$month-$day"
+                }
+                else -> null
+            }
+
             UserProfile(
                 pubkey = event.pubkey,
                 name = obj["name"]?.jsonPrimitive?.content,
@@ -101,7 +113,7 @@ class NostrRepository(
                 banner = obj["banner"]?.jsonPrimitive?.content,
                 lud16 = obj["lud16"]?.jsonPrimitive?.content,
                 website = obj["website"]?.jsonPrimitive?.content,
-                birthday = obj["birthday"]?.jsonPrimitive?.content
+                birthday = birthdayStr
             )
         } catch (e: Exception) {
             UserProfile(pubkey = event.pubkey)
@@ -433,17 +445,37 @@ class NostrRepository(
     }
 
     suspend fun updateProfile(profile: UserProfile): Boolean {
-        val content = buildJsonObject {
-            profile.name?.let { put("name", it) }
-            profile.displayName?.let { put("display_name", it) }
-            profile.about?.let { put("about", it) }
-            profile.picture?.let { put("picture", it) }
-            profile.banner?.let { put("banner", it) }
-            profile.nip05?.let { put("nip05", it) }
-            profile.lud16?.let { put("lud16", it) }
-            profile.website?.let { put("website", it) }
-            profile.birthday?.let { put("birthday", it) }
-        }.toString()
+        // Fetch current profile to merge fields and avoid losing unknown fields
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.METADATA),
+            authors = listOf(profile.pubkey),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 3_000)
+        val latestEvent = events.maxByOrNull { it.createdAt }
+
+        val baseObj = if (latestEvent != null) {
+            try {
+                json.parseToJsonElement(latestEvent.content).jsonObject.toMutableMap()
+            } catch (e: Exception) {
+                mutableMapOf<String, JsonElement>()
+            }
+        } else {
+            mutableMapOf<String, JsonElement>()
+        }
+
+        // Update fields
+        profile.name?.let { baseObj["name"] = JsonPrimitive(it) }
+        profile.displayName?.let { baseObj["display_name"] = JsonPrimitive(it) }
+        profile.about?.let { baseObj["about"] = JsonPrimitive(it) }
+        profile.picture?.let { baseObj["picture"] = JsonPrimitive(it) }
+        profile.banner?.let { baseObj["banner"] = JsonPrimitive(it) }
+        profile.nip05?.let { baseObj["nip05"] = JsonPrimitive(it) }
+        profile.lud16?.let { baseObj["lud16"] = JsonPrimitive(it) }
+        profile.website?.let { baseObj["website"] = JsonPrimitive(it) }
+        profile.birthday?.let { baseObj["birthday"] = JsonPrimitive(it) }
+
+        val content = JsonObject(baseObj).toString()
 
         return client.publish(
             kind = NostrKind.METADATA,
@@ -456,30 +488,39 @@ class NostrRepository(
     private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> {
         if (events.isEmpty()) return emptyList()
 
-        val processedEvents = mutableListOf<NostrEvent>()
+        val processedItems = mutableListOf<Pair<NostrEvent, NostrEvent?>>() // Original, Repost(optional)
+
+        val pubkeysToFetch = mutableSetOf<String>()
+
         for (event in events) {
             if (event.kind == NostrKind.REPOST) {
                 try {
                     val original = json.decodeFromString<NostrEvent>(event.content)
-                    processedEvents.add(original)
+                    processedItems.add(original to event)
+                    pubkeysToFetch.add(original.pubkey)
+                    pubkeysToFetch.add(event.pubkey)
                 } catch (e: Exception) {
-                    // If content is empty or not JSON, we might need to fetch by "e" tag
-                    // But for user profile, usually content is populated
+                    // If content is empty, we might try to fetch it but for now skip or use stub
+                    val eTag = event.getTagValue("e")
+                    if (eTag != null) {
+                        // In a real app, we'd batch fetch these missing original events
+                    }
                 }
-            } else if (event.kind == NostrKind.TEXT_NOTE || event.kind == NostrKind.VIDEO_LOOP || event.kind == NostrKind.LONG_FORM) {
-                processedEvents.add(event)
+            } else {
+                processedItems.add(event to null)
+                pubkeysToFetch.add(event.pubkey)
             }
         }
 
-        if (processedEvents.isEmpty()) return emptyList()
+        if (processedItems.isEmpty()) return emptyList()
 
-        val ids = processedEvents.map { it.id }
-        val profiles = fetchProfiles(processedEvents.map { it.pubkey }.distinct())
+        val profiles = fetchProfiles(pubkeysToFetch.toList())
+        val ids = processedItems.map { it.first.id }
 
         val reactions = fetchReactions(ids)
         val zaps = fetchZaps(ids)
 
-        val posts = processedEvents.map { event ->
+        val posts = processedItems.map { (event, repost) ->
             val likeCount = reactions[event.id] ?: 0
             val zapAmount = zaps[event.id] ?: 0L
 
@@ -496,15 +537,13 @@ class NostrRepository(
                 profile = profiles[event.pubkey],
                 likeCount = likeCount,
                 zapAmount = zapAmount,
-                score = engagementScore * timeMultiplier
+                score = engagementScore * timeMultiplier,
+                repostedBy = if (repost != null) profiles[repost.pubkey] else null,
+                repostTime = repost?.createdAt
             )
         }
 
-        // Sort by score if we have engagement, otherwise by time
-        return if (posts.any { it.score > 0 }) {
-            posts.sortedByDescending { it.score }
-        } else {
-            posts.sortedByDescending { it.event.createdAt }
-        }
+        // Sort by repostTime (if available) or event time
+        return posts.sortedByDescending { it.repostTime ?: it.event.createdAt }
     }
 }

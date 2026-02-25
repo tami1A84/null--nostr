@@ -84,6 +84,54 @@ class HomeViewModel(
         }
     }
 
+    fun likePost(eventId: String) {
+        viewModelScope.launch {
+            try {
+                val success = repository.likePost(eventId)
+                if (success) {
+                    _uiState.update { state ->
+                        val updatePost = { post: ScoredPost ->
+                            if (post.event.id == eventId) post.copy(
+                                isLiked = true,
+                                likeCount = post.likeCount + 1
+                            ) else post
+                        }
+                        state.copy(
+                            posts = state.posts.map(updatePost),
+                            likedPosts = state.likedPosts.map(updatePost)
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "いいねに失敗しました") }
+            }
+        }
+    }
+
+    fun repostPost(eventId: String) {
+        viewModelScope.launch {
+            try {
+                val success = repository.repostPost(eventId)
+                if (success) {
+                    _uiState.update { state ->
+                        val updatePost = { post: ScoredPost ->
+                            if (post.event.id == eventId) post.copy(
+                                isReposted = true,
+                                repostCount = post.repostCount + 1
+                            ) else post
+                        }
+                        state.copy(
+                            posts = state.posts.map(updatePost),
+                            likedPosts = state.likedPosts.map(updatePost)
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "リポストに失敗しました") }
+            }
+        }
+    }
+
     fun refresh() {
         val targetPubkey = _uiState.value.viewingPubkey ?: myPubkeyHex
         viewModelScope.launch {

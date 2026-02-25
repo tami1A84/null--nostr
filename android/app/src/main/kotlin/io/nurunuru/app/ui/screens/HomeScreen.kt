@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material.icons.outlined.Cake
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.*
@@ -125,10 +126,9 @@ fun HomeScreen(viewModel: HomeViewModel) {
                             Button(
                                 onClick = { showEditProfile = true },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color.Transparent,
-                                    contentColor = MaterialTheme.colorScheme.onBackground
+                                    containerColor = Color.Black,
+                                    contentColor = Color.White
                                 ),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, nuruColors.border),
                                 shape = RoundedCornerShape(20.dp),
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                                 modifier = Modifier.height(36.dp)
@@ -280,25 +280,25 @@ fun HomeScreen(viewModel: HomeViewModel) {
                     }
 
                     // Stats row
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(24.dp),
-                        modifier = Modifier.clickable { if (uiState.isOwnProfile) {
-                            viewModel.loadFollowProfiles()
-                            showFollowList = true
-                        } }
+                    Column(
+                        modifier = Modifier
+                            .clickable {
+                                viewModel.loadFollowProfiles()
+                                showFollowList = true
+                            }
+                            .padding(vertical = 4.dp)
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = uiState.followCount.toString(),
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Text(
-                                text = "フォロー中",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = nuruColors.textTertiary
-                            )
-                        }
+                        Text(
+                            text = uiState.followCount.toString(),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = "フォロー中",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = nuruColors.textTertiary
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -308,17 +308,35 @@ fun HomeScreen(viewModel: HomeViewModel) {
                         selectedTabIndex = uiState.activeTab,
                         containerColor = Color.Transparent,
                         contentColor = LineGreen,
+                        indicator = { tabPositions ->
+                            TabRowDefaults.SecondaryIndicator(
+                                modifier = Modifier.tabIndicatorOffset(tabPositions[uiState.activeTab]),
+                                color = LineGreen
+                            )
+                        },
                         divider = { HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp) }
                     ) {
                         Tab(
                             selected = uiState.activeTab == 0,
                             onClick = { viewModel.setActiveTab(0) },
-                            text = { Text("投稿 (${uiState.posts.size})") }
+                            text = {
+                                Text(
+                                    "投稿 (${uiState.posts.size})",
+                                    color = if (uiState.activeTab == 0) LineGreen else nuruColors.textTertiary,
+                                    fontWeight = if (uiState.activeTab == 0) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
                         )
                         Tab(
                             selected = uiState.activeTab == 1,
                             onClick = { viewModel.setActiveTab(1) },
-                            text = { Text("いいね (${uiState.likedPosts.size})") }
+                            text = {
+                                Text(
+                                    "いいね (${uiState.likedPosts.size})",
+                                    color = if (uiState.activeTab == 1) LineGreen else nuruColors.textTertiary,
+                                    fontWeight = if (uiState.activeTab == 1) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
                         )
                     }
                 }
@@ -351,8 +369,8 @@ fun HomeScreen(viewModel: HomeViewModel) {
                     items(displayPosts, key = { if (uiState.activeTab == 1) "like_${it.event.id}" else it.event.id }) { post ->
                         PostItem(
                             post = post,
-                            onLike = { /* TODO: Implement in ViewModel if needed or use Global */ },
-                            onRepost = { /* TODO: Implement */ },
+                            onLike = { viewModel.likePost(post.event.id) },
+                            onRepost = { viewModel.repostPost(post.event.id) },
                             onProfileClick = { pubkey -> viewModel.loadProfile(pubkey) },
                             onDelete = { viewModel.deletePost(post.event.id) },
                             isOwnPost = post.event.pubkey == viewModel.myPubkeyHex

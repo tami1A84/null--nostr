@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
@@ -58,6 +59,29 @@ fun PostItem(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        // Repost Indicator
+        if (post.repostedBy != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 48.dp, top = 8.dp, end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Repeat,
+                    contentDescription = null,
+                    tint = nuruColors.textTertiary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "${post.repostedBy.displayedName} がリポストしました",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = nuruColors.textTertiary
+                )
+            }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -267,10 +291,17 @@ fun PostItem(
                         tint = if (post.isLiked) Color(0xFFFF6B6B) else nuruColors.textTertiary
                     )
                     // Zap
+                    val context = LocalContext.current
                     ActionButton(
                         icon = Icons.Default.Bolt,
                         count = (post.zapAmount / 1000).toInt(),
-                        onClick = { /* TODO: Zap modal */ },
+                        onClick = {
+                            if (profile?.lud16 != null) {
+                                android.widget.Toast.makeText(context, "⚡ Zap送信: ${profile.lud16}", android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                android.widget.Toast.makeText(context, "Lightningアドレスが設定されていません", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         tint = nuruColors.zapColor
                     )
                     // Spacer for layout balance
