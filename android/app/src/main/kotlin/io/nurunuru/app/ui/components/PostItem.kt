@@ -44,6 +44,7 @@ fun PostItem(
     modifier: Modifier = Modifier,
     onDelete: (() -> Unit)? = null,
     isOwnPost: Boolean = false,
+    isVerified: Boolean = false,
     birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList()
 ) {
     val nuruColors = LocalNuruColors.current
@@ -57,7 +58,7 @@ fun PostItem(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Color(0xFF0A0A0A))
     ) {
         // Repost Indicator
         if (post.repostedBy != null) {
@@ -97,13 +98,16 @@ fun PostItem(
             )
 
             Column(modifier = Modifier.weight(1f)) {
-                // Header row: name + time
+                // Header row: name + verification + badges + time
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Text(
                             text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(post.event.pubkey),
                             style = MaterialTheme.typography.bodyMedium,
@@ -111,15 +115,28 @@ fun PostItem(
                             color = MaterialTheme.colorScheme.onBackground,
                             maxLines = 1
                         )
-                        if (profile?.nip05 != null) {
+
+                        // Verification badge (Green checkmark)
+                        if (isVerified) {
                             Text(
-                                text = formatNip05(profile.nip05),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = nuruColors.lineGreen,
-                                maxLines = 1
+                                text = "✅",
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        // Badges (NIP-58)
+                        post.badges.take(3).forEach { badgeUrl ->
+                            AsyncImage(
+                                model = badgeUrl,
+                                contentDescription = "Badge",
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clip(RoundedCornerShape(2.dp))
                             )
                         }
                     }
+
+                    // Time and Menu
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = formatTimestamp(post.event.createdAt),

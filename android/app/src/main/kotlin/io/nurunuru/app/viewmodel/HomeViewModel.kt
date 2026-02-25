@@ -55,6 +55,10 @@ class HomeViewModel(
                 val likedPosts = repository.fetchUserLikes(pubkeyHex, 50)
                 val followList = repository.fetchFollowList(pubkeyHex)
                 val badges = repository.fetchBadges(pubkeyHex)
+                val badgeUrls = badges.mapNotNull { it.getTagValue("thumb") ?: it.getTagValue("image") }
+
+                val enrichedPosts = posts.map { if (it.event.pubkey == pubkeyHex) it.copy(badges = badgeUrls) else it }
+                val enrichedLikes = likedPosts.map { if (it.event.pubkey == pubkeyHex) it.copy(badges = badgeUrls) else it }
 
                 val myFollowList = if (pubkeyHex == myPubkeyHex) followList else repository.fetchFollowList(myPubkeyHex)
                 val isFollowing = if (pubkeyHex == myPubkeyHex) false else myFollowList.contains(pubkeyHex)
@@ -62,8 +66,8 @@ class HomeViewModel(
                 _uiState.update {
                     it.copy(
                         profile = profile,
-                        posts = posts,
-                        likedPosts = likedPosts,
+                        posts = enrichedPosts,
+                        likedPosts = enrichedLikes,
                         followCount = followList.size,
                         followList = followList,
                         badges = badges,
@@ -142,6 +146,10 @@ class HomeViewModel(
                 val likedPosts = repository.fetchUserLikes(targetPubkey, 50)
                 val followList = repository.fetchFollowList(targetPubkey)
                 val badges = repository.fetchBadges(targetPubkey)
+                val badgeUrls = badges.mapNotNull { it.getTagValue("thumb") ?: it.getTagValue("image") }
+
+                val enrichedPosts = posts.map { if (it.event.pubkey == targetPubkey) it.copy(badges = badgeUrls) else it }
+                val enrichedLikes = likedPosts.map { if (it.event.pubkey == targetPubkey) it.copy(badges = badgeUrls) else it }
 
                 val myFollowList = if (targetPubkey == myPubkeyHex) followList else repository.fetchFollowList(myPubkeyHex)
                 val isFollowing = if (targetPubkey == myPubkeyHex) false else myFollowList.contains(targetPubkey)
@@ -149,8 +157,8 @@ class HomeViewModel(
                 _uiState.update {
                     it.copy(
                         profile = profile,
-                        posts = posts,
-                        likedPosts = likedPosts,
+                        posts = enrichedPosts,
+                        likedPosts = enrichedLikes,
                         followCount = followList.size,
                         followList = followList,
                         badges = badges,
