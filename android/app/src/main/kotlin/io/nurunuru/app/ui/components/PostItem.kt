@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Info
@@ -115,9 +117,11 @@ fun PostItem(
 
                         // Verification badge (Green checkmark)
                         if (isVerified) {
-                            Text(
-                                text = "✅",
-                                fontSize = 12.sp
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = nuruColors.lineGreen,
+                                modifier = Modifier.size(14.dp)
                             )
                         }
 
@@ -316,7 +320,7 @@ fun PostItem(
                                 android.widget.Toast.makeText(context, "Lightningアドレスが設定されていません", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         },
-                        tint = nuruColors.zapColor
+                        tint = nuruColors.textTertiary
                     )
                     // Spacer for layout balance
                     Spacer(modifier = Modifier.width(8.dp))

@@ -176,7 +176,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                                 modifier = Modifier.padding(top = 2.dp)
                                             ) {
                                                 Icon(
-                                                    Icons.Default.CheckCircle,
+                                                    Icons.Default.Check,
                                                     contentDescription = null,
                                                     tint = LineGreen,
                                                     modifier = Modifier.size(14.dp)
@@ -281,7 +281,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                 MetaInfoItem(NuruIcons.Zap(false), profile!!.lud16!!)
                             }
                             if (!profile?.website.isNullOrBlank()) {
-                                MetaInfoItem(Icons.Default.Link, profile!!.website!!, color = LineGreen)
+                                MetaInfoItem(Icons.Default.Language, profile!!.website!!, color = LineGreen)
                             }
                             if (!profile?.birthday.isNullOrBlank()) {
                                 MetaInfoItem(Icons.Default.Cake, profile!!.birthday!!)
@@ -548,7 +548,10 @@ fun EditProfileModal(
                 ProfileEditField("NIP-05", nip05, { nip05 = it }, "name@example.com")
                 ProfileEditField("ライトニングアドレス", lud16, { lud16 = it }, "you@wallet.com")
                 ProfileEditField("ウェブサイト", website, { website = it }, "https://example.com")
-                ProfileEditField("誕生日", birthday, { birthday = it }, "MM-DD または YYYY-MM-DD")
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ProfileEditField("誕生日", birthday, { birthday = it }, "MM-DD または YYYY-MM-DD")
+                    Text("例: 01-15 または 2000-01-15", fontSize = 12.sp, color = TextTertiary)
+                }
                 Spacer(Modifier.height(40.dp))
             }
         }

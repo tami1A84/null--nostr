@@ -38,13 +38,13 @@ enum class BottomTab(
     ),
     TIMELINE(
         label = "タイムライン",
-        selectedIcon = Icons.Filled.DynamicFeed,
-        unselectedIcon = Icons.Outlined.DynamicFeed
+        selectedIcon = Icons.Filled.CalendarMonth,
+        unselectedIcon = Icons.Outlined.CalendarMonth
     ),
     MINIAPP(
         label = "ミニアプリ",
-        selectedIcon = Icons.Filled.Apps,
-        unselectedIcon = Icons.Outlined.Apps
+        selectedIcon = Icons.Filled.GridView,
+        unselectedIcon = Icons.Outlined.GridView
     )
 }
 
@@ -92,6 +92,7 @@ fun MainScreen(
     Scaffold(
         bottomBar = {
             NavigationBar(
+                modifier = Modifier.height(56.dp),
                 containerColor = Color(0xFF0A0A0A), // Pure black matching globals.css
                 tonalElevation = 0.dp,
                 windowInsets = WindowInsets.navigationBars
