@@ -76,6 +76,7 @@ private fun ConversationListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets.statusBars,
                 title = {
                     Text(
                         "トーク",
@@ -205,6 +206,7 @@ private fun ConversationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets.statusBars,
                 title = {
                     Text(
                         NostrKeyUtils.shortenPubkey(partnerPubkey),

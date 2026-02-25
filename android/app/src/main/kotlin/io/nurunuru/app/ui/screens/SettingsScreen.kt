@@ -60,6 +60,7 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets.statusBars,
                 title = {
                     Text(
                         "ミニアプリ",
@@ -205,6 +206,7 @@ private fun RelaySettingsView(prefs: AppPreferences, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets.statusBars,
                 title = { Text("リレー設定", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

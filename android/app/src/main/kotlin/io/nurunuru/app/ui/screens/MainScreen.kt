@@ -7,6 +7,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -91,8 +92,9 @@ fun MainScreen(
     Scaffold(
         bottomBar = {
             NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp
+                containerColor = Color(0xFF0A0A0A), // Pure black matching globals.css
+                tonalElevation = 0.dp,
+                windowInsets = WindowInsets.navigationBars
             ) {
                 BottomTab.entries.forEach { tab ->
                     val isSelected = activeTab == tab
@@ -128,13 +130,13 @@ fun MainScreen(
                             selectedTextColor = LineGreen,
                             unselectedIconColor = nuruColors.textTertiary,
                             unselectedTextColor = nuruColors.textTertiary,
-                            indicatorColor = LineGreen.copy(alpha = 0.12f)
+                            indicatorColor = Color.Transparent // No background pill to match web
                         )
                     )
                 }
             }
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = Color(0xFF0A0A0A)
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             when (activeTab) {

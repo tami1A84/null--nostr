@@ -78,7 +78,8 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = bgPrimary,
                     titleContentColor = TextPrimary
-                )
+                ),
+                windowInsets = WindowInsets.statusBars
             )
         },
         floatingActionButton = {
@@ -103,14 +104,14 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
-                // Header (Banner + Avatar Overlap)
+                // Header (Banner + Rounded Sheet Overlap)
                 item {
                     Box(modifier = Modifier.fillMaxWidth()) {
                         // Banner
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(112.dp)
+                                .height(120.dp)
                                 .background(LineGreen)
                         ) {
                             if (profile?.banner != null && profile.banner.isNotBlank()) {
@@ -123,103 +124,108 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                             }
                         }
 
-                        // Avatar Row (Starts before banner ends to overlap)
-                        Row(
+                        // The Rounded Sheet
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 72.dp) // Overlap banner by 40dp (112 - 72)
-                                .padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                .padding(top = 96.dp), // Starts 24dp from bottom of banner
+                            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                            color = bgPrimary
                         ) {
-                            // Avatar
-                            Box(
-                                modifier = Modifier
-                                    .size(80.dp)
-                                    .clip(CircleShape)
-                                    .background(bgPrimary)
-                                    .padding(4.dp)
-                            ) {
-                                UserAvatar(
-                                    pictureUrl = profile?.picture,
-                                    displayName = profile?.displayedName ?: "",
-                                    size = 72.dp
-                                )
-                            }
-
-                            // Name and Edit Button (to the right of avatar)
                             Column(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .padding(bottom = 4.dp)
+                                    .fillMaxWidth()
+                                    .padding(start = 112.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
                             ) {
+                                // Name and Edit/Follow Button
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(
-                                        text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(profile?.pubkey ?: ""),
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 20.sp,
-                                        color = TextPrimary,
-                                        maxLines = 1
-                                    )
-                                    if (uiState.isOwnProfile) {
-                                        IconButton(
-                                            onClick = { showEditProfile = true },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Edit,
-                                                contentDescription = "編集",
-                                                tint = TextTertiary,
-                                                modifier = Modifier.size(16.dp)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text(
+                                                text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(profile?.pubkey ?: ""),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 20.sp,
+                                                color = TextPrimary,
+                                                maxLines = 1
                                             )
+                                            if (uiState.isOwnProfile) {
+                                                IconButton(
+                                                    onClick = { showEditProfile = true },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Edit,
+                                                        contentDescription = "編集",
+                                                        tint = TextTertiary,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        // NIP-05 Badge
+                                        if (profile?.nip05 != null && uiState.isNip05Verified) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                modifier = Modifier.padding(top = 2.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = LineGreen,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Text(
+                                                    text = formatNip05(profile.nip05),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = LineGreen
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Follow/Unfollow Button for other profiles
+                                    if (!uiState.isOwnProfile) {
+                                        Button(
+                                            onClick = {
+                                                if (uiState.isFollowing) viewModel.unfollowUser(uiState.viewingPubkey!!)
+                                                else viewModel.followUser(uiState.viewingPubkey!!)
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (uiState.isFollowing) Color.Transparent else LineGreen,
+                                                contentColor = if (uiState.isFollowing) TextPrimary else Color.White
+                                            ),
+                                            border = if (uiState.isFollowing) androidx.compose.foundation.BorderStroke(1.dp, BorderColor) else null,
+                                            shape = RoundedCornerShape(20.dp),
+                                            modifier = Modifier.height(34.dp),
+                                            contentPadding = PaddingValues(horizontal = 16.dp)
+                                        ) {
+                                            Text(if (uiState.isFollowing) "解除" else "フォロー", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
-
-                                // NIP-05 Badge (Full in header)
-                                if (profile?.nip05 != null && uiState.isNip05Verified) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                        modifier = Modifier.padding(top = 2.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = LineGreen,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Text(
-                                            text = formatNip05(profile.nip05),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = LineGreen
-                                        )
-                                    }
-                                }
                             }
+                        }
 
-                            // Follow/Unfollow Button for other profiles
-                            if (!uiState.isOwnProfile) {
-                                Button(
-                                    onClick = {
-                                        if (uiState.isFollowing) viewModel.unfollowUser(uiState.viewingPubkey!!)
-                                        else viewModel.followUser(uiState.viewingPubkey!!)
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (uiState.isFollowing) Color.Transparent else LineGreen,
-                                        contentColor = if (uiState.isFollowing) TextPrimary else Color.White
-                                    ),
-                                    border = if (uiState.isFollowing) androidx.compose.foundation.BorderStroke(1.dp, BorderColor) else null,
-                                    shape = RoundedCornerShape(20.dp),
-                                    modifier = Modifier.height(36.dp).padding(bottom = 4.dp),
-                                    contentPadding = PaddingValues(horizontal = 16.dp)
-                                ) {
-                                    Text(if (uiState.isFollowing) "解除" else "フォロー", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
+                        // Avatar (Absolute positioned over the sheet edge)
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 64.dp, start = 16.dp)
+                                .size(88.dp)
+                                .clip(CircleShape)
+                                .background(bgPrimary)
+                                .padding(4.dp)
+                        ) {
+                            UserAvatar(
+                                pictureUrl = profile?.picture,
+                                displayName = profile?.displayedName ?: "",
+                                size = 80.dp
+                            )
                         }
                     }
                 }
@@ -331,41 +337,47 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
 
                 // Tabs
                 item {
-                    TabRow(
-                        selectedTabIndex = uiState.activeTab,
-                        containerColor = bgPrimary,
-                        contentColor = LineGreen,
-                        indicator = { tabPositions ->
-                            TabRowDefaults.SecondaryIndicator(
-                                modifier = Modifier.tabIndicatorOffset(tabPositions[uiState.activeTab]),
-                                color = LineGreen
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        TabRow(
+                            selectedTabIndex = uiState.activeTab,
+                            containerColor = bgPrimary,
+                            contentColor = LineGreen,
+                            indicator = { tabPositions ->
+                                TabRowDefaults.SecondaryIndicator(
+                                    modifier = Modifier.tabIndicatorOffset(tabPositions[uiState.activeTab]),
+                                    color = LineGreen,
+                                    height = 2.dp
+                                )
+                            },
+                            divider = {},
+                            modifier = Modifier.fillMaxWidth().height(48.dp)
+                        ) {
+                            Tab(
+                                selected = uiState.activeTab == 0,
+                                onClick = { viewModel.setActiveTab(0) },
+                                text = {
+                                    Text(
+                                        "投稿 (${uiState.posts.size})",
+                                        color = if (uiState.activeTab == 0) LineGreen else TextTertiary,
+                                        fontWeight = if (uiState.activeTab == 0) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 14.sp
+                                    )
+                                }
                             )
-                        },
-                        divider = { HorizontalDivider(color = BorderColor, thickness = 0.5.dp) },
-                        modifier = Modifier.padding(top = 16.dp)
-                    ) {
-                        Tab(
-                            selected = uiState.activeTab == 0,
-                            onClick = { viewModel.setActiveTab(0) },
-                            text = {
-                                Text(
-                                    "投稿 (${uiState.posts.size})",
-                                    color = if (uiState.activeTab == 0) LineGreen else TextTertiary,
-                                    fontWeight = if (uiState.activeTab == 0) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-                        )
-                        Tab(
-                            selected = uiState.activeTab == 1,
-                            onClick = { viewModel.setActiveTab(1) },
-                            text = {
-                                Text(
-                                    "いいね (${uiState.likedPosts.size})",
-                                    color = if (uiState.activeTab == 1) LineGreen else TextTertiary,
-                                    fontWeight = if (uiState.activeTab == 1) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-                        )
+                            Tab(
+                                selected = uiState.activeTab == 1,
+                                onClick = { viewModel.setActiveTab(1) },
+                                text = {
+                                    Text(
+                                        "いいね (${uiState.likedPosts.size})",
+                                        color = if (uiState.activeTab == 1) LineGreen else TextTertiary,
+                                        fontWeight = if (uiState.activeTab == 1) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            )
+                        }
+                        HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
                     }
                 }
 

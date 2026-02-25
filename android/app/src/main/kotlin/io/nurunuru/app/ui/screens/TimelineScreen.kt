@@ -59,6 +59,7 @@ fun TimelineScreen(
             Column {
                 // Tab bar: Global / Following
                 TopAppBar(
+                    windowInsets = WindowInsets.statusBars,
                     title = {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             FilterChip(
