@@ -91,20 +91,18 @@ fun MainScreen(
         },
         bottomBar = {
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                color = Color(0xFF0A0A0A),
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.Black,
                 tonalElevation = 0.dp
             ) {
-                Column {
+                Column(modifier = Modifier.navigationBarsPadding()) {
                     // Top border for the nav bar to match web style
                     androidx.compose.material3.HorizontalDivider(
                         color = io.nurunuru.app.ui.theme.BorderColor,
                         thickness = 0.5.dp
                     )
                     Row(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         BottomTab.entries.forEach { tab ->
@@ -149,8 +147,7 @@ fun MainScreen(
                 }
             }
         },
-        containerColor = Color(0xFF0A0A0A),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0) // Don't consume insets here, let child screens handle them
+        containerColor = Color.Black
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             when (activeTab) {

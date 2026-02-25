@@ -39,7 +39,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
     val uiState by viewModel.uiState.collectAsState()
     val profile = uiState.profile
     val clipboardManager = LocalClipboardManager.current
-    val bgPrimary = Color(0xFF0A0A0A)
+    val bgPrimary = Color.Black
 
     val pullRefreshState = rememberPullToRefreshState()
     if (pullRefreshState.isRefreshing) {
@@ -387,8 +387,27 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                     if (displayPosts.isEmpty()) {
                         item {
                             Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
-                                Box(Modifier.fillMaxWidth().padding(64.dp), contentAlignment = Alignment.Center) {
-                                    Text(if (uiState.activeTab == 0) "投稿がありません" else "いいねがありません", color = TextTertiary)
+                                Column(
+                                    Modifier.fillMaxWidth().padding(vertical = 64.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Box(
+                                        Modifier.size(64.dp).clip(CircleShape).background(BgSecondary),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (uiState.activeTab == 0) Icons.Default.EditNote else Icons.Default.FavoriteBorder,
+                                            contentDescription = null,
+                                            tint = TextTertiary,
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                    }
+                                    Text(
+                                        if (uiState.activeTab == 0) "投稿がありません" else "いいねがありません",
+                                        color = TextSecondary,
+                                        fontSize = 14.sp
+                                    )
                                 }
                             }
                         }

@@ -16,12 +16,17 @@ object Nip05Utils {
     private val cache = ConcurrentHashMap<String, Boolean>()
 
     suspend fun verifyNip05(nip05: String, pubkeyHex: String): Boolean = withContext(Dispatchers.IO) {
-        val cacheKey = "$nip05:$pubkeyHex"
+        // Normalize NIP-05 format (handle domain-only format)
+        val normalizedNip05 = if (!nip05.contains("@")) {
+            "_@$nip05"
+        } else {
+            nip05
+        }
+
+        val cacheKey = "$normalizedNip05:$pubkeyHex"
         cache[cacheKey]?.let { return@withContext it }
 
-        if (!nip05.contains("@")) return@withContext false
-
-        val parts = nip05.split("@")
+        val parts = normalizedNip05.split("@")
         if (parts.size != 2) return@withContext false
 
         val name = parts[0]
@@ -32,6 +37,8 @@ object Nip05Utils {
         try {
             val request = Request.Builder()
                 .url(url)
+                .addHeader("Accept", "application/json")
+                .addHeader("User-Agent", "NuruNuru-Android/1.0")
                 .build()
 
             client.newCall(request).execute().use { response ->

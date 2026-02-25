@@ -46,16 +46,18 @@ fun EditProfileModal(
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var isUploading by remember { mutableStateOf(false) }
+    var isUploadingPicture by remember { mutableStateOf(false) }
+    var isUploadingBanner by remember { mutableStateOf(false) }
+    val isUploading = isUploadingPicture || isUploadingBanner
 
     val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             scope.launch {
-                isUploading = true
+                isUploadingPicture = true
                 val bytes = context.contentResolver.openInputStream(it)?.readBytes()
                 val url = viewModel.uploadImage(bytes ?: byteArrayOf(), context.contentResolver.getType(it) ?: "image/jpeg")
                 if (url != null) picture = url
-                isUploading = false
+                isUploadingPicture = false
             }
         }
     }
@@ -63,11 +65,11 @@ fun EditProfileModal(
     val bannerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             scope.launch {
-                isUploading = true
+                isUploadingBanner = true
                 val bytes = context.contentResolver.openInputStream(it)?.readBytes()
                 val url = viewModel.uploadImage(bytes ?: byteArrayOf(), context.contentResolver.getType(it) ?: "image/jpeg")
                 if (url != null) banner = url
-                isUploading = false
+                isUploadingBanner = false
             }
         }
     }
@@ -121,8 +123,13 @@ fun EditProfileModal(
                     Text("アイコン画像", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box(Modifier.weight(1f)) { NuruTextField(picture, { picture = it }, "https://...", singleLine = true) }
-                        IconButton(onClick = { imageLauncher.launch("image/*") }, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(BgTertiary)) {
-                            Icon(Icons.Default.FileUpload, null, tint = TextPrimary)
+                        IconButton(
+                            onClick = { imageLauncher.launch("image/*") },
+                            enabled = !isUploading,
+                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(BgTertiary)
+                        ) {
+                            if (isUploadingPicture) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = LineGreen)
+                            else Icon(Icons.Default.FileUpload, null, tint = TextPrimary)
                         }
                     }
                 }
@@ -131,8 +138,13 @@ fun EditProfileModal(
                     Text("バナー画像", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box(Modifier.weight(1f)) { NuruTextField(banner, { banner = it }, "https://...", singleLine = true) }
-                        IconButton(onClick = { bannerLauncher.launch("image/*") }, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(BgTertiary)) {
-                            Icon(Icons.Default.FileUpload, null, tint = TextPrimary)
+                        IconButton(
+                            onClick = { bannerLauncher.launch("image/*") },
+                            enabled = !isUploading,
+                            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(BgTertiary)
+                        ) {
+                            if (isUploadingBanner) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = LineGreen)
+                            else Icon(Icons.Default.FileUpload, null, tint = TextPrimary)
                         }
                     }
                 }
