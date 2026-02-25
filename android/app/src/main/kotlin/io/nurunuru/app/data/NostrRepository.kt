@@ -95,10 +95,15 @@ class NostrRepository(
             val birthdayStr = when (birthdayElement) {
                 is JsonPrimitive -> birthdayElement.content
                 is JsonObject -> {
-                    val month = birthdayElement["month"]?.jsonPrimitive?.content?.padStart(2, '0') ?: "??"
-                    val day = birthdayElement["day"]?.jsonPrimitive?.content?.padStart(2, '0') ?: "??"
+                    // NIP-123 support or custom object format
+                    val month = birthdayElement["month"]?.jsonPrimitive?.content?.padStart(2, '0')
+                    val day = birthdayElement["day"]?.jsonPrimitive?.content?.padStart(2, '0')
                     val year = birthdayElement["year"]?.jsonPrimitive?.content
-                    if (year != null) "$year-$month-$day" else "$month-$day"
+                    if (month != null && day != null) {
+                        if (year != null) "$year-$month-$day" else "$month-$day"
+                    } else {
+                        null
+                    }
                 }
                 else -> null
             }
@@ -464,16 +469,24 @@ class NostrRepository(
             mutableMapOf<String, JsonElement>()
         }
 
-        // Update fields
-        profile.name?.let { baseObj["name"] = JsonPrimitive(it) }
-        profile.displayName?.let { baseObj["display_name"] = JsonPrimitive(it) }
-        profile.about?.let { baseObj["about"] = JsonPrimitive(it) }
-        profile.picture?.let { baseObj["picture"] = JsonPrimitive(it) }
-        profile.banner?.let { baseObj["banner"] = JsonPrimitive(it) }
-        profile.nip05?.let { baseObj["nip05"] = JsonPrimitive(it) }
-        profile.lud16?.let { baseObj["lud16"] = JsonPrimitive(it) }
-        profile.website?.let { baseObj["website"] = JsonPrimitive(it) }
-        profile.birthday?.let { baseObj["birthday"] = JsonPrimitive(it) }
+        // Update fields (match web logic: remove if blank/null)
+        fun updateField(key: String, value: String?) {
+            if (value.isNullOrBlank()) {
+                baseObj.remove(key)
+            } else {
+                baseObj[key] = JsonPrimitive(value)
+            }
+        }
+
+        updateField("name", profile.name)
+        updateField("display_name", profile.displayName ?: profile.name)
+        updateField("about", profile.about)
+        updateField("picture", profile.picture)
+        updateField("banner", profile.banner)
+        updateField("nip05", profile.nip05)
+        updateField("lud16", profile.lud16)
+        updateField("website", profile.website)
+        updateField("birthday", profile.birthday)
 
         val content = JsonObject(baseObj).toString()
 

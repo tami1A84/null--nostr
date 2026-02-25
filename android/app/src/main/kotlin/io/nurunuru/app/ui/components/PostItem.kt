@@ -7,11 +7,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -270,25 +270,25 @@ fun PostItem(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Action buttons
+                // Action buttons (Match web order: Like, Repost, Zap)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(32.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Like (Thumbs up as per web)
+                    ActionButton(
+                        icon = if (post.isLiked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                        count = post.likeCount,
+                        onClick = onLike,
+                        tint = if (post.isLiked) nuruColors.lineGreen else nuruColors.textTertiary
+                    )
                     // Repost
                     ActionButton(
                         icon = Icons.Outlined.Repeat,
                         count = post.repostCount,
                         onClick = onRepost,
                         tint = if (post.isReposted) nuruColors.lineGreen else nuruColors.textTertiary
-                    )
-                    // Like
-                    ActionButton(
-                        icon = if (post.isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        count = post.likeCount,
-                        onClick = onLike,
-                        tint = if (post.isLiked) Color(0xFFFF6B6B) else nuruColors.textTertiary
                     )
                     // Zap
                     val context = LocalContext.current

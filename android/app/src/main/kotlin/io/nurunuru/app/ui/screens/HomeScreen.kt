@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -67,6 +69,7 @@ fun HomeScreen(viewModel: HomeViewModel) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .nestedScroll(pullRefreshState.nestedScrollConnection)
     ) {
         LazyColumn(
@@ -78,8 +81,8 @@ fun HomeScreen(viewModel: HomeViewModel) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(140.dp)
-                        .background(nuruColors.bgTertiary)
+                        .height(112.dp)
+                        .background(nuruColors.lineGreen)
                 ) {
                     if (profile?.banner != null) {
                         AsyncImage(
@@ -94,251 +97,294 @@ fun HomeScreen(viewModel: HomeViewModel) {
 
             // Profile section
             item {
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.background)
+                        .offset(y = (-48).dp)
                         .padding(horizontal = 16.dp)
                 ) {
-                    // Avatar and Edit Button
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .offset(y = (-32).dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(16.dp)
                     ) {
-                        Box(
+                        // Avatar and Action Button
+                        Row(
                             modifier = Modifier
-                                .size(80.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.background)
-                                .padding(3.dp)
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
                         ) {
-                            UserAvatar(
-                                pictureUrl = profile?.picture,
-                                displayName = profile?.displayedName ?: "",
-                                size = 74.dp
-                            )
-                        }
-
-                        if (uiState.isOwnProfile) {
-                            Button(
-                                onClick = { showEditProfile = true },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color.Black,
-                                    contentColor = Color.White
-                                ),
-                                shape = RoundedCornerShape(20.dp),
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                                modifier = Modifier.height(36.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .offset(y = (-40).dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .padding(4.dp)
                             ) {
-                                Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("編集", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            }
-                        } else {
-                            Button(
-                                onClick = {
-                                    if (uiState.isFollowing) {
-                                        viewModel.unfollowUser(uiState.viewingPubkey!!)
-                                    } else {
-                                        viewModel.followUser(uiState.viewingPubkey!!)
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (uiState.isFollowing) Color.Transparent else nuruColors.lineGreen,
-                                    contentColor = if (uiState.isFollowing) MaterialTheme.colorScheme.onBackground else Color.White
-                                ),
-                                border = if (uiState.isFollowing) androidx.compose.foundation.BorderStroke(1.dp, nuruColors.border) else null,
-                                shape = RoundedCornerShape(20.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text(
-                                    if (uiState.isFollowing) "解除" else "フォロー",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
+                                UserAvatar(
+                                    pictureUrl = profile?.picture,
+                                    displayName = profile?.displayedName ?: "",
+                                    size = 72.dp
                                 )
                             }
-                        }
-                    }
 
-                    Spacer(modifier = Modifier.height((-24).dp))
-
-                    // Name
-                    if (uiState.isLoading) {
-                        Box(
-                            modifier = Modifier
-                                .width(120.dp)
-                                .height(20.dp)
-                                .background(nuruColors.bgTertiary, RoundedCornerShape(4.dp))
-                        )
-                    } else {
-                        Text(
-                            text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(
-                                uiState.profile?.pubkey ?: ""
-                            ),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-
-                    // NIP-05
-                    if (profile?.nip05 != null && uiState.isNip05Verified) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = LineGreen,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = formatNip05(profile.nip05),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = LineGreen
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Bio
-                    if (profile?.about != null) {
-                        Text(
-                            text = profile.about,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            lineHeight = 20.sp
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    // Website
-                    if (profile?.website != null && profile.website.isNotBlank()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                Icons.Outlined.Link,
-                                contentDescription = null,
-                                tint = nuruColors.textTertiary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = profile.website,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = LineGreen
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    // Birthday
-                    if (profile?.birthday != null && profile.birthday.isNotBlank()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                Icons.Outlined.Cake,
-                                contentDescription = null,
-                                tint = nuruColors.textTertiary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = profile.birthday,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = nuruColors.textSecondary
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    // Badges
-                    if (uiState.badges.isNotEmpty()) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        ) {
-                            uiState.badges.take(3).forEach { badge ->
-                                val thumb = badge.getTagValue("thumb") ?: badge.getTagValue("image")
-                                if (thumb != null) {
-                                    AsyncImage(
-                                        model = thumb,
-                                        contentDescription = badge.getTagValue("name"),
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(RoundedCornerShape(4.dp))
+                            if (uiState.isOwnProfile) {
+                                IconButton(
+                                    onClick = { showEditProfile = true },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "編集",
+                                        tint = nuruColors.textTertiary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        if (uiState.isFollowing) {
+                                            viewModel.unfollowUser(uiState.viewingPubkey!!)
+                                        } else {
+                                            viewModel.followUser(uiState.viewingPubkey!!)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (uiState.isFollowing) Color.Transparent else nuruColors.lineGreen,
+                                        contentColor = if (uiState.isFollowing) MaterialTheme.colorScheme.onBackground else Color.White
+                                    ),
+                                    border = if (uiState.isFollowing) androidx.compose.foundation.BorderStroke(1.dp, nuruColors.border) else null,
+                                    shape = RoundedCornerShape(20.dp),
+                                    modifier = Modifier.height(32.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                ) {
+                                    Text(
+                                        if (uiState.isFollowing) "解除" else "フォロー",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
 
-                    // Stats row
-                    Column(
-                        modifier = Modifier
-                            .clickable {
-                                viewModel.loadFollowProfiles()
-                                showFollowList = true
-                            }
-                            .padding(vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = uiState.followCount.toString(),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Text(
-                            text = "フォロー中",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = nuruColors.textTertiary
-                        )
-                    }
+                        Spacer(modifier = Modifier.height((-32).dp))
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Tabs
-                    TabRow(
-                        selectedTabIndex = uiState.activeTab,
-                        containerColor = Color.Transparent,
-                        contentColor = LineGreen,
-                        indicator = { tabPositions ->
-                            TabRowDefaults.SecondaryIndicator(
-                                modifier = Modifier.tabIndicatorOffset(tabPositions[uiState.activeTab]),
-                                color = LineGreen
+                        // Name
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(
+                                    uiState.profile?.pubkey ?: ""
+                                ),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                maxLines = 1
                             )
-                        },
-                        divider = { HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp) }
-                    ) {
-                        Tab(
-                            selected = uiState.activeTab == 0,
-                            onClick = { viewModel.setActiveTab(0) },
-                            text = {
+                        }
+
+                        // NIP-05
+                        if (profile?.nip05 != null && uiState.isNip05Verified) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(top = 2.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = LineGreen,
+                                    modifier = Modifier.size(14.dp)
+                                )
                                 Text(
-                                    "投稿 (${uiState.posts.size})",
-                                    color = if (uiState.activeTab == 0) LineGreen else nuruColors.textTertiary,
-                                    fontWeight = if (uiState.activeTab == 0) FontWeight.Bold else FontWeight.Normal
+                                    text = formatNip05(profile.nip05),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LineGreen,
+                                    maxLines = 1
                                 )
                             }
+                        }
+
+                        // Pubkey (shortened)
+                        Text(
+                            text = NostrKeyUtils.shortenPubkey(uiState.profile?.pubkey ?: "", 12),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = nuruColors.textTertiary,
+                            modifier = Modifier.padding(top = 2.dp)
                         )
-                        Tab(
-                            selected = uiState.activeTab == 1,
-                            onClick = { viewModel.setActiveTab(1) },
-                            text = {
+
+                        // Bio
+                        if (profile?.about != null && profile.about.isNotBlank()) {
+                            Text(
+                                text = profile.about,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = nuruColors.textSecondary,
+                                lineHeight = 18.sp,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+
+                        // Lightning Address
+                        if (profile?.lud16 != null && profile.lud16.isNotBlank()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(top = 8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Bolt,
+                                    contentDescription = null,
+                                    tint = nuruColors.textTertiary,
+                                    modifier = Modifier.size(14.dp)
+                                )
                                 Text(
-                                    "いいね (${uiState.likedPosts.size})",
-                                    color = if (uiState.activeTab == 1) LineGreen else nuruColors.textTertiary,
-                                    fontWeight = if (uiState.activeTab == 1) FontWeight.Bold else FontWeight.Normal
+                                    text = profile.lud16,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = nuruColors.textTertiary,
+                                    maxLines = 1
                                 )
                             }
-                        )
+                        }
+
+                        // Website
+                        if (profile?.website != null && profile.website.isNotBlank()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(top = 4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Link,
+                                    contentDescription = null,
+                                    tint = nuruColors.textTertiary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = profile.website,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LineGreen,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        // Birthday
+                        if (profile?.birthday != null && profile.birthday.isNotBlank()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(top = 4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Cake,
+                                    contentDescription = null,
+                                    tint = nuruColors.textTertiary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = profile.birthday,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = nuruColors.textTertiary
+                                )
+                            }
+                        }
+
+                        // Badges
+                        if (uiState.badges.isNotEmpty()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(top = 12.dp)
+                            ) {
+                                uiState.badges.take(3).forEach { badge ->
+                                    val thumb = badge.getTagValue("thumb") ?: badge.getTagValue("image")
+                                    if (thumb != null) {
+                                        AsyncImage(
+                                            model = thumb,
+                                            contentDescription = badge.getTagValue("name"),
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clip(RoundedCornerShape(4.dp))
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Follow count
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp)
+                                .clickable {
+                                    viewModel.loadFollowProfiles()
+                                    showFollowList = true
+                                },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = uiState.followCount.toString(),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Text(
+                                text = "フォロー中",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = nuruColors.textSecondary
+                            )
+                        }
                     }
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height((-32).dp))
+            }
+
+            // Tabs
+            item {
+                TabRow(
+                    selectedTabIndex = uiState.activeTab,
+                    containerColor = Color.Transparent,
+                    contentColor = LineGreen,
+                    indicator = { tabPositions ->
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[uiState.activeTab]),
+                            color = LineGreen
+                        )
+                    },
+                    divider = { HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp) }
+                ) {
+                    Tab(
+                        selected = uiState.activeTab == 0,
+                        onClick = { viewModel.setActiveTab(0) },
+                        text = {
+                            Text(
+                                "投稿 (${uiState.posts.size})",
+                                color = if (uiState.activeTab == 0) LineGreen else nuruColors.textTertiary,
+                                fontWeight = if (uiState.activeTab == 0) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    )
+                    Tab(
+                        selected = uiState.activeTab == 1,
+                        onClick = { viewModel.setActiveTab(1) },
+                        text = {
+                            Text(
+                                "いいね (${uiState.likedPosts.size})",
+                                color = if (uiState.activeTab == 1) LineGreen else nuruColors.textTertiary,
+                                fontWeight = if (uiState.activeTab == 1) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    )
                 }
             }
 
@@ -422,6 +468,7 @@ fun EditProfileModal(
     onSave: (UserProfile) -> Unit,
     viewModel: HomeViewModel
 ) {
+    val nuruColors = LocalNuruColors.current
     var name by remember { mutableStateOf(profile.name ?: "") }
     var about by remember { mutableStateOf(profile.about ?: "") }
     var picture by remember { mutableStateOf(profile.picture ?: "") }
@@ -474,71 +521,163 @@ fun EditProfileModal(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
+        dragHandle = null
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
-                .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                .fillMaxHeight(0.9f)
         ) {
-            Text("プロフィール編集", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
-
-            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("名前") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(value = picture, onValueChange = { picture = it }, label = { Text("アイコン画像URL") }, modifier = Modifier.fillMaxWidth(),
-                trailingIcon = { IconButton(onClick = { imageLauncher.launch("image/*") }) { Icon(Icons.Default.Edit, null) } }
-            )
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(value = banner, onValueChange = { banner = it }, label = { Text("バナー画像URL") }, modifier = Modifier.fillMaxWidth(),
-                trailingIcon = { IconButton(onClick = { bannerLauncher.launch("image/*") }) { Icon(Icons.Default.Edit, null) } }
-            )
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(value = about, onValueChange = { about = it }, label = { Text("自己紹介") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(value = nip05, onValueChange = { nip05 = it }, label = { Text("NIP-05") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(value = lud16, onValueChange = { lud16 = it }, label = { Text("ライトニングアドレス") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(value = website, onValueChange = { website = it }, label = { Text("ウェブサイト") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(value = birthday, onValueChange = { birthday = it }, label = { Text("誕生日 (MM-DD)") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(24.dp))
-
-            Button(
-                onClick = {
-                    onSave(profile.copy(
-                        name = name,
-                        about = about,
-                        picture = picture,
-                        banner = banner,
-                        nip05 = nip05,
-                        lud16 = lud16,
-                        website = website,
-                        birthday = birthday
-                    ))
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
-                enabled = !isUploading
+            // Header (Web parity)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isUploading) CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = Color.White,
-                    strokeWidth = 2.dp
-                )
-                else Text("保存", fontWeight = FontWeight.Bold)
+                TextButton(onClick = onDismiss) {
+                    Text("キャンセル", color = nuruColors.textSecondary, fontSize = 14.sp)
+                }
+                Text("プロフィール編集", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onBackground)
+                TextButton(
+                    onClick = {
+                        onSave(profile.copy(
+                            name = name,
+                            about = about,
+                            picture = picture,
+                            banner = banner,
+                            nip05 = nip05,
+                            lud16 = lud16,
+                            website = website,
+                            birthday = birthday
+                        ))
+                    },
+                    enabled = !isUploading
+                ) {
+                    if (isUploading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = nuruColors.lineGreen)
+                    } else {
+                        Text("保存", color = nuruColors.lineGreen, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
             }
-            Spacer(Modifier.height(32.dp))
+            HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Name
+                ProfileEditField(label = "名前", value = name, onValueChange = { name = it }, placeholder = "表示名")
+
+                // Picture
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("アイコン画像", style = MaterialTheme.typography.labelMedium, color = nuruColors.textSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            NuruTextField(value = picture, onValueChange = { picture = it }, placeholder = "https://...")
+                        }
+                        IconButton(
+                            onClick = { imageLauncher.launch("image/*") },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(nuruColors.bgTertiary)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+
+                // Banner
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("バナー画像", style = MaterialTheme.typography.labelMedium, color = nuruColors.textSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            NuruTextField(value = banner, onValueChange = { banner = it }, placeholder = "https://...")
+                        }
+                        IconButton(
+                            onClick = { bannerLauncher.launch("image/*") },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(nuruColors.bgTertiary)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+
+                // About
+                ProfileEditField(label = "自己紹介", value = about, onValueChange = { about = it }, placeholder = "自己紹介", minLines = 3)
+
+                // NIP-05
+                ProfileEditField(label = "NIP-05", value = nip05, onValueChange = { nip05 = it }, placeholder = "name@example.com")
+
+                // LUD-16
+                ProfileEditField(label = "ライトニングアドレス", value = lud16, onValueChange = { lud16 = it }, placeholder = "you@wallet.com")
+
+                // Website
+                ProfileEditField(label = "ウェブサイト", value = website, onValueChange = { website = it }, placeholder = "https://example.com")
+
+                // Birthday
+                ProfileEditField(label = "誕生日", value = birthday, onValueChange = { birthday = it }, placeholder = "MM-DD または YYYY-MM-DD")
+
+                Spacer(Modifier.height(40.dp))
+            }
         }
     }
+}
+
+@Composable
+fun ProfileEditField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    minLines: Int = 1
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = LocalNuruColors.current.textSecondary)
+        NuruTextField(value = value, onValueChange = onValueChange, placeholder = placeholder, minLines = minLines)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NuruTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    minLines: Int = 1
+) {
+    val nuruColors = LocalNuruColors.current
+    TextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = { Text(placeholder, color = nuruColors.textTertiary, fontSize = 14.sp) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .border(0.5.dp, nuruColors.border, RoundedCornerShape(8.dp)),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = nuruColors.bgTertiary,
+            unfocusedContainerColor = Color(0xFF1C1C1E), // BgSecondary-ish
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
+            cursorColor = nuruColors.lineGreen,
+            focusedTextColor = MaterialTheme.colorScheme.onBackground,
+            unfocusedTextColor = MaterialTheme.colorScheme.onBackground
+        ),
+        textStyle = TextStyle(fontSize = 14.sp),
+        minLines = minLines
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
