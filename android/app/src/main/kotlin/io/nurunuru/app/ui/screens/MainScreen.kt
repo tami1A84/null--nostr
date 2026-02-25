@@ -1,6 +1,9 @@
 package io.nurunuru.app.ui.screens
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -21,31 +24,21 @@ import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.*
 
-enum class BottomTab(
-    val label: String,
-    val selectedIcon: ImageVector,
-    val unselectedIcon: ImageVector
-) {
-    HOME(
-        label = "ホーム",
-        selectedIcon = Icons.Filled.Home,
-        unselectedIcon = Icons.Outlined.Home
-    ),
-    TALK(
-        label = "トーク",
-        selectedIcon = Icons.Filled.ChatBubble,
-        unselectedIcon = Icons.Outlined.ChatBubble
-    ),
-    TIMELINE(
-        label = "タイムライン",
-        selectedIcon = Icons.Filled.CalendarMonth,
-        unselectedIcon = Icons.Outlined.CalendarMonth
-    ),
-    MINIAPP(
-        label = "ミニアプリ",
-        selectedIcon = Icons.Filled.GridView,
-        unselectedIcon = Icons.Outlined.GridView
-    )
+enum class BottomTab(val label: String) {
+    HOME("ホーム"),
+    TALK("トーク"),
+    TIMELINE("タイムライン"),
+    MINIAPP("ミニアプリ")
+}
+
+@Composable
+fun BottomTab.getIcon(isSelected: Boolean): ImageVector {
+    return when (this) {
+        BottomTab.HOME -> io.nurunuru.app.ui.icons.NuruIcons.Home(isSelected)
+        BottomTab.TALK -> io.nurunuru.app.ui.icons.NuruIcons.Talk(isSelected)
+        BottomTab.TIMELINE -> io.nurunuru.app.ui.icons.NuruIcons.Timeline(isSelected)
+        BottomTab.MINIAPP -> io.nurunuru.app.ui.icons.NuruIcons.Grid(isSelected)
+    }
 }
 
 @Composable
@@ -97,53 +90,64 @@ fun MainScreen(
             // but coordinate through MainScreen's contentWindowInsets.
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = Color(0xFF0A0A0A), // Pure black matching globals.css
-                tonalElevation = 0.dp,
-                windowInsets = WindowInsets.navigationBars
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.Black,
+                tonalElevation = 0.dp
             ) {
-                BottomTab.entries.forEach { tab ->
-                    val isSelected = activeTab == tab
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = {
-                            if (activeTab == tab) {
-                                // Tap same tab = refresh
-                                when (tab) {
-                                    BottomTab.TIMELINE -> timelineVM.refresh()
-                                    BottomTab.TALK -> talkVM.loadConversations()
-                                    BottomTab.HOME -> homeVM.refresh()
-                                    BottomTab.MINIAPP -> {}
-                                }
-                            }
-                            activeTab = tab
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                contentDescription = tab.label
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = tab.label,
-                                fontSize = 10.sp,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = LineGreen,
-                            selectedTextColor = LineGreen,
-                            unselectedIconColor = nuruColors.textTertiary,
-                            unselectedTextColor = nuruColors.textTertiary,
-                            indicatorColor = Color.Transparent // No background pill to match web
-                        )
+                Column(modifier = Modifier.navigationBarsPadding()) {
+                    // Top border for the nav bar to match web style
+                    androidx.compose.material3.HorizontalDivider(
+                        color = io.nurunuru.app.ui.theme.BorderColor,
+                        thickness = 0.5.dp
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        BottomTab.entries.forEach { tab ->
+                            val isSelected = activeTab == tab
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null // No ripple for a cleaner look matching web
+                                    ) {
+                                        if (activeTab == tab) {
+                                            when (tab) {
+                                                BottomTab.TIMELINE -> timelineVM.refresh()
+                                                BottomTab.TALK -> talkVM.loadConversations()
+                                                BottomTab.HOME -> homeVM.refresh()
+                                                BottomTab.MINIAPP -> {}
+                                            }
+                                        }
+                                        activeTab = tab
+                                    },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = tab.getIcon(isSelected),
+                                    contentDescription = tab.label,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = if (isSelected) LineGreen else nuruColors.textTertiary
+                                )
+                                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = tab.label,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (isSelected) LineGreen else nuruColors.textTertiary
+                                )
+                            }
+                        }
+                    }
                 }
             }
         },
-        containerColor = Color(0xFF0A0A0A),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0) // Don't consume insets here, let child screens handle them
+        containerColor = Color.Black
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             when (activeTab) {

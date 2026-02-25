@@ -39,7 +39,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
     val uiState by viewModel.uiState.collectAsState()
     val profile = uiState.profile
     val clipboardManager = LocalClipboardManager.current
-    val bgPrimary = Color(0xFF0A0A0A)
+    val bgPrimary = Color.Black
 
     val pullRefreshState = rememberPullToRefreshState()
     if (pullRefreshState.isRefreshing) {
@@ -52,6 +52,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
     var showEditProfile by remember { mutableStateOf(false) }
     var showFollowList by remember { mutableStateOf(false) }
     var showPostModal by remember { mutableStateOf(false) }
+    var postToDelete by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -91,14 +92,14 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
-                // Header (Banner + Rounded Sheet Overlap)
+                // Unified Profile Card (Banner + Overlapping Surface)
                 item {
                     Box(modifier = Modifier.fillMaxWidth()) {
                         // Banner
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(120.dp)
+                                .height(112.dp)
                                 .background(LineGreen)
                         ) {
                             if (profile?.banner != null && profile.banner.isNotBlank()) {
@@ -111,29 +112,41 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                             }
                         }
 
-                        // The Rounded Sheet (Card look)
+                        // The Overlapping Surface (Combined into one card)
                         Surface(
                             modifier = Modifier
-                                .padding(horizontal = 12.dp)
+                                .padding(horizontal = 16.dp)
                                 .fillMaxWidth()
-                                .padding(top = 96.dp),
-                            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                            color = bgPrimary
+                                .padding(top = 64.dp), // Height(112) - Overlap(48) = 64
+                            shape = RoundedCornerShape(16.dp),
+                            color = bgPrimary,
+                            shadowElevation = 2.dp
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 112.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
+                                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 0.dp)
                             ) {
+                                // Header Row (Actions and Name)
                                 Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.Top
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    // Empty space where the avatar overlaps from above
+                                    Spacer(modifier = Modifier.size(80.dp))
+
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    // Name, NIP-05, Pubkey
+                                    Column(
+                                        modifier = Modifier.weight(1f).padding(top = 8.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
                                             Text(
-                                                text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(profile?.pubkey ?: ""),
+                                                text = profile?.displayedName ?: "Anonymous",
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 18.sp,
                                                 color = TextPrimary,
@@ -141,7 +154,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                             )
                                             if (uiState.isOwnProfile) {
                                                 Icon(
-                                                    Icons.Default.Edit,
+                                                    NuruIcons.Edit,
                                                     contentDescription = "編集",
                                                     tint = TextTertiary,
                                                     modifier = Modifier
@@ -151,6 +164,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                             }
                                         }
 
+                                        // NIP-05 verified badge
                                         if (profile?.nip05 != null && uiState.isNip05Verified) {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
@@ -165,10 +179,36 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                                 )
                                                 Text(
                                                     text = formatNip05(profile.nip05),
-                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontSize = 13.sp,
                                                     color = LineGreen
                                                 )
                                             }
+                                        }
+
+                                        // Pubkey with copy button
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier
+                                                .padding(top = 4.dp)
+                                                .clickable {
+                                                    profile?.pubkey?.let {
+                                                        clipboardManager.setText(AnnotatedString(NostrKeyUtils.encodeNpub(it) ?: it))
+                                                    }
+                                                }
+                                        ) {
+                                            Text(
+                                                text = NostrKeyUtils.shortenPubkey(profile?.pubkey ?: "", 12),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = TextTertiary,
+                                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                            )
+                                            Icon(
+                                                Icons.Default.ContentCopy,
+                                                contentDescription = "コピー",
+                                                tint = TextTertiary,
+                                                modifier = Modifier.size(12.dp)
+                                            )
                                         }
                                     }
 
@@ -185,19 +225,91 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                             border = if (uiState.isFollowing) androidx.compose.foundation.BorderStroke(1.dp, BorderColor) else null,
                                             shape = RoundedCornerShape(20.dp),
                                             modifier = Modifier.height(34.dp),
-                                            contentPadding = PaddingValues(horizontal = 16.dp)
+                                            contentPadding = PaddingValues(horizontal = 12.dp)
                                         ) {
                                             Text(if (uiState.isFollowing) "解除" else "フォロー", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
+
+                                // About
+                                if (!profile?.about.isNullOrBlank()) {
+                                    Text(
+                                        text = profile!!.about!!,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary,
+                                        modifier = Modifier.padding(top = 0.dp), // Adjust padding because of avatar offset
+                                        lineHeight = 18.sp
+                                    )
+                                }
+
+                                // Meta Info (LN, Website, Birthday)
+                                Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (!profile?.lud16.isNullOrBlank()) {
+                                        MetaInfoItem(NuruIcons.Zap(false), profile!!.lud16!!)
+                                    }
+                                    if (!profile?.website.isNullOrBlank()) {
+                                        MetaInfoItem(NuruIcons.Website, profile!!.website!!, color = LineGreen)
+                                    }
+                                    if (!profile?.birthday.isNullOrBlank()) {
+                                        MetaInfoItem(NuruIcons.Cake, profile!!.birthday!!)
+                                    }
+                                }
+
+                                // Badges
+                                if (uiState.badges.isNotEmpty()) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.padding(top = 12.dp)
+                                    ) {
+                                        uiState.badges.take(3).forEach { badge ->
+                                            val thumb = badge.getTagValue("thumb") ?: badge.getTagValue("image")
+                                            if (thumb != null) {
+                                                AsyncImage(
+                                                    model = thumb,
+                                                    contentDescription = badge.getTagValue("name"),
+                                                    modifier = Modifier
+                                                        .size(16.dp)
+                                                        .clip(RoundedCornerShape(2.dp))
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Follow Count
+                                Row(
+                                    modifier = Modifier
+                                        .padding(top = 12.dp)
+                                        .clickable {
+                                            viewModel.loadFollowProfiles()
+                                            showFollowList = true
+                                        },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(Icons.Default.People, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                    Text(
+                                        text = uiState.followCount.toString(),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = "フォロー中",
+                                        fontSize = 14.sp,
+                                        color = TextSecondary
+                                    )
+                                }
                             }
                         }
 
+                        // Avatar - Positioned outside Surface to prevent clipping
                         Box(
                             modifier = Modifier
-                                .padding(top = 64.dp, start = 24.dp)
-                                .size(88.dp)
+                                .padding(start = 32.dp) // 16 (outer padding) + 16 (inner padding)
+                                .offset(y = 24.dp) // 64 (surface padding top) - 40 (overlap) = 24
+                                .size(80.dp)
                                 .clip(CircleShape)
                                 .background(bgPrimary)
                                 .padding(4.dp)
@@ -205,115 +317,8 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                             UserAvatar(
                                 pictureUrl = profile?.picture,
                                 displayName = profile?.displayedName ?: "",
-                                size = 80.dp
+                                size = 72.dp
                             )
-                        }
-                    }
-                }
-
-                // Profile Details
-                item {
-                    Surface(
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp)
-                            .fillMaxWidth(),
-                        color = bgPrimary
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
-                                .padding(top = 12.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier
-                                    .clickable {
-                                        profile?.pubkey?.let {
-                                            clipboardManager.setText(AnnotatedString(NostrKeyUtils.encodeNpub(it) ?: it))
-                                        }
-                                    }
-                            ) {
-                                Text(
-                                    text = NostrKeyUtils.shortenPubkey(profile?.pubkey ?: "", 12),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TextTertiary,
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                                )
-                                Icon(
-                                    Icons.Default.ContentCopy,
-                                    contentDescription = "コピー",
-                                    tint = TextTertiary,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            }
-
-                            if (!profile?.about.isNullOrBlank()) {
-                                Text(
-                                    text = profile!!.about!!,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary,
-                                    modifier = Modifier.padding(top = 12.dp),
-                                    lineHeight = 18.sp
-                                )
-                            }
-
-                            Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (!profile?.lud16.isNullOrBlank()) {
-                                    MetaInfoItem(NuruIcons.Zap(false), profile!!.lud16!!)
-                                }
-                                if (!profile?.website.isNullOrBlank()) {
-                                    MetaInfoItem(NuruIcons.Website, profile!!.website!!, color = LineGreen)
-                                }
-                                if (!profile?.birthday.isNullOrBlank()) {
-                                    MetaInfoItem(NuruIcons.Cake, profile!!.birthday!!)
-                                }
-                            }
-
-                            if (uiState.badges.isNotEmpty()) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.padding(top = 12.dp)
-                                ) {
-                                    uiState.badges.take(3).forEach { badge ->
-                                        val thumb = badge.getTagValue("thumb") ?: badge.getTagValue("image")
-                                        if (thumb != null) {
-                                            AsyncImage(
-                                                model = thumb,
-                                                contentDescription = badge.getTagValue("name"),
-                                                modifier = Modifier
-                                                    .size(24.dp)
-                                                    .clip(RoundedCornerShape(4.dp))
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .padding(top = 16.dp, bottom = 12.dp)
-                                    .clickable {
-                                        viewModel.loadFollowProfiles()
-                                        showFollowList = true
-                                    },
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(Icons.Default.People, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
-                                Text(
-                                    text = uiState.followCount.toString(),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "フォロー中",
-                                    fontSize = 14.sp,
-                                    color = TextSecondary
-                                )
-                            }
                         }
                     }
                 }
@@ -382,8 +387,27 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                     if (displayPosts.isEmpty()) {
                         item {
                             Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
-                                Box(Modifier.fillMaxWidth().padding(64.dp), contentAlignment = Alignment.Center) {
-                                    Text(if (uiState.activeTab == 0) "投稿がありません" else "いいねがありません", color = TextTertiary)
+                                Column(
+                                    Modifier.fillMaxWidth().padding(vertical = 64.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Box(
+                                        Modifier.size(64.dp).clip(CircleShape).background(BgSecondary),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (uiState.activeTab == 0) Icons.Default.EditNote else Icons.Default.FavoriteBorder,
+                                            contentDescription = null,
+                                            tint = TextTertiary,
+                                            modifier = Modifier.size(32.dp)
+                                        )
+                                    }
+                                    Text(
+                                        if (uiState.activeTab == 0) "投稿がありません" else "いいねがありません",
+                                        color = TextSecondary,
+                                        fontSize = 14.sp
+                                    )
                                 }
                             }
                         }
@@ -395,7 +419,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                     onLike = { viewModel.likePost(post.event.id) },
                                     onRepost = { viewModel.repostPost(post.event.id) },
                                     onProfileClick = { viewModel.loadProfile(it) },
-                                    onDelete = { viewModel.deletePost(post.event.id) },
+                                    onDelete = { postToDelete = post.event.id },
                                     isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
                                     isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false
                                 )
@@ -439,6 +463,32 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
             displayName = profile?.displayedName ?: "",
             onDismiss = { showPostModal = false },
             onPublish = { content, cw -> viewModel.publishNote(content, cw); showPostModal = false }
+        )
+    }
+
+    if (postToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { postToDelete = null },
+            title = { Text("削除の確認") },
+            text = { Text("この投稿を削除しますか？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        postToDelete?.let { viewModel.deletePost(it) }
+                        postToDelete = null
+                    }
+                ) {
+                    Text("削除", color = Color.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { postToDelete = null }) {
+                    Text("キャンセル", color = TextSecondary)
+                }
+            },
+            containerColor = bgPrimary,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary
         )
     }
 }

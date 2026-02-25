@@ -47,7 +47,17 @@ fun PostItem(
     birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList()
 ) {
     val nuruColors = LocalNuruColors.current
+
     val profile = post.profile
+    // Internal NIP-05 verification for users not verified by the parent
+    var internalVerified by remember { mutableStateOf(isVerified) }
+    LaunchedEffect(profile?.nip05, isVerified) {
+        if (!isVerified && profile?.nip05 != null) {
+            internalVerified = io.nurunuru.app.data.Nip05Utils.verifyNip05(profile.nip05, post.event.pubkey)
+        } else {
+            internalVerified = isVerified
+        }
+    }
     var showMenu by remember { mutableStateOf(false) }
 
     // Content Warning state
@@ -57,7 +67,7 @@ fun PostItem(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF0A0A0A))
+            .background(Color.Black)
     ) {
         // Repost Indicator
         if (post.repostedBy != null) {
@@ -75,7 +85,7 @@ fun PostItem(
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    text = "${post.repostedBy.displayedName} がリポストしました",
+                    text = "${post.repostedBy.displayedName} がリポスト",
                     style = MaterialTheme.typography.labelSmall,
                     color = nuruColors.textTertiary
                 )
@@ -115,14 +125,26 @@ fun PostItem(
                             maxLines = 1
                         )
 
-                        // Verification badge (Green checkmark)
-                        if (isVerified) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = nuruColors.lineGreen,
-                                modifier = Modifier.size(14.dp)
-                            )
+                        // Verification badge (Green checkmark + NIP-05 address)
+                        if (internalVerified && profile?.nip05 != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = nuruColors.lineGreen,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = formatNip05(profile.nip05),
+                                    fontSize = 11.sp,
+                                    color = nuruColors.lineGreen,
+                                    maxLines = 1,
+                                    modifier = Modifier.widthIn(max = 100.dp)
+                                )
+                            }
                         }
 
                         // Badges (NIP-58)
@@ -267,6 +289,23 @@ fun PostItem(
                                         )
                                     }
                                 }
+
+                                // 6.3s LOOP badge
+                                Surface(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(8.dp),
+                                    color = nuruColors.lineGreen,
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "6.3s LOOP",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -406,31 +445,86 @@ private fun PostContent(post: ScoredPost) {
 
 @Composable
 private fun ImageGrid(images: List<String>) {
-    when (images.size) {
-        1 -> AsyncImage(
-            model = images[0],
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 300.dp)
-                .clip(RoundedCornerShape(12.dp))
-        )
-        else -> {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                images.take(4).forEachIndexed { index, url ->
-                    AsyncImage(
-                        model = url,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(120.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                    )
+    val context = LocalContext.current
+    var showAll by remember { mutableStateOf(false) }
+    val maxVisible = 4
+    val visibleImages = if (showAll) images else images.take(maxVisible)
+    val hiddenCount = if (images.size > maxVisible && !showAll) images.size - maxVisible else 0
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (images.size == 1) {
+            AsyncImage(
+                model = images[0],
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable {
+                        // Open in browser
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(images[0]))
+                        context.startActivity(intent)
+                    }
+            )
+        } else {
+            // Grid layout
+            val rows = (visibleImages.size + 1) / 2
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (r in 0 until rows) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        for (c in 0 until 2) {
+                            val index = r * 2 + c
+                            if (index < visibleImages.size) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    AsyncImage(
+                                        model = visibleImages[index],
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(if (images.size == 3 && index == 0) 244.dp else 120.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                if (index == maxVisible - 1 && hiddenCount > 0) {
+                                                    showAll = true
+                                                } else {
+                                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(visibleImages[index]))
+                                                    context.startActivity(intent)
+                                                }
+                                            }
+                                    )
+                                    if (index == maxVisible - 1 && hiddenCount > 0) {
+                                        Box(
+                                            modifier = Modifier
+                                                .matchParentSize()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color.Black.copy(alpha = 0.6f))
+                                                .clickable { showAll = true },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "+$hiddenCount",
+                                                color = Color.White,
+                                                fontSize = 20.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            }
+            if (showAll) {
+                TextButton(onClick = { showAll = false }) {
+                    Text("閉じる", color = io.nurunuru.app.ui.theme.LineGreen, fontSize = 12.sp)
                 }
             }
         }
