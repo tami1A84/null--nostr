@@ -3,7 +3,6 @@ package io.nurunuru.app.ui.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,29 +20,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.models.DmConversation
 import io.nurunuru.app.data.models.DmMessage
-import io.nurunuru.app.data.NostrKeyUtils
+import io.nurunuru.app.ui.components.ConversationItem
+import io.nurunuru.app.ui.components.MessageBubble
+import io.nurunuru.app.ui.components.NewChatModal
 import io.nurunuru.app.ui.icons.NuruIcons
-import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.TalkViewModel
-import java.text.SimpleDateFormat
-import java.util.*
-
-private val IMAGE_REGEX = Regex(
-    "https?://[^\\s]+\\.(?:jpg|jpeg|png|gif|webp|avif)(\\?[^\\s]*)?",
-    RegexOption.IGNORE_CASE
-)
 
 @Composable
 fun TalkScreen(viewModel: TalkViewModel) {
@@ -74,7 +64,7 @@ private fun ConversationListScreen(
     isLoading: Boolean
 ) {
     val nuruColors = LocalNuruColors.current
-    var showNewChatDialog by remember { mutableStateOf(false) }
+    var showNewChatModal by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -89,7 +79,7 @@ private fun ConversationListScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { showNewChatDialog = true },
+                        onClick = { showNewChatModal = true },
                         modifier = Modifier
                             .padding(end = 8.dp)
                             .size(32.dp)
@@ -110,11 +100,11 @@ private fun ConversationListScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        if (showNewChatDialog) {
-            NewChatDialog(
-                onDismiss = { showNewChatDialog = false },
+        if (showNewChatModal) {
+            NewChatModal(
+                onDismiss = { showNewChatModal = false },
                 onStartChat = { pubkey ->
-                    showNewChatDialog = false
+                    showNewChatModal = false
                     viewModel.openConversation(pubkey)
                 }
             )
@@ -185,58 +175,6 @@ private fun ConversationListScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun ConversationItem(
-    conversation: DmConversation,
-    onClick: () -> Unit
-) {
-    val nuruColors = LocalNuruColors.current
-    val profile = conversation.partnerProfile
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        UserAvatar(
-            pictureUrl = profile?.picture,
-            displayName = profile?.displayedName ?: "",
-            size = 48.dp
-        )
-
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(conversation.partnerPubkey),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1
-                )
-                Text(
-                    text = formatTime(conversation.lastMessageTime),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = nuruColors.textTertiary
-                )
-            }
-            Text(
-                text = conversation.lastMessage.ifBlank { "メッセージなし" },
-                style = MaterialTheme.typography.bodySmall,
-                color = nuruColors.textTertiary,
-                maxLines = 1
-            )
         }
     }
 }
@@ -412,199 +350,5 @@ private fun ConversationScreen(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun MessageBubble(message: DmMessage) {
-    val nuruColors = LocalNuruColors.current
-
-    // Extract CW
-    val cwRegex = Regex("""^\[CW:\s*([^\]]*)\]\s*\n\n([\s\S]*)$""")
-    val cwMatch = cwRegex.find(message.content)
-    val displayContent = cwMatch?.groupValues?.get(2) ?: message.content
-    val cwReason = cwMatch?.groupValues?.get(1)
-    var isCwRevealed by remember { mutableStateOf(cwReason == null) }
-
-    // Extract images
-    val images = IMAGE_REGEX.findAll(displayContent).map { it.value }.toList()
-    val cleanText = IMAGE_REGEX.replace(displayContent, "").trim()
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (message.isMine) Arrangement.End else Arrangement.Start
-    ) {
-        Column(
-            horizontalAlignment = if (message.isMine) Alignment.End else Alignment.Start
-        ) {
-            Box(
-                modifier = Modifier
-                    .background(
-                        if (message.isMine) LineGreen else MaterialTheme.colorScheme.surfaceVariant,
-                        RoundedCornerShape(
-                            topStart = 16.dp,
-                            topEnd = 16.dp,
-                            bottomStart = if (message.isMine) 16.dp else 4.dp,
-                            bottomEnd = if (message.isMine) 4.dp else 16.dp
-                        )
-                    )
-                    .widthIn(max = 280.dp)
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                Column {
-                    if (cwReason != null && !isCwRevealed) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable { isCwRevealed = true }
-                        ) {
-                            Icon(
-                                Icons.Outlined.Warning,
-                                null,
-                                tint = if (message.isMine) Color.White else Color(0xFFFF9800),
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                "CW: $cwReason",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (message.isMine) Color.White else Color(0xFFFF9800),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    } else {
-                        if (cwReason != null) {
-                            Text(
-                                "CW: $cwReason",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = (if (message.isMine) Color.White else Color(0xFFFF9800)).copy(alpha = 0.7f),
-                                modifier = Modifier.clickable { isCwRevealed = false }
-                            )
-                            Spacer(Modifier.height(4.dp))
-                        }
-
-                        if (cleanText.isNotBlank()) {
-                            Text(
-                                text = cleanText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (message.isMine) MaterialTheme.colorScheme.onPrimary
-                                else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        images.forEach { url ->
-                            Spacer(Modifier.height(4.dp))
-                            AsyncImage(
-                                model = url,
-                                contentDescription = null,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 300.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                            )
-                        }
-                    }
-                }
-            }
-            Text(
-                text = formatTime(message.timestamp),
-                style = MaterialTheme.typography.bodySmall,
-                color = nuruColors.textTertiary,
-                modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun NewChatDialog(
-    onDismiss: () -> Unit,
-    onStartChat: (String) -> Unit
-) {
-    val nuruColors = LocalNuruColors.current
-    var pubkeyInput by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                "新しいトーク",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "相手の公開鍵",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = nuruColors.textSecondary
-                )
-                BasicTextField(
-                    value = pubkeyInput,
-                    onValueChange = { pubkeyInput = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(nuruColors.bgTertiary, RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                    ),
-                    cursorBrush = SolidColor(LineGreen),
-                    decorationBox = { innerTextField ->
-                        Box {
-                            if (pubkeyInput.isEmpty()) {
-                                Text(
-                                    "npub1... または hex",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = nuruColors.textTertiary
-                                )
-                            }
-                            innerTextField()
-                        }
-                    }
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val pubkey = pubkeyInput.trim()
-                    if (pubkey.isNotBlank()) {
-                        val hex = NostrKeyUtils.parsePublicKey(pubkey)
-                        if (hex != null) {
-                            onStartChat(hex)
-                        } else {
-                            // If parsing fails, just try as is (could be raw hex already if parse fails for some reason)
-                            onStartChat(pubkey)
-                        }
-                    }
-                },
-                enabled = pubkeyInput.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = LineGreen)
-            ) {
-                Text("開始", color = Color.White)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("キャンセル", color = nuruColors.textSecondary)
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(16.dp)
-    )
-}
-
-private fun formatTime(unixSec: Long): String {
-    val now = System.currentTimeMillis() / 1000
-    val diff = now - unixSec
-    return when {
-        diff < 60 -> "たった今"
-        diff < 3600 -> "${diff / 60}分前"
-        diff < 86400 -> "${diff / 3600}時間前"
-        else -> SimpleDateFormat("M/d HH:mm", Locale.JAPAN).format(Date(unixSec * 1000))
     }
 }
