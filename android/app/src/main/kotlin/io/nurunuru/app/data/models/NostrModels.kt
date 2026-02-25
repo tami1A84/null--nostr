@@ -50,7 +50,10 @@ data class ScoredPost(
     val replyCount: Int = 0,
     val isLiked: Boolean = false,
     val isReposted: Boolean = false,
-    val quotedPost: ScoredPost? = null
+    val badges: List<String> = emptyList(),
+    val quotedPost: ScoredPost? = null,
+    val repostedBy: UserProfile? = null,
+    val repostTime: Long? = null
 )
 
 data class DmConversation(

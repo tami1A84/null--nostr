@@ -59,6 +59,7 @@ fun TimelineScreen(
             Column {
                 // Tab bar: Global / Following
                 TopAppBar(
+                    windowInsets = WindowInsets.statusBars,
                     title = {
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             FilterChip(
@@ -182,13 +183,18 @@ fun TimelineScreen(
                 else -> {
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                         items(displayPosts, key = { it.event.id }) { post ->
-                            PostItem(
-                                post = post,
-                                onLike = { viewModel.likePost(post.event.id) },
-                                onRepost = { viewModel.repostPost(post.event.id) },
-                                onProfileClick = { /* TODO: navigate to profile */ },
-                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
-                            )
+                            Surface(
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                color = MaterialTheme.colorScheme.background
+                            ) {
+                                PostItem(
+                                    post = post,
+                                    onLike = { viewModel.likePost(post.event.id) },
+                                    onRepost = { viewModel.repostPost(post.event.id) },
+                                    onProfileClick = { /* TODO: navigate to profile */ },
+                                    birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
+                                )
+                            }
                         }
                         item {
                             Spacer(modifier = Modifier.height(80.dp))

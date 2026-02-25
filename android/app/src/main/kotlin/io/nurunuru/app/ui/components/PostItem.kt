@@ -5,13 +5,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
@@ -30,6 +29,7 @@ import coil.compose.AsyncImage
 import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.data.NostrKeyUtils
+import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import java.text.SimpleDateFormat
 import java.util.*
@@ -43,6 +43,7 @@ fun PostItem(
     modifier: Modifier = Modifier,
     onDelete: (() -> Unit)? = null,
     isOwnPost: Boolean = false,
+    isVerified: Boolean = false,
     birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList()
 ) {
     val nuruColors = LocalNuruColors.current
@@ -56,12 +57,35 @@ fun PostItem(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Color(0xFF0A0A0A))
     ) {
+        // Repost Indicator
+        if (post.repostedBy != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 48.dp, top = 8.dp, end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = NuruIcons.Repost,
+                    contentDescription = null,
+                    tint = nuruColors.textTertiary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "${post.repostedBy.displayedName} がリポストしました",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = nuruColors.textTertiary
+                )
+            }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Avatar
@@ -73,13 +97,16 @@ fun PostItem(
             )
 
             Column(modifier = Modifier.weight(1f)) {
-                // Header row: name + time
+                // Header row: name + verification + badges + time
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Text(
                             text = profile?.displayedName ?: NostrKeyUtils.shortenPubkey(post.event.pubkey),
                             style = MaterialTheme.typography.bodyMedium,
@@ -87,15 +114,30 @@ fun PostItem(
                             color = MaterialTheme.colorScheme.onBackground,
                             maxLines = 1
                         )
-                        if (profile?.nip05 != null) {
-                            Text(
-                                text = formatNip05(profile.nip05),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = nuruColors.lineGreen,
-                                maxLines = 1
+
+                        // Verification badge (Green checkmark)
+                        if (isVerified) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = nuruColors.lineGreen,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+
+                        // Badges (NIP-58)
+                        post.badges.take(3).forEach { badgeUrl ->
+                            AsyncImage(
+                                model = badgeUrl,
+                                contentDescription = "Badge",
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clip(RoundedCornerShape(2.dp))
                             )
                         }
                     }
+
+                    // Time and Menu
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = formatTimestamp(post.event.createdAt),
@@ -246,32 +288,39 @@ fun PostItem(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // Action buttons
+                // Action buttons (Match web order: Like, Repost, Zap)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(32.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Like (Thumbs up as per web)
+                    ActionButton(
+                        icon = NuruIcons.Like(post.isLiked),
+                        count = post.likeCount,
+                        onClick = onLike,
+                        tint = if (post.isLiked) nuruColors.lineGreen else nuruColors.textTertiary
+                    )
                     // Repost
                     ActionButton(
-                        icon = Icons.Outlined.Repeat,
+                        icon = NuruIcons.Repost,
                         count = post.repostCount,
                         onClick = onRepost,
                         tint = if (post.isReposted) nuruColors.lineGreen else nuruColors.textTertiary
                     )
-                    // Like
-                    ActionButton(
-                        icon = if (post.isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                        count = post.likeCount,
-                        onClick = onLike,
-                        tint = if (post.isLiked) Color(0xFFFF6B6B) else nuruColors.textTertiary
-                    )
                     // Zap
+                    val context = LocalContext.current
                     ActionButton(
-                        icon = Icons.Default.Bolt,
+                        icon = NuruIcons.Zap(false),
                         count = (post.zapAmount / 1000).toInt(),
-                        onClick = { /* TODO: Zap modal */ },
-                        tint = nuruColors.zapColor
+                        onClick = {
+                            if (profile?.lud16 != null) {
+                                android.widget.Toast.makeText(context, "⚡ Zap送信: ${profile.lud16}", android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                android.widget.Toast.makeText(context, "Lightningアドレスが設定されていません", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        tint = nuruColors.textTertiary
                     )
                     // Spacer for layout balance
                     Spacer(modifier = Modifier.width(8.dp))

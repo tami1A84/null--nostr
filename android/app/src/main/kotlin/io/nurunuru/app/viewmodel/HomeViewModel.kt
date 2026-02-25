@@ -3,7 +3,9 @@ package io.nurunuru.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import io.nurunuru.app.data.Nip05Utils
 import io.nurunuru.app.data.NostrRepository
+import io.nurunuru.app.data.models.NostrEvent
 import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.data.models.UserProfile
 import kotlinx.coroutines.flow.*
@@ -21,10 +23,11 @@ data class HomeUiState(
     val viewingPubkey: String? = null, // null = own profile
     val activeTab: Int = 0, // 0: Posts, 1: Likes
     val isNip05Verified: Boolean = false,
-    val badges: List<io.nurunuru.app.data.models.NostrEvent> = emptyList(),
+    val badges: List<NostrEvent> = emptyList(),
     val isFollowing: Boolean = false,
     val followList: List<String> = emptyList(),
-    val followProfiles: Map<String, UserProfile> = emptyMap()
+    val followProfiles: Map<String, UserProfile> = emptyMap(),
+    val uploadServer: String = "nostr.build"
 ) {
     val isOwnProfile: Boolean
         get() = viewingPubkey == null
@@ -40,6 +43,7 @@ class HomeViewModel(
 
     init {
         loadMyProfile()
+        _uiState.update { it.copy(uploadServer = repository.getUploadServer()) }
     }
 
     fun loadMyProfile() {
@@ -55,6 +59,10 @@ class HomeViewModel(
                 val likedPosts = repository.fetchUserLikes(pubkeyHex, 50)
                 val followList = repository.fetchFollowList(pubkeyHex)
                 val badges = repository.fetchBadges(pubkeyHex)
+                val badgeUrls = badges.mapNotNull { it.getTagValue("thumb") ?: it.getTagValue("image") }
+
+                val enrichedPosts = posts.map { if (it.event.pubkey == pubkeyHex) it.copy(badges = badgeUrls) else it }
+                val enrichedLikes = likedPosts.map { if (it.event.pubkey == pubkeyHex) it.copy(badges = badgeUrls) else it }
 
                 val myFollowList = if (pubkeyHex == myPubkeyHex) followList else repository.fetchFollowList(myPubkeyHex)
                 val isFollowing = if (pubkeyHex == myPubkeyHex) false else myFollowList.contains(pubkeyHex)
@@ -62,8 +70,8 @@ class HomeViewModel(
                 _uiState.update {
                     it.copy(
                         profile = profile,
-                        posts = posts,
-                        likedPosts = likedPosts,
+                        posts = enrichedPosts,
+                        likedPosts = enrichedLikes,
                         followCount = followList.size,
                         followList = followList,
                         badges = badges,
@@ -74,12 +82,60 @@ class HomeViewModel(
 
                 // Verify NIP-05
                 profile?.nip05?.let { nip05 ->
-                    val verified = io.nurunuru.app.data.Nip05Utils.verifyNip05(nip05, pubkeyHex)
+                    val verified = Nip05Utils.verifyNip05(nip05, pubkeyHex)
                     _uiState.update { it.copy(isNip05Verified = verified) }
                 }
 
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "プロフィールの読み込みに失敗しました", isLoading = false) }
+            }
+        }
+    }
+
+    fun likePost(eventId: String) {
+        viewModelScope.launch {
+            try {
+                val success = repository.likePost(eventId)
+                if (success) {
+                    _uiState.update { state ->
+                        val updatePost = { post: ScoredPost ->
+                            if (post.event.id == eventId) post.copy(
+                                isLiked = true,
+                                likeCount = post.likeCount + 1
+                            ) else post
+                        }
+                        state.copy(
+                            posts = state.posts.map(updatePost),
+                            likedPosts = state.likedPosts.map(updatePost)
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "いいねに失敗しました") }
+            }
+        }
+    }
+
+    fun repostPost(eventId: String) {
+        viewModelScope.launch {
+            try {
+                val success = repository.repostPost(eventId)
+                if (success) {
+                    _uiState.update { state ->
+                        val updatePost = { post: ScoredPost ->
+                            if (post.event.id == eventId) post.copy(
+                                isReposted = true,
+                                repostCount = post.repostCount + 1
+                            ) else post
+                        }
+                        state.copy(
+                            posts = state.posts.map(updatePost),
+                            likedPosts = state.likedPosts.map(updatePost)
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "リポストに失敗しました") }
             }
         }
     }
@@ -94,6 +150,10 @@ class HomeViewModel(
                 val likedPosts = repository.fetchUserLikes(targetPubkey, 50)
                 val followList = repository.fetchFollowList(targetPubkey)
                 val badges = repository.fetchBadges(targetPubkey)
+                val badgeUrls = badges.mapNotNull { it.getTagValue("thumb") ?: it.getTagValue("image") }
+
+                val enrichedPosts = posts.map { if (it.event.pubkey == targetPubkey) it.copy(badges = badgeUrls) else it }
+                val enrichedLikes = likedPosts.map { if (it.event.pubkey == targetPubkey) it.copy(badges = badgeUrls) else it }
 
                 val myFollowList = if (targetPubkey == myPubkeyHex) followList else repository.fetchFollowList(myPubkeyHex)
                 val isFollowing = if (targetPubkey == myPubkeyHex) false else myFollowList.contains(targetPubkey)
@@ -101,8 +161,8 @@ class HomeViewModel(
                 _uiState.update {
                     it.copy(
                         profile = profile,
-                        posts = posts,
-                        likedPosts = likedPosts,
+                        posts = enrichedPosts,
+                        likedPosts = enrichedLikes,
                         followCount = followList.size,
                         followList = followList,
                         badges = badges,
@@ -112,7 +172,7 @@ class HomeViewModel(
                 }
 
                 profile?.nip05?.let { nip05 ->
-                    val verified = io.nurunuru.app.data.Nip05Utils.verifyNip05(nip05, targetPubkey)
+                    val verified = Nip05Utils.verifyNip05(nip05, targetPubkey)
                     _uiState.update { it.copy(isNip05Verified = verified) }
                 }
             } catch (e: Exception) {
@@ -208,12 +268,30 @@ class HomeViewModel(
         }
     }
 
+    fun publishNote(content: String, cw: String? = null) {
+        viewModelScope.launch {
+            try {
+                val event = repository.publishNote(content, contentWarning = cw)
+                if (event != null) {
+                    refresh()
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "投稿に失敗しました") }
+            }
+        }
+    }
+
     suspend fun uploadImage(fileBytes: ByteArray, mimeType: String): String? {
         return try {
             repository.uploadImage(fileBytes, mimeType)
         } catch (e: Exception) {
             null
         }
+    }
+
+    fun setUploadServer(server: String) {
+        repository.setUploadServer(server)
+        _uiState.update { it.copy(uploadServer = server) }
     }
 
     fun clearError() {

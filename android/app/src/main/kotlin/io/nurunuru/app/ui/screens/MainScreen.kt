@@ -7,6 +7,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,13 +38,13 @@ enum class BottomTab(
     ),
     TIMELINE(
         label = "タイムライン",
-        selectedIcon = Icons.Filled.DynamicFeed,
-        unselectedIcon = Icons.Outlined.DynamicFeed
+        selectedIcon = Icons.Filled.CalendarMonth,
+        unselectedIcon = Icons.Outlined.CalendarMonth
     ),
     MINIAPP(
         label = "ミニアプリ",
-        selectedIcon = Icons.Filled.Apps,
-        unselectedIcon = Icons.Outlined.Apps
+        selectedIcon = Icons.Filled.GridView,
+        unselectedIcon = Icons.Outlined.GridView
     )
 }
 
@@ -89,10 +90,17 @@ fun MainScreen(
     }
 
     Scaffold(
+        topBar = {
+            // Each screen should ideally handle its own top bar to manage internal state
+            // but we need to coordinate insets.
+            // We'll let child screens provide their top bars or keep them internal for now
+            // but coordinate through MainScreen's contentWindowInsets.
+        },
         bottomBar = {
             NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp
+                containerColor = Color(0xFF0A0A0A), // Pure black matching globals.css
+                tonalElevation = 0.dp,
+                windowInsets = WindowInsets.navigationBars
             ) {
                 BottomTab.entries.forEach { tab ->
                     val isSelected = activeTab == tab
@@ -128,13 +136,14 @@ fun MainScreen(
                             selectedTextColor = LineGreen,
                             unselectedIconColor = nuruColors.textTertiary,
                             unselectedTextColor = nuruColors.textTertiary,
-                            indicatorColor = LineGreen.copy(alpha = 0.12f)
+                            indicatorColor = Color.Transparent // No background pill to match web
                         )
                     )
                 }
             }
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = Color(0xFF0A0A0A),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0) // Don't consume insets here, let child screens handle them
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             when (activeTab) {

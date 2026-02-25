@@ -76,6 +76,7 @@ private fun ConversationListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets.statusBars,
                 title = {
                     Text(
                         "トーク",
@@ -112,11 +113,18 @@ private fun ConversationListScreen(
                 else -> {
                     LazyColumn(modifier = Modifier.fillMaxSize()) {
                         items(conversations, key = { it.partnerPubkey }) { conversation ->
-                            ConversationItem(
-                                conversation = conversation,
-                                onClick = { viewModel.openConversation(conversation.partnerPubkey) }
-                            )
-                            HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+                            Surface(
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                color = MaterialTheme.colorScheme.background
+                            ) {
+                                Column {
+                                    ConversationItem(
+                                        conversation = conversation,
+                                        onClick = { viewModel.openConversation(conversation.partnerPubkey) }
+                                    )
+                                    HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+                                }
+                            }
                         }
                     }
                 }
@@ -205,6 +213,7 @@ private fun ConversationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets.statusBars,
                 title = {
                     Text(
                         NostrKeyUtils.shortenPubkey(partnerPubkey),
@@ -242,7 +251,12 @@ private fun ConversationScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(messages, key = { it.event.id }) { message ->
-                            MessageBubble(message = message)
+                            Surface(
+                                modifier = Modifier.padding(horizontal = 12.dp),
+                                color = MaterialTheme.colorScheme.background
+                            ) {
+                                MessageBubble(message = message)
+                            }
                         }
                     }
                 }

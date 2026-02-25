@@ -91,6 +91,23 @@ class NostrRepository(
     private fun parseProfile(event: NostrEvent): UserProfile {
         return try {
             val obj = json.parseToJsonElement(event.content).jsonObject
+            val birthdayElement = obj["birthday"]
+            val birthdayStr = when (birthdayElement) {
+                is JsonPrimitive -> birthdayElement.content
+                is JsonObject -> {
+                    // NIP-123 support or custom object format
+                    val month = birthdayElement["month"]?.jsonPrimitive?.content?.padStart(2, '0')
+                    val day = birthdayElement["day"]?.jsonPrimitive?.content?.padStart(2, '0')
+                    val year = birthdayElement["year"]?.jsonPrimitive?.content
+                    if (month != null && day != null) {
+                        if (year != null) "$year-$month-$day" else "$month-$day"
+                    } else {
+                        null
+                    }
+                }
+                else -> null
+            }
+
             UserProfile(
                 pubkey = event.pubkey,
                 name = obj["name"]?.jsonPrimitive?.content,
@@ -101,7 +118,7 @@ class NostrRepository(
                 banner = obj["banner"]?.jsonPrimitive?.content,
                 lud16 = obj["lud16"]?.jsonPrimitive?.content,
                 website = obj["website"]?.jsonPrimitive?.content,
-                birthday = obj["birthday"]?.jsonPrimitive?.content
+                birthday = birthdayStr
             )
         } catch (e: Exception) {
             UserProfile(pubkey = event.pubkey)
@@ -428,22 +445,59 @@ class NostrRepository(
         )
     }
 
+    fun getUploadServer(): String = prefs.uploadServer
+    fun setUploadServer(server: String) { prefs.uploadServer = server }
+
     suspend fun uploadImage(fileBytes: ByteArray, mimeType: String): String? {
-        return ImageUploadUtils.uploadToNostrBuild(fileBytes, mimeType, client.getSigner())
+        val server = prefs.uploadServer
+        return if (server == "nostr.build") {
+            ImageUploadUtils.uploadToNostrBuild(fileBytes, mimeType, client.getSigner())
+        } else {
+            // Assume Blossom URL
+            ImageUploadUtils.uploadToBlossom(fileBytes, mimeType, client.getSigner()!!, server)
+        }
     }
 
     suspend fun updateProfile(profile: UserProfile): Boolean {
-        val content = buildJsonObject {
-            profile.name?.let { put("name", it) }
-            profile.displayName?.let { put("display_name", it) }
-            profile.about?.let { put("about", it) }
-            profile.picture?.let { put("picture", it) }
-            profile.banner?.let { put("banner", it) }
-            profile.nip05?.let { put("nip05", it) }
-            profile.lud16?.let { put("lud16", it) }
-            profile.website?.let { put("website", it) }
-            profile.birthday?.let { put("birthday", it) }
-        }.toString()
+        // Fetch current profile to merge fields and avoid losing unknown fields
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.METADATA),
+            authors = listOf(profile.pubkey),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 3_000)
+        val latestEvent = events.maxByOrNull { it.createdAt }
+
+        val baseObj = if (latestEvent != null) {
+            try {
+                json.parseToJsonElement(latestEvent.content).jsonObject.toMutableMap()
+            } catch (e: Exception) {
+                mutableMapOf<String, JsonElement>()
+            }
+        } else {
+            mutableMapOf<String, JsonElement>()
+        }
+
+        // Update fields (match web logic: remove if blank/null)
+        fun updateField(key: String, value: String?) {
+            if (value.isNullOrBlank()) {
+                baseObj.remove(key)
+            } else {
+                baseObj[key] = JsonPrimitive(value)
+            }
+        }
+
+        updateField("name", profile.name)
+        updateField("display_name", profile.displayName ?: profile.name)
+        updateField("about", profile.about)
+        updateField("picture", profile.picture)
+        updateField("banner", profile.banner)
+        updateField("nip05", profile.nip05)
+        updateField("lud16", profile.lud16)
+        updateField("website", profile.website)
+        updateField("birthday", profile.birthday)
+
+        val content = JsonObject(baseObj).toString()
 
         return client.publish(
             kind = NostrKind.METADATA,
@@ -456,38 +510,61 @@ class NostrRepository(
     private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> {
         if (events.isEmpty()) return emptyList()
 
-        val processedEvents = mutableListOf<NostrEvent>()
+        val myPubkey = prefs.publicKeyHex
+        val processedItems = mutableListOf<Pair<NostrEvent, NostrEvent?>>() // Original, Repost(optional)
+        val pubkeysToFetch = mutableSetOf<String>()
+
         for (event in events) {
             if (event.kind == NostrKind.REPOST) {
                 try {
                     val original = json.decodeFromString<NostrEvent>(event.content)
-                    processedEvents.add(original)
+                    processedItems.add(original to event)
+                    pubkeysToFetch.add(original.pubkey)
+                    pubkeysToFetch.add(event.pubkey)
                 } catch (e: Exception) {
-                    // If content is empty or not JSON, we might need to fetch by "e" tag
-                    // But for user profile, usually content is populated
+                    // skip or handle missing content
                 }
-            } else if (event.kind == NostrKind.TEXT_NOTE || event.kind == NostrKind.VIDEO_LOOP || event.kind == NostrKind.LONG_FORM) {
-                processedEvents.add(event)
+            } else {
+                processedItems.add(event to null)
+                pubkeysToFetch.add(event.pubkey)
             }
         }
 
-        if (processedEvents.isEmpty()) return emptyList()
+        if (processedItems.isEmpty()) return emptyList()
 
-        val ids = processedEvents.map { it.id }
-        val profiles = fetchProfiles(processedEvents.map { it.pubkey }.distinct())
+        val profiles = fetchProfiles(pubkeysToFetch.toList())
+        val ids = processedItems.map { it.first.id }
 
-        val reactions = fetchReactions(ids)
+        // Fetch reactions and check if I liked
+        val reactionsFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.REACTION),
+            tags = mapOf("e" to ids),
+            limit = 500
+        )
+        val reactionEvents = client.fetchEvents(reactionsFilter, 3000)
+        val reactionCounts = reactionEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
+        val myLikes = if (myPubkey != null) reactionEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
+
+        // Fetch reposts and check if I reposted
+        val repostsFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.REPOST),
+            tags = mapOf("e" to ids),
+            limit = 500
+        )
+        val repostEvents = client.fetchEvents(repostsFilter, 3000)
+        val repostCounts = repostEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
+        val myReposts = if (myPubkey != null) repostEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
+
         val zaps = fetchZaps(ids)
 
-        val posts = processedEvents.map { event ->
-            val likeCount = reactions[event.id] ?: 0
+        return processedItems.map { (event, repost) ->
+            val likeCount = reactionCounts[event.id] ?: 0
+            val repostCount = repostCounts[event.id] ?: 0
             val zapAmount = zaps[event.id] ?: 0L
 
-            // Simple scoring matching web weights
-            // zap: 100 (per 1000 sats roughly), like: 5
-            val engagementScore = (zapAmount / 1000.0) * 100.0 + likeCount * 5.0
+            // Scoring matching web weights: Zap (100), Repost (25), Like (5)
+            val engagementScore = (zapAmount / 1000.0) * 100.0 + likeCount * 5.0 + repostCount * 25.0
 
-            // Time decay (linear over 24h for simplicity)
             val ageHours = (System.currentTimeMillis() / 1000 - event.createdAt) / 3600.0
             val timeMultiplier = (24.0 - ageHours.coerceIn(0.0, 24.0)) / 24.0
 
@@ -495,16 +572,14 @@ class NostrRepository(
                 event = event,
                 profile = profiles[event.pubkey],
                 likeCount = likeCount,
+                repostCount = repostCount,
                 zapAmount = zapAmount,
-                score = engagementScore * timeMultiplier
+                score = engagementScore * timeMultiplier,
+                isLiked = myLikes.contains(event.id),
+                isReposted = myReposts.contains(event.id),
+                repostedBy = if (repost != null) profiles[repost.pubkey] else null,
+                repostTime = repost?.createdAt
             )
-        }
-
-        // Sort by score if we have engagement, otherwise by time
-        return if (posts.any { it.score > 0 }) {
-            posts.sortedByDescending { it.score }
-        } else {
-            posts.sortedByDescending { it.event.createdAt }
-        }
+        }.sortedByDescending { it.repostTime ?: it.event.createdAt }
     }
 }
