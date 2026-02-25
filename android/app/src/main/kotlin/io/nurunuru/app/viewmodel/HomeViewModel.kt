@@ -3,7 +3,9 @@ package io.nurunuru.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import io.nurunuru.app.data.Nip05Utils
 import io.nurunuru.app.data.NostrRepository
+import io.nurunuru.app.data.models.NostrEvent
 import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.data.models.UserProfile
 import kotlinx.coroutines.flow.*
@@ -21,7 +23,7 @@ data class HomeUiState(
     val viewingPubkey: String? = null, // null = own profile
     val activeTab: Int = 0, // 0: Posts, 1: Likes
     val isNip05Verified: Boolean = false,
-    val badges: List<io.nurunuru.app.data.models.NostrEvent> = emptyList(),
+    val badges: List<NostrEvent> = emptyList(),
     val isFollowing: Boolean = false,
     val followList: List<String> = emptyList(),
     val followProfiles: Map<String, UserProfile> = emptyMap(),
@@ -80,7 +82,7 @@ class HomeViewModel(
 
                 // Verify NIP-05
                 profile?.nip05?.let { nip05 ->
-                    val verified = io.nurunuru.app.data.Nip05Utils.verifyNip05(nip05, pubkeyHex)
+                    val verified = Nip05Utils.verifyNip05(nip05, pubkeyHex)
                     _uiState.update { it.copy(isNip05Verified = verified) }
                 }
 
@@ -170,7 +172,7 @@ class HomeViewModel(
                 }
 
                 profile?.nip05?.let { nip05 ->
-                    val verified = io.nurunuru.app.data.Nip05Utils.verifyNip05(nip05, targetPubkey)
+                    val verified = Nip05Utils.verifyNip05(nip05, targetPubkey)
                     _uiState.update { it.copy(isNip05Verified = verified) }
                 }
             } catch (e: Exception) {

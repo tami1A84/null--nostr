@@ -1,21 +1,14 @@
 package io.nurunuru.app.ui.screens
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
@@ -28,30 +21,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.models.UserProfile
-import io.nurunuru.app.ui.components.PostItem
+import io.nurunuru.app.ui.components.*
 import io.nurunuru.app.ui.icons.NuruIcons
-import io.nurunuru.app.ui.components.PostModal
-import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.*
 import io.nurunuru.app.viewmodel.HomeViewModel
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
     val uiState by viewModel.uiState.collectAsState()
     val profile = uiState.profile
-    val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     val bgPrimary = Color(0xFF0A0A0A)
 
@@ -129,7 +115,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 96.dp), // Starts 24dp from bottom of banner
+                                .padding(top = 96.dp),
                             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
                             color = bgPrimary
                         ) {
@@ -138,7 +124,6 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                     .fillMaxWidth()
                                     .padding(start = 112.dp, end = 16.dp, top = 8.dp, bottom = 12.dp)
                             ) {
-                                // Name and Edit/Follow Button
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -165,7 +150,6 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                             }
                                         }
 
-                                        // NIP-05 Badge
                                         if (profile?.nip05 != null && uiState.isNip05Verified) {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
@@ -187,7 +171,6 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                         }
                                     }
 
-                                    // Follow/Unfollow Button for other profiles
                                     if (!uiState.isOwnProfile) {
                                         Button(
                                             onClick = {
@@ -210,7 +193,6 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                             }
                         }
 
-                        // Avatar (Absolute positioned over the sheet edge)
                         Box(
                             modifier = Modifier
                                 .padding(top = 64.dp, start = 16.dp)
@@ -236,7 +218,6 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                             .padding(horizontal = 16.dp)
                             .padding(top = 12.dp)
                     ) {
-                        // Pubkey + Copy
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -261,7 +242,6 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                             )
                         }
 
-                        // Bio
                         if (!profile?.about.isNullOrBlank()) {
                             Text(
                                 text = profile!!.about!!,
@@ -272,7 +252,6 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                             )
                         }
 
-                        // Meta Info (LN, Website, Birthday)
                         Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (!profile?.lud16.isNullOrBlank()) {
                                 MetaInfoItem(NuruIcons.Zap(false), profile!!.lud16!!)
@@ -285,7 +264,6 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                             }
                         }
 
-                        // Badges
                         if (uiState.badges.isNotEmpty()) {
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -306,7 +284,6 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                             }
                         }
 
-                        // Follow Stats
                         Row(
                             modifier = Modifier
                                 .padding(top = 16.dp)
@@ -379,7 +356,6 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                     }
                 }
 
-                // Feed Content
                 if (uiState.isLoading) {
                     items(5) { SkeletonPostItem() }
                 } else {
@@ -449,192 +425,6 @@ fun MetaInfoItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: St
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(icon, null, tint = TextTertiary, modifier = Modifier.size(16.dp))
         Text(text, fontSize = 14.sp, color = color, maxLines = 1)
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun EditProfileModal(
-    profile: UserProfile,
-    onDismiss: () -> Unit,
-    onSave: (UserProfile) -> Unit,
-    viewModel: HomeViewModel
-) {
-    val uiState by viewModel.uiState.collectAsState()
-    var name by remember { mutableStateOf(profile.name ?: "") }
-    var about by remember { mutableStateOf(profile.about ?: "") }
-    var picture by remember { mutableStateOf(profile.picture ?: "") }
-    var banner by remember { mutableStateOf(profile.banner ?: "") }
-    var nip05 by remember { mutableStateOf(profile.nip05 ?: "") }
-    var lud16 by remember { mutableStateOf(profile.lud16 ?: "") }
-    var website by remember { mutableStateOf(profile.website ?: "") }
-    var birthday by remember { mutableStateOf(profile.birthday ?: "") }
-
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var isUploading by remember { mutableStateOf(false) }
-
-    val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let {
-            scope.launch {
-                isUploading = true
-                val bytes = context.contentResolver.openInputStream(it)?.readBytes()
-                val url = viewModel.uploadImage(bytes ?: byteArrayOf(), context.contentResolver.getType(it) ?: "image/jpeg")
-                if (url != null) picture = url
-                isUploading = false
-            }
-        }
-    }
-
-    val bannerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let {
-            scope.launch {
-                isUploading = true
-                val bytes = context.contentResolver.openInputStream(it)?.readBytes()
-                val url = viewModel.uploadImage(bytes ?: byteArrayOf(), context.contentResolver.getType(it) ?: "image/jpeg")
-                if (url != null) banner = url
-                isUploading = false
-            }
-        }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color.Black,
-        dragHandle = null
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.9f)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(onClick = onDismiss) { Text("キャンセル", color = TextSecondary) }
-                Text("プロフィール編集", fontWeight = FontWeight.Bold, color = TextPrimary)
-                TextButton(onClick = { onSave(profile.copy(name=name, about=about, picture=picture, banner=banner, nip05=nip05, lud16=lud16, website=website, birthday=birthday)) }, enabled = !isUploading) {
-                    if (isUploading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = LineGreen)
-                    else Text("保存", color = LineGreen, fontWeight = FontWeight.Bold)
-                }
-            }
-            HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
-
-            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                ProfileEditField("名前", name, { name = it }, "表示名")
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("アップロード先", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("nostr.build", "https://blossom.nostr.build").forEach { server ->
-                            FilterChip(
-                                selected = uiState.uploadServer == server,
-                                onClick = { viewModel.setUploadServer(server) },
-                                label = { Text(if (server == "nostr.build") "nostr.build" else "Blossom", fontSize = 12.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LineGreen,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = BgSecondary,
-                                    labelColor = TextSecondary
-                                ),
-                                border = null,
-                                shape = RoundedCornerShape(16.dp)
-                            )
-                        }
-                    }
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("アイコン画像", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(Modifier.weight(1f)) { NuruTextField(picture, { picture = it }, "https://...", singleLine = true) }
-                        IconButton(onClick = { imageLauncher.launch("image/*") }, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(BgTertiary)) {
-                            Icon(Icons.Default.FileUpload, null, tint = TextPrimary)
-                        }
-                    }
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("バナー画像", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(Modifier.weight(1f)) { NuruTextField(banner, { banner = it }, "https://...", singleLine = true) }
-                        IconButton(onClick = { bannerLauncher.launch("image/*") }, modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(BgTertiary)) {
-                            Icon(Icons.Default.FileUpload, null, tint = TextPrimary)
-                        }
-                    }
-                }
-
-                ProfileEditField("自己紹介", about, { about = it }, "自己紹介", minLines = 3)
-                ProfileEditField("NIP-05", nip05, { nip05 = it }, "name@example.com")
-                ProfileEditField("ライトニングアドレス", lud16, { lud16 = it }, "you@wallet.com")
-                ProfileEditField("ウェブサイト", website, { website = it }, "https://example.com")
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ProfileEditField("誕生日", birthday, { birthday = it }, "MM-DD または YYYY-MM-DD")
-                    Text("例: 01-15 または 2000-01-15", fontSize = 12.sp, color = TextTertiary)
-                }
-                Spacer(Modifier.height(40.dp))
-            }
-        }
-    }
-}
-
-@Composable
-fun ProfileEditField(label: String, value: String, onValueChange: (String) -> Unit, placeholder: String, minLines: Int = 1) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = TextSecondary)
-        NuruTextField(value, onValueChange, placeholder, minLines)
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun NuruTextField(value: String, onValueChange: (String) -> Unit, placeholder: String, minLines: Int = 1, singleLine: Boolean = false) {
-    TextField(
-        value = value,
-        onValueChange = onValueChange,
-        placeholder = { Text(placeholder, color = TextTertiary, fontSize = 14.sp) },
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(0.5.dp, BorderColor, RoundedCornerShape(8.dp)),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = BgTertiary,
-            unfocusedContainerColor = BgSecondary,
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent,
-            cursorColor = LineGreen,
-            focusedTextColor = TextPrimary,
-            unfocusedTextColor = TextPrimary
-        ),
-        textStyle = TextStyle(fontSize = 14.sp),
-        minLines = minLines,
-        singleLine = singleLine,
-        maxLines = if (singleLine) 1 else Int.MAX_VALUE
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun FollowListModal(pubkeys: List<String>, profiles: Map<String, UserProfile>, onDismiss: () -> Unit, onUnfollow: (String) -> Unit, onProfileClick: (String) -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.Black) {
-        Column(Modifier.fillMaxWidth().heightIn(min = 400.dp)) {
-            Text("フォロー中 (${pubkeys.size})", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.padding(16.dp))
-            HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
-            LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
-                items(pubkeys) { pk ->
-                    val p = profiles[pk]
-                    Row(Modifier.fillMaxWidth().clickable { onProfileClick(pk) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        UserAvatar(p?.picture, p?.displayedName ?: "", 40.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(p?.displayedName ?: NostrKeyUtils.shortenPubkey(pk), fontWeight = FontWeight.Bold, color = TextPrimary)
-                            if (p?.nip05 != null) Text(p.nip05, style = MaterialTheme.typography.bodySmall, color = LineGreen)
-                        }
-                        Button(onClick = { onUnfollow(pk) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Color.Red), border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red), shape = RoundedCornerShape(16.dp), modifier = Modifier.height(32.dp)) {
-                            Text("解除", fontSize = 12.sp)
-                        }
-                    }
-                    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
-                }
-            }
-        }
     }
 }
 

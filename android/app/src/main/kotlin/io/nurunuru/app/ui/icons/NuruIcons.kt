@@ -17,8 +17,8 @@ object NuruIcons {
             viewportWidth = 24f,
             viewportHeight = 24f
         ).path(
-            fill = if (filled) SolidColor(Color.Black) else null,
-            stroke = SolidColor(Color.Black),
+            fill = if (filled) SolidColor(Color.White) else null,
+            stroke = SolidColor(Color.White),
             strokeLineWidth = 1.8f,
             strokeLineCap = StrokeCap.Round,
             strokeLineJoin = StrokeJoin.Round
@@ -53,7 +53,7 @@ object NuruIcons {
         viewportHeight = 24f
     ).path(
         fill = null,
-        stroke = SolidColor(Color.Black),
+        stroke = SolidColor(Color.White),
         strokeLineWidth = 1.8f,
         strokeLineCap = StrokeCap.Round,
         strokeLineJoin = StrokeJoin.Round
@@ -83,7 +83,7 @@ object NuruIcons {
         viewportHeight = 24f
     ).path(
         fill = null,
-        stroke = SolidColor(Color.Black),
+        stroke = SolidColor(Color.White),
         strokeLineWidth = 2f,
         strokeLineCap = StrokeCap.Round,
         strokeLineJoin = StrokeJoin.Round
@@ -133,7 +133,7 @@ object NuruIcons {
         viewportHeight = 24f
     ).path(
         fill = null,
-        stroke = SolidColor(Color.Black),
+        stroke = SolidColor(Color.White),
         strokeLineWidth = 1.8f,
         strokeLineCap = StrokeCap.Round,
         strokeLineJoin = StrokeJoin.Round
@@ -166,8 +166,8 @@ object NuruIcons {
             viewportWidth = 24f,
             viewportHeight = 24f
         ).path(
-            fill = if (filled) SolidColor(Color.Black) else null,
-            stroke = SolidColor(Color.Black),
+            fill = if (filled) SolidColor(Color.White) else null,
+            stroke = SolidColor(Color.White),
             strokeLineWidth = 1.8f,
             strokeLineCap = StrokeCap.Round,
             strokeLineJoin = StrokeJoin.Round
