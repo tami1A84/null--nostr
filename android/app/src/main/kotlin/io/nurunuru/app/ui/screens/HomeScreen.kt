@@ -117,23 +117,25 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                             modifier = Modifier
                                 .padding(horizontal = 16.dp)
                                 .fillMaxWidth()
-                                .padding(top = 80.dp),
+                                .padding(top = 64.dp), // Height(112) - Overlap(48) = 64
                             shape = RoundedCornerShape(16.dp),
-                            color = bgPrimary
+                            color = bgPrimary,
+                            shadowElevation = 2.dp
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp)
+                                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 0.dp)
                             ) {
                                 // Avatar and Name section
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.Top
                                 ) {
-                                    // Avatar with border
+                                    // Avatar with border - Overlapping the banner
                                     Box(
                                         modifier = Modifier
+                                            .offset(y = (-40).dp)
                                             .size(80.dp)
                                             .clip(CircleShape)
                                             .background(bgPrimary)
@@ -150,7 +152,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
 
                                     // Name, NIP-05, Pubkey
                                     Column(
-                                        modifier = Modifier.weight(1f).padding(top = 4.dp)
+                                        modifier = Modifier.weight(1f).padding(top = 8.dp)
                                     ) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
@@ -249,7 +251,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                                         text = profile!!.about!!,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = TextSecondary,
-                                        modifier = Modifier.padding(top = 12.dp),
+                                        modifier = Modifier.padding(top = 0.dp), // Adjust padding because of avatar offset
                                         lineHeight = 18.sp
                                     )
                                 }

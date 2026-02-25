@@ -215,4 +215,209 @@ object NuruIcons {
         lineToRelative(9.5f, -9.5f)
         close()
     }.build()
+
+    fun Home(filled: Boolean): ImageVector {
+        return ImageVector.Builder(
+            name = "Home",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).path(
+            fill = if (filled) SolidColor(Color.White) else null,
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = if (filled) 0f else 1.8f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ) {
+            if (filled) {
+                moveTo(12f, 2f)
+                lineTo(3f, 9f)
+                verticalLineToRelative(12f)
+                arcToRelative(1f, 1f, 0f, false, false, 1f, 1f)
+                horizontalLineToRelative(5f)
+                arcToRelative(1f, 1f, 0f, false, false, 1f, -1f)
+                verticalLineToRelative(-5f)
+                arcToRelative(1f, 1f, 0f, false, true, 1f, -1f)
+                horizontalLineToRelative(2f)
+                arcToRelative(1f, 1f, 0f, false, true, 1f, 1f)
+                verticalLineToRelative(5f)
+                arcToRelative(1f, 1f, 0f, false, false, 1f, 1f)
+                horizontalLineToRelative(5f)
+                arcToRelative(1f, 1f, 0f, false, false, 1f, -1f)
+                verticalLineTo(9f)
+                lineToRelative(-9f, -7f)
+                close()
+            } else {
+                moveTo(3f, 9f)
+                lineToRelative(9f, -7f)
+                lineToRelative(9f, 7f)
+                verticalLineToRelative(11f)
+                arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+                horizontalLineTo(5f)
+                arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+                verticalLineTo(9f)
+                close()
+                moveTo(9f, 22f)
+                verticalLineTo(12f)
+                horizontalLineToRelative(6f)
+                verticalLineToRelative(10f)
+            }
+        }.build()
+    }
+
+    fun Talk(filled: Boolean): ImageVector {
+        return ImageVector.Builder(
+            name = "Talk",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).path(
+            fill = if (filled) SolidColor(Color.White) else null,
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = if (filled) 0f else 1.8f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ) {
+            if (filled) {
+                moveTo(12f, 2f)
+                curveTo(6.48f, 2f, 2f, 5.58f, 2f, 10f)
+                curveToRelative(0f, 2.62f, 1.34f, 4.98f, 3.5f, 6.56f)
+                verticalLineTo(21f)
+                lineToRelative(4.22f, -2.33f)
+                curveToRelative(0.73f, 0.18f, 1.49f, 0.33f, 2.28f, 0.33f)
+                curveToRelative(5.52f, 0f, 10f, -3.58f, 10f, -8f)
+                reflectiveCurveTo(17.52f, 2f, 12f, 2f)
+                close()
+            } else {
+                moveTo(8f, 12f)
+                horizontalLineToRelative(0.01f)
+                moveTo(12f, 12f)
+                horizontalLineToRelative(0.01f)
+                moveTo(16f, 12f)
+                horizontalLineToRelative(0.01f)
+                moveTo(21f, 12f)
+                curveToRelative(0f, 4.42f, -4.03f, 8f, -9f, 8f)
+                curveToRelative(-1.5f, 0f, -2.92f, -0.32f, -4.19f, -0.88f)
+                lineTo(3f, 21f)
+                lineToRelative(1.9f, -3.8f)
+                curveTo(3.71f, 15.77f, 3f, 14.01f, 3f, 12f)
+                curveToRelative(0f, -4.42f, 4.03f, -8f, 9f, -8f)
+                reflectiveCurveToRelative(9f, 3.58f, 9f, 8f)
+                close()
+            }
+        }.build()
+    }
+
+    fun Timeline(filled: Boolean): ImageVector {
+        return ImageVector.Builder(
+            name = "Timeline",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).path(
+            fill = if (filled) SolidColor(Color.White) else null,
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = if (filled) 0f else 1.8f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ) {
+            if (filled) {
+                moveTo(4f, 4f)
+                horizontalLineToRelative(16f)
+                arcToRelative(2f, 2f, 0f, false, true, 2f, 2f)
+                verticalLineToRelative(12f)
+                arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+                horizontalLineTo(4f)
+                arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+                verticalLineTo(6f)
+                arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+                close()
+                moveTo(6f, 8f)
+                verticalLineToRelative(2f)
+                horizontalLineToRelative(4f)
+                verticalLineTo(8f)
+                horizontalLineTo(6f)
+                close()
+                moveTo(6f, 12f)
+                verticalLineToRelative(2f)
+                horizontalLineToRelative(8f)
+                verticalLineToRelative(-2f)
+                horizontalLineTo(6f)
+                close()
+                moveTo(6f, 16f)
+                verticalLineToRelative(2f)
+                horizontalLineToRelative(6f)
+                verticalLineToRelative(-2f)
+                horizontalLineTo(6f)
+                close()
+                moveTo(16f, 8f)
+                verticalLineToRelative(10f)
+                horizontalLineToRelative(2f)
+                verticalLineTo(8f)
+                horizontalLineToRelative(-2f)
+                close()
+            } else {
+                moveTo(19f, 20f)
+                horizontalLineTo(5f)
+                arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+                verticalLineTo(6f)
+                arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+                horizontalLineToRelative(14f)
+                arcToRelative(2f, 2f, 0f, false, true, 2f, 2f)
+                verticalLineToRelative(12f)
+                arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+                close()
+                moveTo(16f, 2f)
+                verticalLineToRelative(4f)
+                moveTo(8f, 2f)
+                verticalLineToRelative(4f)
+                moveTo(3f, 10f)
+                horizontalLineToRelative(18f)
+            }
+        }.build()
+    }
+
+    fun Grid(filled: Boolean): ImageVector {
+        return ImageVector.Builder(
+            name = "Grid",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).path(
+            fill = if (filled) SolidColor(Color.White) else null,
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = if (filled) 0f else 1.8f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ) {
+            moveTo(4f, 4f)
+            horizontalLineToRelative(6f)
+            verticalLineToRelative(6f)
+            horizontalLineTo(4f)
+            verticalLineTo(4f)
+            close()
+            moveTo(14f, 4f)
+            horizontalLineToRelative(6f)
+            verticalLineToRelative(6f)
+            horizontalLineToRelative(-6f)
+            verticalLineTo(4f)
+            close()
+            moveTo(4f, 14f)
+            horizontalLineToRelative(6f)
+            verticalLineToRelative(6f)
+            horizontalLineTo(4f)
+            verticalLineToRelative(-6f)
+            close()
+            moveTo(14f, 14f)
+            horizontalLineToRelative(6f)
+            verticalLineToRelative(6f)
+            horizontalLineToRelative(-6f)
+            verticalLineToRelative(-6f)
+            close()
+        }.build()
+    }
 }

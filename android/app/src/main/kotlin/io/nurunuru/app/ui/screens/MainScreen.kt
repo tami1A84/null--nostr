@@ -21,31 +21,21 @@ import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.*
 
-enum class BottomTab(
-    val label: String,
-    val selectedIcon: ImageVector,
-    val unselectedIcon: ImageVector
-) {
-    HOME(
-        label = "ホーム",
-        selectedIcon = Icons.Filled.Home,
-        unselectedIcon = Icons.Outlined.Home
-    ),
-    TALK(
-        label = "トーク",
-        selectedIcon = Icons.Filled.ChatBubble,
-        unselectedIcon = Icons.Outlined.ChatBubble
-    ),
-    TIMELINE(
-        label = "タイムライン",
-        selectedIcon = Icons.Filled.CalendarMonth,
-        unselectedIcon = Icons.Outlined.CalendarMonth
-    ),
-    MINIAPP(
-        label = "ミニアプリ",
-        selectedIcon = Icons.Filled.GridView,
-        unselectedIcon = Icons.Outlined.GridView
-    )
+enum class BottomTab(val label: String) {
+    HOME("ホーム"),
+    TALK("トーク"),
+    TIMELINE("タイムライン"),
+    MINIAPP("ミニアプリ")
+}
+
+@Composable
+fun BottomTab.getIcon(isSelected: Boolean): ImageVector {
+    return when (this) {
+        BottomTab.HOME -> io.nurunuru.app.ui.icons.NuruIcons.Home(isSelected)
+        BottomTab.TALK -> io.nurunuru.app.ui.icons.NuruIcons.Talk(isSelected)
+        BottomTab.TIMELINE -> io.nurunuru.app.ui.icons.NuruIcons.Timeline(isSelected)
+        BottomTab.MINIAPP -> io.nurunuru.app.ui.icons.NuruIcons.Grid(isSelected)
+    }
 }
 
 @Composable
@@ -98,6 +88,7 @@ fun MainScreen(
         },
         bottomBar = {
             NavigationBar(
+                modifier = Modifier.height(56.dp),
                 containerColor = Color(0xFF0A0A0A), // Pure black matching globals.css
                 tonalElevation = 0.dp,
                 windowInsets = WindowInsets.navigationBars
@@ -120,8 +111,9 @@ fun MainScreen(
                         },
                         icon = {
                             Icon(
-                                imageVector = if (isSelected) tab.selectedIcon else tab.unselectedIcon,
-                                contentDescription = tab.label
+                                imageVector = tab.getIcon(isSelected),
+                                contentDescription = tab.label,
+                                modifier = Modifier.size(24.dp)
                             )
                         },
                         label = {
