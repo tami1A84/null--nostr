@@ -1253,7 +1253,7 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   return (
     <div className="min-h-full overflow-x-hidden">
       {/* Header with tabs - fixed position (mobile only) */}
-      <header className="fixed top-0 left-0 right-0 lg:left-[240px] xl:left-[280px] z-30 header-blur border-b border-[var(--border-color)]">
+      <header className="fixed top-0 left-0 right-0 lg:left-[240px] xl:left-[280px] z-30 bg-[var(--bg-primary)] border-b border-[var(--border-color)]">
         <div className="flex items-center justify-between px-4 h-14 lg:h-16">
           {/* Tab Switcher (Mobile only) - Pill Style */}
           <div className="flex items-center gap-2 p-1 bg-[var(--bg-secondary)] rounded-full lg:hidden">

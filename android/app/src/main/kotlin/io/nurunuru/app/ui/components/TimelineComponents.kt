@@ -46,7 +46,7 @@ fun TimelineHeader(
                         .background(nuruColors.bgSecondary, RoundedCornerShape(20.dp))
                         .padding(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Pill-style tabs
                     TimelineTabButton(
@@ -134,9 +134,12 @@ private fun TimelineTabButton(
 }
 
 @Composable
-fun TimelineLoadingState() {
+fun TimelineLoadingState(
+    text: String = "読み込んでいます...",
+    modifier: Modifier = Modifier.fillMaxSize()
+) {
     val nuruColors = LocalNuruColors.current
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(modifier, contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -147,24 +150,66 @@ fun TimelineLoadingState() {
             ) {
                 repeat(3) { index ->
                     val infiniteTransition = rememberInfiniteTransition()
+                    val dotScale by infiniteTransition.animateFloat(
+                        initialValue = 0.6f,
+                        targetValue = 1.0f,
+                        animationSpec = infiniteRepeatable(
+                            animation = keyframes {
+                                durationMillis = 1400
+                                0.6f at 0 with FastOutSlowInEasing
+                                1.0f at 400 with FastOutSlowInEasing
+                                0.6f at 800 with FastOutSlowInEasing
+                                0.6f at 1400 with FastOutSlowInEasing
+                            },
+                            repeatMode = RepeatMode.Restart,
+                            initialStartOffset = StartOffset(index * 160)
+                        )
+                    )
                     val dotAlpha by infiniteTransition.animateFloat(
                         initialValue = 0.5f,
-                        targetValue = 1f,
+                        targetValue = 1.0f,
                         animationSpec = infiniteRepeatable(
-                            animation = tween(600, delayMillis = index * 200),
-                            repeatMode = RepeatMode.Reverse
+                            animation = keyframes {
+                                durationMillis = 1400
+                                0.5f at 0 with FastOutSlowInEasing
+                                1.0f at 400 with FastOutSlowInEasing
+                                0.5f at 800 with FastOutSlowInEasing
+                                0.5f at 1400 with FastOutSlowInEasing
+                            },
+                            repeatMode = RepeatMode.Restart,
+                            initialStartOffset = StartOffset(index * 160)
+                        )
+                    )
+                    val dotY by infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = -4f,
+                        animationSpec = infiniteRepeatable(
+                            animation = keyframes {
+                                durationMillis = 1400
+                                0f at 0 with FastOutSlowInEasing
+                                -4f at 400 with FastOutSlowInEasing
+                                0f at 800 with FastOutSlowInEasing
+                                0f at 1400 with FastOutSlowInEasing
+                            },
+                            repeatMode = RepeatMode.Restart,
+                            initialStartOffset = StartOffset(index * 160)
                         )
                     )
                     Box(
                         modifier = Modifier
                             .size(8.dp)
+                            .graphicsLayer {
+                                scaleX = dotScale
+                                scaleY = dotScale
+                                alpha = dotAlpha
+                                translationY = dotY.dp.toPx()
+                            }
                             .background(LineGreen, RoundedCornerShape(4.dp))
-                            .graphicsLayer { alpha = dotAlpha }
                     )
                 }
             }
             Text(
-                "読み込んでいます...",
+                text,
                 style = MaterialTheme.typography.bodySmall,
                 color = nuruColors.textSecondary
             )
@@ -255,6 +300,15 @@ fun TimelineEmptyState(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                         )
                     }
+                } else {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "しばらくお待ちいただくか、更新してみてください",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 12.sp,
+                        color = nuruColors.textTertiary,
+                        textAlign = TextAlign.Center
+                    )
                 }
             } else {
                 Text(

@@ -351,14 +351,16 @@ fun PostActions(
             icon = NuruIcons.Like(post.isLiked),
             count = post.likeCount,
             onClick = onLike,
-            tint = if (post.isLiked) nuruColors.lineGreen else nuruColors.textTertiary
+            tint = if (post.isLiked) nuruColors.lineGreen else nuruColors.textTertiary,
+            animate = post.isLiked
         )
         // Repost
         ActionButton(
             icon = NuruIcons.Repost,
             count = post.repostCount,
             onClick = onRepost,
-            tint = if (post.isReposted) nuruColors.lineGreen else nuruColors.textTertiary
+            tint = if (post.isReposted) nuruColors.lineGreen else nuruColors.textTertiary,
+            animate = post.isReposted
         )
         // Zap
         ActionButton(
@@ -371,7 +373,8 @@ fun PostActions(
                     android.widget.Toast.makeText(context, "Lightningアドレスが設定されていません", android.widget.Toast.LENGTH_SHORT).show()
                 }
             },
-            tint = nuruColors.textTertiary
+            tint = nuruColors.textTertiary,
+            animate = false // TODO: Trigger animation on successful zap
         )
 
         // Client tag (via)
@@ -432,8 +435,24 @@ private fun ActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     count: Int,
     onClick: () -> Unit,
-    tint: Color
+    tint: Color,
+    animate: Boolean = false
 ) {
+    val scale = remember { Animatable(1f) }
+
+    LaunchedEffect(animate) {
+        if (animate) {
+            scale.animateTo(
+                targetValue = 1.3f,
+                animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
+            )
+            scale.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
+            )
+        }
+    }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -443,7 +462,12 @@ private fun ActionButton(
             imageVector = icon,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier
+                .size(20.dp)
+                .graphicsLayer {
+                    scaleX = scale.value
+                    scaleY = scale.value
+                }
         )
         if (count > 0) {
             Text(

@@ -190,7 +190,13 @@ private fun TimelineContent(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(displayPosts, key = { it.event.id }) { post ->
+                        val alpha = remember { Animatable(0f) }
+                        LaunchedEffect(Unit) {
+                            alpha.animateTo(1f, animationSpec = tween(300))
+                        }
+
                         PostItem(
+                            modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
                             post = post,
                             onLike = { viewModel.likePost(post.event.id) },
                             onRepost = { viewModel.repostPost(post.event.id) },
