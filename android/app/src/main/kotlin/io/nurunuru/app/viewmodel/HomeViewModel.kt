@@ -92,6 +92,31 @@ class HomeViewModel(
         }
     }
 
+    fun muteUser(pubkey: String) {
+        viewModelScope.launch {
+            try {
+                repository.muteUser(pubkey)
+                refresh()
+            } catch (e: Exception) { /* Ignore */ }
+        }
+    }
+
+    fun reportEvent(eventId: String?, pubkey: String, type: String, content: String) {
+        viewModelScope.launch {
+            try {
+                repository.reportEvent(eventId, pubkey, type, content)
+            } catch (e: Exception) { /* Ignore */ }
+        }
+    }
+
+    fun submitBirdwatch(eventId: String, authorPubkey: String, type: String, content: String, url: String) {
+        viewModelScope.launch {
+            try {
+                repository.publishBirdwatchLabel(eventId, authorPubkey, type, content, url)
+            } catch (e: Exception) { /* Ignore */ }
+        }
+    }
+
     fun likePost(eventId: String) {
         viewModelScope.launch {
             try {

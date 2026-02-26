@@ -22,8 +22,13 @@ fun PostItem(
     onLike: () -> Unit,
     onRepost: () -> Unit,
     onProfileClick: (String) -> Unit,
+    repository: io.nurunuru.app.data.NostrRepository,
     modifier: Modifier = Modifier,
     onDelete: (() -> Unit)? = null,
+    onMute: (() -> Unit)? = null,
+    onReport: ((String, String) -> Unit)? = null, // type, content
+    onBirdwatch: ((String, String, String) -> Unit)? = null, // type, content, url
+    onNotInterested: (() -> Unit)? = null,
     isOwnPost: Boolean = false,
     isVerified: Boolean = false,
     birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList()
@@ -44,6 +49,10 @@ fun PostItem(
     // Content Warning state
     val cwReason = post.event.getTagValue("content-warning")
     var isCWExpanded by remember { mutableStateOf(cwReason == null) }
+
+    var showReportModal by remember { mutableStateOf(false) }
+    var showBirdwatchModal by remember { mutableStateOf(false) }
+    var showZapModal by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -71,7 +80,12 @@ fun PostItem(
                     post = post,
                     internalVerified = internalVerified,
                     onProfileClick = onProfileClick,
+                    repository = repository,
                     onDelete = onDelete,
+                    onMute = onMute,
+                    onReport = { showReportModal = true },
+                    onBirdwatch = { showBirdwatchModal = true },
+                    onNotInterested = onNotInterested,
                     isOwnPost = isOwnPost
                 )
 
@@ -85,7 +99,7 @@ fun PostItem(
                         PostCWHeader(reason = cwReason, onCollapse = { isCWExpanded = false })
                     }
 
-                    PostContent(post = post)
+                    PostContent(post = post, repository = repository)
                     PostMedia(post = post)
                 }
 
@@ -99,12 +113,46 @@ fun PostItem(
                 PostActions(
                     post = post,
                     onLike = onLike,
-                    onRepost = onRepost
+                    onRepost = onRepost,
+                    onZap = { showZapModal = true }
                 )
             }
         }
 
         HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+    }
+
+    if (showZapModal) {
+        ZapModal(
+            post = post,
+            repository = repository,
+            onDismiss = { showZapModal = false },
+            onSuccess = { invoice ->
+                showZapModal = false
+                // handle invoice? (currently copy-only in modal)
+            }
+        )
+    }
+
+    if (showReportModal) {
+        ReportModal(
+            onDismiss = { showReportModal = false },
+            onReport = { type, content ->
+                showReportModal = false
+                onReport?.invoke(type, content)
+            }
+        )
+    }
+
+    if (showBirdwatchModal) {
+        BirdwatchModal(
+            onDismiss = { showBirdwatchModal = false },
+            onSubmit = { type, content, url ->
+                showBirdwatchModal = false
+                onBirdwatch?.invoke(type, content, url)
+            },
+            existingNotes = birdwatchNotes
+        )
     }
 }
 

@@ -26,12 +26,10 @@ import io.nurunuru.app.ui.theme.LocalNuruColors
 fun PostActions(
     post: ScoredPost,
     onLike: () -> Unit,
-    onRepost: () -> Unit
+    onRepost: () -> Unit,
+    onZap: () -> Unit
 ) {
     val nuruColors = LocalNuruColors.current
-    val context = LocalContext.current
-    val profile = post.profile
-    val toastState = LocalToastState.current
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -58,13 +56,7 @@ fun PostActions(
         ActionButton(
             icon = NuruIcons.Zap(false),
             count = (post.zapAmount / 1000).toInt(),
-            onClick = {
-                if (profile?.lud16 != null) {
-                    toastState.show("⚡ Zap送信: ${profile.lud16}", ToastType.SUCCESS)
-                } else {
-                    toastState.show("Lightningアドレスが設定されていません", ToastType.WARNING)
-                }
-            },
+            onClick = onZap,
             tint = nuruColors.textTertiary,
             animate = false
         )

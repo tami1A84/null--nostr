@@ -175,7 +175,7 @@ private fun TimelineContent(
 
         when {
             isLoading && displayPosts.isEmpty() -> {
-                TimelineLoadingState()
+                TimelineLoadingSkeleton()
             }
             error != null && displayPosts.isEmpty() -> {
                 TimelineErrorState(onRetry = {
@@ -200,14 +200,34 @@ private fun TimelineContent(
                             alpha.animateTo(1f, animationSpec = tween(300))
                         }
 
-                        PostItem(
-                            modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
-                            post = post,
-                            onLike = { viewModel.likePost(post.event.id) },
-                            onRepost = { viewModel.repostPost(post.event.id) },
-                            onProfileClick = { /* TODO: navigate to profile */ },
-                            birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
-                        )
+                        if (post.event.kind == 30023) {
+                            LongFormPostItem(
+                                post = post,
+                                onLike = { viewModel.likePost(post.event.id) },
+                                onRepost = { viewModel.repostPost(post.event.id) },
+                                onProfileClick = { /* TODO */ },
+                                repository = repository,
+                                onMute = { viewModel.muteUser(post.event.pubkey) },
+                                onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
+                                onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
+                                onNotInterested = { viewModel.setNotInterested(post.event.id) },
+                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
+                            )
+                        } else {
+                            PostItem(
+                                modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
+                                post = post,
+                                onLike = { viewModel.likePost(post.event.id) },
+                                onRepost = { viewModel.repostPost(post.event.id) },
+                                onProfileClick = { /* TODO: navigate to profile */ },
+                                repository = repository,
+                                onMute = { viewModel.muteUser(post.event.pubkey) },
+                                onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
+                                onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
+                                onNotInterested = { viewModel.setNotInterested(post.event.id) },
+                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
+                            )
+                        }
                     }
                 }
             }

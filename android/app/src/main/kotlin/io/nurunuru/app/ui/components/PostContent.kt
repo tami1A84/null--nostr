@@ -7,9 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -96,7 +94,12 @@ fun PostHeader(
     post: ScoredPost,
     internalVerified: Boolean,
     onProfileClick: (String) -> Unit,
+    repository: io.nurunuru.app.data.NostrRepository,
     onDelete: (() -> Unit)? = null,
+    onMute: (() -> Unit)? = null,
+    onReport: (() -> Unit)? = null,
+    onBirdwatch: (() -> Unit)? = null,
+    onNotInterested: (() -> Unit)? = null,
     isOwnPost: Boolean = false
 ) {
     val nuruColors = LocalNuruColors.current
@@ -142,15 +145,11 @@ fun PostHeader(
                 }
             }
 
-            post.badges.take(3).forEach { badgeUrl ->
-                AsyncImage(
-                    model = badgeUrl,
-                    contentDescription = "Badge",
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                )
-            }
+            BadgeDisplay(
+                pubkey = post.event.pubkey,
+                repository = repository,
+                initialBadges = post.badges
+            )
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -159,24 +158,53 @@ fun PostHeader(
                 style = MaterialTheme.typography.bodySmall,
                 color = nuruColors.textTertiary
             )
-            if (isOwnPost && onDelete != null) {
-                Box {
-                    IconButton(
-                        onClick = { showMenu = true },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = "Menu",
-                            tint = nuruColors.textTertiary,
-                            modifier = Modifier.size(16.dp)
+
+            Box {
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Menu",
+                        tint = nuruColors.textTertiary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                ) {
+                    if (onNotInterested != null && !isOwnPost) {
+                        DropdownMenuItem(
+                            text = { Text("この投稿に興味がない") },
+                            onClick = { showMenu = false; onNotInterested() },
+                            leadingIcon = { Icon(NuruIcons.Talk(false), null) } // Using Talk as placeholder for not interested
                         )
                     }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false },
-                        modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-                    ) {
+                    if (onBirdwatch != null && !isOwnPost) {
+                        DropdownMenuItem(
+                            text = { Text("Birdwatch", color = Color(0xFF2196F3)) },
+                            onClick = { showMenu = false; onBirdwatch() },
+                            leadingIcon = { Icon(Icons.Default.Check, null, tint = Color(0xFF2196F3)) }
+                        )
+                    }
+                    if (onReport != null && !isOwnPost) {
+                        DropdownMenuItem(
+                            text = { Text("通報", color = Color(0xFFFF9800)) },
+                            onClick = { showMenu = false; onReport() },
+                            leadingIcon = { Icon(Icons.Default.Warning, null, tint = Color(0xFFFF9800)) }
+                        )
+                    }
+                    if (onMute != null && !isOwnPost) {
+                        DropdownMenuItem(
+                            text = { Text("ミュート", color = Color.Red) },
+                            onClick = { showMenu = false; onMute() },
+                            leadingIcon = { Icon(Icons.Default.Block, null, tint = Color.Red) }
+                        )
+                    }
+                    if (isOwnPost && onDelete != null) {
                         DropdownMenuItem(
                             text = { Text("削除", color = Color.Red) },
                             onClick = {
@@ -195,7 +223,7 @@ fun PostHeader(
 }
 
 @Composable
-fun PostContent(post: ScoredPost) {
+fun PostContent(post: ScoredPost, repository: io.nurunuru.app.data.NostrRepository) {
     val nuruColors = LocalNuruColors.current
     val content = post.event.content
     val cleanContent = removeImageUrls(content).trim()
@@ -211,53 +239,119 @@ fun PostContent(post: ScoredPost) {
 
     val inlineContent = mutableMapOf<String, InlineTextContent>()
 
-    val annotated = buildAnnotatedString {
-        val regex = Regex("(:\\w+:|#\\w+|@\\w+|nostr:\\w+)")
-        var lastIdx = 0
+    val parts = mutableListOf<ContentPart>()
+    val regex = Regex("(https?://[^\\s]+|nostr:(?:note1|nevent1|npub1|nprofile1|naddr1)[a-z0-9]{58,}|#\\w+|:\\w+:)")
+    var lastIdx = 0
 
-        regex.findAll(cleanContent).forEach { match ->
-            append(cleanContent.substring(lastIdx, match.range.first))
-            val value = match.value
-
-            if (value.startsWith(":") && value.endsWith(":")) {
-                val shortcode = value.removeSurrounding(":")
-                val url = emojis[shortcode]
-                if (url != null) {
-                    val id = "emoji_$shortcode"
-                    inlineContent[id] = InlineTextContent(
-                        Placeholder(20.sp, 20.sp, PlaceholderVerticalAlign.Center)
-                    ) {
-                        AsyncImage(
-                            model = url,
-                            contentDescription = value,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                    appendInlineContent(id, value)
-                } else {
-                    append(value)
-                }
-            } else if (value.startsWith("#")) {
-                withStyle(SpanStyle(color = nuruColors.lineGreen, fontWeight = FontWeight.Medium)) {
-                    append(value)
-                }
-            } else {
-                withStyle(SpanStyle(color = nuruColors.lineGreen)) {
-                    append(value)
-                }
-            }
-            lastIdx = match.range.last + 1
+    regex.findAll(cleanContent).forEach { match ->
+        if (match.range.first > lastIdx) {
+            parts.add(ContentPart.Text(cleanContent.substring(lastIdx, match.range.first)))
         }
-        append(cleanContent.substring(lastIdx))
+        val value = match.value
+        when {
+            value.startsWith("http") -> parts.add(ContentPart.Link(value))
+            value.startsWith("nostr:") -> parts.add(ContentPart.Nostr(value))
+            value.startsWith("#") -> parts.add(ContentPart.Hashtag(value))
+            value.startsWith(":") && value.endsWith(":") -> parts.add(ContentPart.Emoji(value))
+        }
+        lastIdx = match.range.last + 1
+    }
+    if (lastIdx < cleanContent.length) {
+        parts.add(ContentPart.Text(cleanContent.substring(lastIdx)))
     }
 
-    Text(
-        text = annotated,
-        inlineContent = inlineContent,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onBackground,
-        lineHeight = 22.sp
-    )
+    val annotated = buildAnnotatedString {
+        parts.forEach { part ->
+            when (part) {
+                is ContentPart.Text -> append(part.text)
+                is ContentPart.Hashtag -> withStyle(SpanStyle(color = nuruColors.lineGreen, fontWeight = FontWeight.Medium)) { append(part.tag) }
+                is ContentPart.Emoji -> {
+                    val shortcode = part.code.removeSurrounding(":")
+                    val url = emojis[shortcode]
+                    if (url != null) {
+                        val id = "emoji_$shortcode"
+                        inlineContent[id] = InlineTextContent(
+                            Placeholder(20.sp, 20.sp, PlaceholderVerticalAlign.Center)
+                        ) {
+                            AsyncImage(model = url, contentDescription = part.code, modifier = Modifier.fillMaxSize())
+                        }
+                        appendInlineContent(id, part.code)
+                    } else {
+                        append(part.code)
+                    }
+                }
+                is ContentPart.Link -> withStyle(SpanStyle(color = nuruColors.lineGreen)) { append(part.url.take(40) + if (part.url.length > 40) "..." else "") }
+                is ContentPart.Nostr -> withStyle(SpanStyle(color = nuruColors.lineGreen)) { append(part.link.take(30) + "...") }
+            }
+        }
+    }
+
+    Column {
+        Text(
+            text = annotated,
+            inlineContent = inlineContent,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            lineHeight = 22.sp
+        )
+
+        // Render URL previews and embedded notes
+        parts.forEach { part ->
+            when (part) {
+                is ContentPart.Link -> URLPreview(url = part.url)
+                is ContentPart.Nostr -> EmbeddedNostrContent(link = part.link, repository = repository)
+                else -> {}
+            }
+        }
+    }
+}
+
+sealed class ContentPart {
+    data class Text(val text: String) : ContentPart()
+    data class Link(val url: String) : ContentPart()
+    data class Nostr(val link: String) : ContentPart()
+    data class Hashtag(val tag: String) : ContentPart()
+    data class Emoji(val code: String) : ContentPart()
+}
+
+@Composable
+fun EmbeddedNostrContent(link: String, repository: io.nurunuru.app.data.NostrRepository) {
+    val bech32 = link.removePrefix("nostr:")
+    var note by remember { mutableStateOf<ScoredPost?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(link) {
+        val parsed = NostrKeyUtils.parseNostrLink(bech32)
+        if (parsed != null && (parsed.type == "note" || parsed.type == "nevent")) {
+            note = repository.fetchEvent(parsed.id)
+        }
+        isLoading = false
+    }
+
+    if (isLoading) {
+        PostSkeleton()
+    } else if (note != null) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { /* TODO: Navigate to note */ },
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    UserAvatar(pictureUrl = note!!.profile?.picture, displayName = note!!.profile?.displayedName ?: "", size = 20.dp)
+                    Text(text = note!!.profile?.displayedName ?: NostrKeyUtils.shortenPubkey(note!!.event.pubkey), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(text = note!!.event.content, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    } else {
+        Text(text = link, color = LocalNuruColors.current.lineGreen, style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 @Composable
@@ -323,42 +417,6 @@ fun PostMedia(post: ScoredPost) {
     }
 }
 
-@Composable
-fun BirdwatchDisplay(notes: List<io.nurunuru.app.data.models.NostrEvent>) {
-    Surface(
-        color = Color(0xFF2196F3).copy(alpha = 0.05f),
-        shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF2196F3).copy(alpha = 0.2f)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.Info,
-                    contentDescription = null,
-                    tint = Color(0xFF2196F3),
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "コミュニティノート",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFF2196F3),
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            notes.forEach { note ->
-                Text(
-                    text = note.content,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(vertical = 2.dp)
-                )
-            }
-        }
-    }
-}
 
 @Composable
 fun PostImageGrid(images: List<String>) {

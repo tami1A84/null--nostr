@@ -92,9 +92,12 @@ fun HomeScreen(
                 contentPadding = PaddingValues(bottom = 16.dp) // Optimized
             ) {
                 item {
-                    ProfileHeader(
-                        profile = profile,
-                        isOwnProfile = uiState.isOwnProfile,
+                    if (profile == null) {
+                        ProfileSkeleton()
+                    } else {
+                        ProfileHeader(
+                            profile = profile,
+                            isOwnProfile = uiState.isOwnProfile,
                         isFollowing = uiState.isFollowing,
                         isNip05Verified = uiState.isNip05Verified,
                         followCount = uiState.followCount,
@@ -108,8 +111,9 @@ fun HomeScreen(
                             viewModel.loadFollowProfiles()
                             showFollowList = true
                         },
-                        clipboardManager = clipboardManager
-                    )
+                            clipboardManager = clipboardManager
+                        )
+                    }
                 }
 
                 item {
@@ -124,7 +128,7 @@ fun HomeScreen(
                 if (uiState.isLoading) {
                     items(5) {
                         Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
-                            ProfileSkeletonPostItem()
+                            PostSkeleton()
                         }
                     }
                 } else {
@@ -143,16 +147,36 @@ fun HomeScreen(
                                 alpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(300))
                             }
                             Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
-                                PostItem(
-                                    modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
-                                    post = post,
-                                    onLike = { viewModel.likePost(post.event.id) },
-                                    onRepost = { viewModel.repostPost(post.event.id) },
-                                    onProfileClick = { viewModel.loadProfile(it) },
-                                    onDelete = { postToDelete = post.event.id },
-                                    isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
-                                    isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false
-                                )
+                                if (post.event.kind == 30023) {
+                                    LongFormPostItem(
+                                        post = post,
+                                        onLike = { viewModel.likePost(post.event.id) },
+                                        onRepost = { viewModel.repostPost(post.event.id) },
+                                        onProfileClick = { viewModel.loadProfile(it) },
+                                        repository = repository,
+                                        onDelete = { postToDelete = post.event.id },
+                                        onMute = { viewModel.muteUser(post.event.pubkey) },
+                                        onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
+                                        onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
+                                        isOwnPost = post.event.pubkey == viewModel.myPubkeyHex
+                                    )
+                                } else {
+                                    PostItem(
+                                        modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
+                                        post = post,
+                                        onLike = { viewModel.likePost(post.event.id) },
+                                        onRepost = { viewModel.repostPost(post.event.id) },
+                                        onProfileClick = { viewModel.loadProfile(it) },
+                                        repository = repository,
+                                        onDelete = { postToDelete = post.event.id },
+                                        onMute = { viewModel.muteUser(post.event.pubkey) },
+                                        onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
+                                        onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
+                                        onNotInterested = { /* Home doesn't need this for now */ },
+                                        isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
+                                        isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false
+                                    )
+                                }
                             }
                         }
                     }

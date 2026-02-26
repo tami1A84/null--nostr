@@ -4,6 +4,8 @@ import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 /**
  * High-level Nostr operations.
@@ -255,6 +257,51 @@ class NostrRepository(
         return zapAmounts
     }
 
+    suspend fun fetchLightningInvoice(lud16: String, amountSats: Long, comment: String = ""): String? {
+        if (!lud16.contains("@")) return null
+        val (name, domain) = lud16.split("@")
+        val lnurlUrl = "https://$domain/.well-known/lnurlp/$name"
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val okHttpClient = OkHttpClient()
+                val metaRequest = Request.Builder().url(lnurlUrl).build()
+                val metaResponse = okHttpClient.newCall(metaRequest).execute()
+                if (!metaResponse.isSuccessful) return@withContext null
+
+                val metaBody = metaResponse.body?.string() ?: return@withContext null
+                val meta = json.parseToJsonElement(metaBody).jsonObject
+
+                val minSendable = meta["minSendable"]?.jsonPrimitive?.long ?: 0L
+                val maxSendable = meta["maxSendable"]?.jsonPrimitive?.long ?: 1000000000L
+                val amountMsats = amountSats * 1000
+
+                if (amountMsats < minSendable || amountMsats > maxSendable) return@withContext null
+
+                val callback = meta["callback"]?.jsonPrimitive?.content ?: return@withContext null
+                var callbackUrl = "$callback?amount=$amountMsats"
+
+                val commentAllowed = meta["commentAllowed"]?.jsonPrimitive?.int ?: 0
+                if (comment.isNotBlank() && comment.length <= commentAllowed) {
+                    callbackUrl += "&comment=${java.net.URLEncoder.encode(comment, "UTF-8")}"
+                }
+
+                val invRequest = Request.Builder().url(callbackUrl).build()
+                val invResponse = okHttpClient.newCall(invRequest).execute()
+                if (!invResponse.isSuccessful) return@withContext null
+
+                val invBody = invResponse.body?.string() ?: return@withContext null
+                val invData = json.parseToJsonElement(invBody).jsonObject
+
+                if (invData["status"]?.jsonPrimitive?.content == "ERROR") return@withContext null
+
+                invData["pr"]?.jsonPrimitive?.content
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
     suspend fun fetchBirdwatchNotes(eventIds: List<String>): Map<String, List<NostrEvent>> {
         if (eventIds.isEmpty()) return emptyMap()
         val filter = NostrClient.Filter(
@@ -419,6 +466,49 @@ class NostrRepository(
             kind = NostrKind.DELETION,
             content = reason,
             tags = listOf(listOf("e", eventId))
+        ) != null
+    }
+
+    suspend fun reportEvent(eventId: String?, pubkey: String, reportType: String, content: String = ""): Boolean {
+        val tags = mutableListOf(listOf("p", pubkey, reportType))
+        if (eventId != null) {
+            tags.add(listOf("e", eventId, reportType))
+        }
+        return client.publish(kind = 1984, content = content, tags = tags) != null
+    }
+
+    suspend fun publishBirdwatchLabel(eventId: String, authorPubkey: String, contextType: String, content: String, sourceUrl: String = ""): Boolean {
+        val fullContent = if (sourceUrl.isNotBlank()) "$content\n\nソース: $sourceUrl" else content
+        val tags = listOf(
+            listOf("L", "birdwatch"),
+            listOf("l", contextType, "birdwatch"),
+            listOf("e", eventId),
+            listOf("p", authorPubkey)
+        )
+        return client.publish(kind = 1985, content = fullContent, tags = tags) != null
+    }
+
+    suspend fun muteUser(pubkeyHex: String): Boolean {
+        // NIP-51 mute list (Kind 10000)
+        val filter = NostrClient.Filter(
+            kinds = listOf(10000),
+            authors = listOf(prefs.publicKeyHex ?: return false),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        val latest = events.maxByOrNull { it.createdAt }
+
+        val tags = latest?.tags?.toMutableList() ?: mutableListOf()
+        if (tags.any { it.firstOrNull() == "p" && it.getOrNull(1) == pubkeyHex }) {
+            return true
+        }
+
+        tags.add(listOf("p", pubkeyHex))
+
+        return client.publish(
+            kind = 10000,
+            content = latest?.content ?: "",
+            tags = tags
         ) != null
     }
 

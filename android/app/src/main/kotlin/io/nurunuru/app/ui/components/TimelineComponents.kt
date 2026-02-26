@@ -109,82 +109,8 @@ fun TimelineLoadingState(
     text: String = "読み込んでいます...",
     modifier: Modifier = Modifier.fillMaxSize()
 ) {
-    val nuruColors = LocalNuruColors.current
     Box(modifier, contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                repeat(3) { index ->
-                    val infiniteTransition = rememberInfiniteTransition()
-                    val dotScale by infiniteTransition.animateFloat(
-                        initialValue = 0.6f,
-                        targetValue = 1.0f,
-                        animationSpec = infiniteRepeatable(
-                            animation = keyframes {
-                                durationMillis = 1400
-                                0.6f at 0 using FastOutSlowInEasing
-                                1.0f at 400 using FastOutSlowInEasing
-                                0.6f at 800 using FastOutSlowInEasing
-                                0.6f at 1400 using FastOutSlowInEasing
-                            },
-                            repeatMode = RepeatMode.Restart,
-                            initialStartOffset = StartOffset(index * 160)
-                        )
-                    )
-                    val dotAlpha by infiniteTransition.animateFloat(
-                        initialValue = 0.5f,
-                        targetValue = 1.0f,
-                        animationSpec = infiniteRepeatable(
-                            animation = keyframes {
-                                durationMillis = 1400
-                                0.5f at 0 using FastOutSlowInEasing
-                                1.0f at 400 using FastOutSlowInEasing
-                                0.5f at 800 using FastOutSlowInEasing
-                                0.5f at 1400 using FastOutSlowInEasing
-                            },
-                            repeatMode = RepeatMode.Restart,
-                            initialStartOffset = StartOffset(index * 160)
-                        )
-                    )
-                    val dotY by infiniteTransition.animateFloat(
-                        initialValue = 0f,
-                        targetValue = -4f,
-                        animationSpec = infiniteRepeatable(
-                            animation = keyframes {
-                                durationMillis = 1400
-                                0f at 0 using FastOutSlowInEasing
-                                -4f at 400 using FastOutSlowInEasing
-                                0f at 800 using FastOutSlowInEasing
-                                0f at 1400 using FastOutSlowInEasing
-                            },
-                            repeatMode = RepeatMode.Restart,
-                            initialStartOffset = StartOffset(index * 160)
-                        )
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .graphicsLayer {
-                                scaleX = dotScale
-                                scaleY = dotScale
-                                alpha = dotAlpha
-                                translationY = dotY.dp.toPx()
-                            }
-                            .background(LineGreen, RoundedCornerShape(4.dp))
-                    )
-                }
-            }
-            Text(
-                text,
-                style = MaterialTheme.typography.bodySmall,
-                color = nuruColors.textSecondary
-            )
-        }
+        FriendlyLoading(message = text)
     }
 }
 
