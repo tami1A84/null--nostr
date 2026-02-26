@@ -23,6 +23,11 @@ import io.nurunuru.app.viewmodel.AuthViewModel
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        var instance: MainActivity? = null
+            private set
+    }
+
     private var authViewModel: AuthViewModel? = null
     private lateinit var signerLauncher: ActivityResultLauncher<Intent>
 
@@ -32,6 +37,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        instance = this
         enableEdgeToEdge()
 
         signerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -77,6 +83,11 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntent(intent)
+    }
+
+    override fun onDestroy() {
+        if (instance == this) instance = null
+        super.onDestroy()
     }
 
     private fun handleIntent(intent: Intent?) {

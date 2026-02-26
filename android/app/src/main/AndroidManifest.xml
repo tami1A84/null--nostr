@@ -9,6 +9,17 @@
     <queries>
         <package android:name="com.greenart7c3.nostrsigner" />
         <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="nostrsigner" />
+        </intent>
+        <intent>
+            <action android:name="com.nostr.signer.GET_PUBLIC_KEY" />
+        </intent>
+        <intent>
+            <action android:name="com.nostr.signer.SIGN_EVENT" />
+        </intent>
+        <intent>
             <action android:name="com.greenart7c3.nostr.signer.GET_PUBLIC_KEY" />
         </intent>
         <intent>

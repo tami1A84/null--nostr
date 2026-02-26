@@ -50,7 +50,7 @@ fun LoginScreen(
 
     val amberLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val pubkey = result.data?.getStringExtra("signature") ?: result.data?.getStringExtra("pubKey")
+            val pubkey = result.data?.getStringExtra("pubKey") ?: result.data?.getStringExtra("signature")
             if (pubkey != null) {
                 viewModel.loginWithAmber(pubkey)
             }
@@ -222,7 +222,7 @@ fun LoginScreen(
                     Button(
                         onClick = {
                             try {
-                                amberLauncher.launch(ExternalSigner.createGetPublicKeyIntent())
+                                amberLauncher.launch(ExternalSigner.createGetPublicKeyIntent(context))
                             } catch (e: Exception) {
                                 android.widget.Toast.makeText(context, "外部署名アプリが見つかりません", android.widget.Toast.LENGTH_SHORT).show()
                             }

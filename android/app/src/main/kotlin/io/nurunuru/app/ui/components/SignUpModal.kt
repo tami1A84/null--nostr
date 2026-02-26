@@ -500,7 +500,7 @@ fun ProfileStep(
                 .size(100.dp)
                 .clip(CircleShape)
                 .background(nuruColors.bgSecondary)
-                .clickable { pictureLauncher.launch("image/*") },
+                .clickable(enabled = !uploadingPicture) { pictureLauncher.launch("image/*") },
             contentAlignment = Alignment.Center
         ) {
             if (picture.isNotEmpty()) {
@@ -528,7 +528,11 @@ fun ProfileStep(
                 }
             }
         }
-        Text("アイコン画像をアップロード", fontSize = 12.sp, color = nuruColors.textTertiary)
+        Text(
+            if (uploadingPicture) "アップロード中..." else "アイコン画像をアップロード",
+            fontSize = 12.sp,
+            color = if (uploadingPicture) LineGreen else nuruColors.textTertiary
+        )
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {

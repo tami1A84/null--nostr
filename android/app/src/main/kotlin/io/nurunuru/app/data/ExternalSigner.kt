@@ -7,7 +7,9 @@ import android.util.Log
 import io.nurunuru.app.MainActivity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -20,26 +22,43 @@ object ExternalSigner : AppSigner {
 
     private const val PACKAGE_NAME = "com.greenart7c3.nostrsigner"
 
-    // NIP-55 Actions
-    private const val ACTION_GET_PUBLIC_KEY = "com.greenart7c3.nostr.signer.GET_PUBLIC_KEY"
-    private const val ACTION_SIGN_EVENT = "com.greenart7c3.nostr.signer.SIGN_EVENT"
-    private const val ACTION_NIP04_ENCRYPT = "com.greenart7c3.nostr.signer.NIP_04_ENCRYPT"
-    private const val ACTION_NIP04_DECRYPT = "com.greenart7c3.nostr.signer.NIP_04_DECRYPT"
-    private const val ACTION_NIP44_ENCRYPT = "com.greenart7c3.nostr.signer.NIP_44_ENCRYPT"
-    private const val ACTION_NIP44_DECRYPT = "com.greenart7c3.nostr.signer.NIP_44_DECRYPT"
+    // NIP-55 Actions (Official)
+    private const val ACTION_GET_PUBLIC_KEY = "com.nostr.signer.GET_PUBLIC_KEY"
+    private const val ACTION_SIGN_EVENT = "com.nostr.signer.SIGN_EVENT"
+    private const val ACTION_NIP04_ENCRYPT = "com.nostr.signer.NIP_04_ENCRYPT"
+    private const val ACTION_NIP04_DECRYPT = "com.nostr.signer.NIP_04_DECRYPT"
+    private const val ACTION_NIP44_ENCRYPT = "com.nostr.signer.NIP_44_ENCRYPT"
+    private const val ACTION_NIP44_DECRYPT = "com.nostr.signer.NIP_44_DECRYPT"
+
+    // Legacy Amber Actions (Backwards compatibility)
+    private const val ACTION_GET_PUBLIC_KEY_LEGACY = "com.greenart7c3.nostr.signer.GET_PUBLIC_KEY"
+    private const val ACTION_SIGN_EVENT_LEGACY = "com.greenart7c3.nostr.signer.SIGN_EVENT"
 
     private var pendingRequest: CompletableDeferred<Intent>? = null
     private val mutex = kotlinx.coroutines.sync.Mutex()
 
-    fun createGetPublicKeyIntent(): Intent {
-        return Intent(ACTION_GET_PUBLIC_KEY).apply {
+    fun createGetPublicKeyIntent(context: Context?): Intent {
+        val intent = Intent(ACTION_GET_PUBLIC_KEY).apply {
             `package` = PACKAGE_NAME
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
+
+        // Fallback to legacy action if official not resolved
+        if (context != null && intent.resolveActivity(context.packageManager) == null) {
+            intent.action = ACTION_GET_PUBLIC_KEY_LEGACY
+        }
+
+        // Last fallback: nostrsigner: scheme
+        if (context != null && intent.resolveActivity(context.packageManager) == null) {
+            intent.action = Intent.ACTION_VIEW
+            intent.data = Uri.parse("nostrsigner:")
+        }
+
+        return intent
     }
 
-    fun createSignEventIntent(eventJson: String, pubkey: String): Intent {
-        return Intent(ACTION_SIGN_EVENT).apply {
+    fun createSignEventIntent(context: Context?, eventJson: String, pubkey: String): Intent {
+        val intent = Intent(ACTION_SIGN_EVENT).apply {
             `package` = PACKAGE_NAME
             putExtra("type", "sign_event")
             putExtra("event", eventJson)
@@ -47,6 +66,12 @@ object ExternalSigner : AppSigner {
             putExtra("returnType", "event")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
+
+        if (context != null && intent.resolveActivity(context.packageManager) == null) {
+            intent.action = ACTION_SIGN_EVENT_LEGACY
+        }
+
+        return intent
     }
 
     fun createDecryptIntent(content: String, pubkey: String, currentUser: String, nip44: Boolean): Intent {
@@ -74,7 +99,7 @@ object ExternalSigner : AppSigner {
     }
 
     suspend fun signEvent(context: Context?, eventJson: String, pubkey: String): String? {
-        val intent = createSignEventIntent(eventJson, pubkey)
+        val intent = createSignEventIntent(context, eventJson, pubkey)
         val result = request(context, intent) ?: return null
         return result.getStringExtra("event") ?: result.getStringExtra("signature")
     }
@@ -98,7 +123,9 @@ object ExternalSigner : AppSigner {
         if (context is MainActivity) {
             context.launchExternalSigner(intent)
         } else {
-            return null
+            // Fallback for when context is not MainActivity (try to use a global reference if we have one)
+            // For now, if it's not MainActivity, we might fail unless we implement the tracker
+            MainActivity.instance?.launchExternalSigner(intent) ?: return null
         }
 
         return try {
@@ -115,25 +142,41 @@ object ExternalSigner : AppSigner {
     }
 
     override suspend fun signEvent(eventJson: String): String? {
-        val intent = createSignEventIntent(eventJson, getPublicKeyHex())
+        val intent = createSignEventIntent(null, eventJson, getPublicKeyHex())
         val result = request(null, intent) ?: return null
-        return result.getStringExtra("event") ?: result.getStringExtra("signature")
+        val signedEventJson = result.getStringExtra("event")
+        if (signedEventJson != null) return signedEventJson
+
+        val signature = result.getStringExtra("signature")
+        if (signature != null) {
+            // Reconstruct event if only signature is returned
+            return try {
+                val map = Json.parseToJsonElement(eventJson).jsonObject.toMutableMap()
+                map["sig"] = jsonPrimitive(signature)
+                Json.encodeToString(JsonObject(map))
+            } catch (e: Exception) {
+                null
+            }
+        }
+        return null
     }
+
+    private fun jsonPrimitive(value: String) = kotlinx.serialization.json.JsonPrimitive(value)
 
     override suspend fun nip04Encrypt(receiverPubkeyHex: String, content: String): String? {
-        return encrypt(null, content, receiverPubkeyHex, "", false)
+        return encrypt(null, content, receiverPubkeyHex, getPublicKeyHex(), false)
     }
 
-    override suspend fun nip04Decrypt(senderPubkeyHex: String, content: String): String? {
-        return decrypt(null, content, senderPubkeyHex, "", false)
+    override suspend fun nip04Decrypt(senderPubkeyHex: String, encryptedContent: String): String? {
+        return decrypt(null, encryptedContent, senderPubkeyHex, getPublicKeyHex(), false)
     }
 
     override suspend fun nip44Encrypt(receiverPubkeyHex: String, content: String): String? {
-        return encrypt(null, content, receiverPubkeyHex, "", true)
+        return encrypt(null, content, receiverPubkeyHex, getPublicKeyHex(), true)
     }
 
-    override suspend fun nip44Decrypt(senderPubkeyHex: String, content: String): String? {
-        return decrypt(null, content, senderPubkeyHex, "", true)
+    override suspend fun nip44Decrypt(senderPubkeyHex: String, encryptedContent: String): String? {
+        return decrypt(null, encryptedContent, senderPubkeyHex, getPublicKeyHex(), true)
     }
 
     fun onResult(intent: Intent?) {
