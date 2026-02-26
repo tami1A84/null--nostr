@@ -579,6 +579,19 @@ class NostrRepository(
         }
     }
 
+    suspend fun updateRelayList(relays: List<Triple<String, Boolean, Boolean>>): Boolean {
+        val tags = relays.map { (url, read, write) ->
+            val marker = when {
+                read && write -> null
+                read -> "read"
+                write -> "write"
+                else -> null
+            }
+            if (marker != null) listOf("r", url, marker) else listOf("r", url)
+        }
+        return client.publish(kind = 10002, content = "", tags = tags) != null
+    }
+
     suspend fun updateProfile(profile: UserProfile): Boolean {
         // Fetch current profile to merge fields and avoid losing unknown fields
         val filter = NostrClient.Filter(

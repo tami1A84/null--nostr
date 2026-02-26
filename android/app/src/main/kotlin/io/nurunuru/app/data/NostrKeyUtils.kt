@@ -11,6 +11,13 @@ data class NostrLink(val type: String, val id: String)
 object NostrKeyUtils {
 
     /**
+     * Generate new Nostr keys.
+     */
+    fun generateKeys(): Keys {
+        return Keys.generate()
+    }
+
+    /**
      * Parse a private key from nsec bech32 or hex string.
      * Returns hex private key or null on error.
      */
