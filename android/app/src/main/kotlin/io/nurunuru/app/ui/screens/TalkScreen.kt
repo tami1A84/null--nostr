@@ -67,6 +67,7 @@ private fun ConversationListScreen(
     var showNewChatModal by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 windowInsets = WindowInsets.statusBars,
@@ -205,6 +206,7 @@ private fun ConversationScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 windowInsets = WindowInsets.statusBars,

@@ -70,6 +70,7 @@ fun TimelineScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TimelineHeader(
                 feedType = uiState.feedType,

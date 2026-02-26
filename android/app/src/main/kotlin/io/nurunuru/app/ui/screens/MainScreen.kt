@@ -83,6 +83,7 @@ fun MainScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             // Each screen should ideally handle its own top bar to manage internal state
             // but we need to coordinate insets.

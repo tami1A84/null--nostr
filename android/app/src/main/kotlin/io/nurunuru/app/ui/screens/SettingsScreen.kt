@@ -59,6 +59,7 @@ fun SettingsScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 windowInsets = WindowInsets.statusBars,
@@ -209,6 +210,7 @@ private fun RelaySettingsView(prefs: AppPreferences, onBack: () -> Unit) {
     var newRelayInput by remember { mutableStateOf("") }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 windowInsets = WindowInsets.statusBars,

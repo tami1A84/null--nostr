@@ -55,6 +55,7 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
     var postToDelete by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = { Text("ホーム", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
