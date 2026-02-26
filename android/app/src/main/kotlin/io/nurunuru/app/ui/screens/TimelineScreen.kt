@@ -46,6 +46,7 @@ fun TimelineScreen(
     var showPostModal by remember { mutableStateOf(false) }
     var showSearchModal by remember { mutableStateOf(false) }
     var showNotificationsModal by remember { mutableStateOf(false) }
+    var viewingPubkey by remember { mutableStateOf<String?>(null) }
 
     // Pager state for Recommended (0) and Following (1)
     // Default to Following (index 1)
@@ -205,7 +206,7 @@ private fun TimelineContent(
                                 post = post,
                                 onLike = { viewModel.likePost(post.event.id) },
                                 onRepost = { viewModel.repostPost(post.event.id) },
-                                onProfileClick = { /* TODO */ },
+                                onProfileClick = { viewingPubkey = it },
                                 repository = repository,
                                 onMute = { viewModel.muteUser(post.event.pubkey) },
                                 onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
@@ -219,7 +220,7 @@ private fun TimelineContent(
                                 post = post,
                                 onLike = { viewModel.likePost(post.event.id) },
                                 onRepost = { viewModel.repostPost(post.event.id) },
-                                onProfileClick = { /* TODO: navigate to profile */ },
+                                onProfileClick = { viewingPubkey = it },
                                 repository = repository,
                                 onMute = { viewModel.muteUser(post.event.pubkey) },
                                 onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },

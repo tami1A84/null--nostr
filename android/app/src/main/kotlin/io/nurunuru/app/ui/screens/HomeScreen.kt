@@ -51,6 +51,7 @@ fun HomeScreen(
     var showFollowList by remember { mutableStateOf(false) }
     var showPostModal by remember { mutableStateOf(false) }
     var postToDelete by remember { mutableStateOf<String?>(null) }
+    var viewingPubkey by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -152,7 +153,7 @@ fun HomeScreen(
                                         post = post,
                                         onLike = { viewModel.likePost(post.event.id) },
                                         onRepost = { viewModel.repostPost(post.event.id) },
-                                        onProfileClick = { viewModel.loadProfile(it) },
+                                        onProfileClick = { if (it != viewModel.myPubkeyHex) viewingPubkey = it },
                                         repository = repository,
                                         onDelete = { postToDelete = post.event.id },
                                         onMute = { viewModel.muteUser(post.event.pubkey) },
@@ -166,7 +167,7 @@ fun HomeScreen(
                                         post = post,
                                         onLike = { viewModel.likePost(post.event.id) },
                                         onRepost = { viewModel.repostPost(post.event.id) },
-                                        onProfileClick = { viewModel.loadProfile(it) },
+                                        onProfileClick = { if (it != viewModel.myPubkeyHex) viewingPubkey = it },
                                         repository = repository,
                                         onDelete = { postToDelete = post.event.id },
                                         onMute = { viewModel.muteUser(post.event.pubkey) },
@@ -207,7 +208,21 @@ fun HomeScreen(
             profiles = uiState.followProfiles,
             onDismiss = { showFollowList = false },
             onUnfollow = { viewModel.unfollowUser(it) },
-            onProfileClick = { viewModel.loadProfile(it); showFollowList = false }
+            onProfileClick = { viewingPubkey = it; showFollowList = false }
+        )
+    }
+
+    if (viewingPubkey != null) {
+        val homeViewModel: HomeViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+            key = "profile_$viewingPubkey",
+            factory = HomeViewModel.Factory(repository, viewModel.myPubkeyHex)
+        )
+        UserProfileModal(
+            pubkey = viewingPubkey!!,
+            viewModel = homeViewModel,
+            repository = repository,
+            onDismiss = { viewingPubkey = null },
+            onStartDM = { /* TODO */ }
         )
     }
 

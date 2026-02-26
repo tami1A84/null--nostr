@@ -155,13 +155,7 @@ fun ProfileHeader(
                 }
 
                 if (!profile?.about.isNullOrBlank()) {
-                    Text(
-                        text = profile!!.about!!,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(top = 0.dp),
-                        lineHeight = 18.sp
-                    )
+                    ProfileAbout(about = profile!!.about!!)
                 }
 
                 Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -172,7 +166,38 @@ fun ProfileHeader(
                         MetaInfoItem(NuruIcons.Website, profile!!.website!!, color = LineGreen)
                     }
                     if (!profile?.birthday.isNullOrBlank()) {
-                        MetaInfoItem(NuruIcons.Cake, profile!!.birthday!!)
+                        val isToday = remember(profile?.birthday) {
+                            try {
+                                val today = java.util.Calendar.getInstance()
+                                val month = today.get(java.util.Calendar.MONTH) + 1
+                                val day = today.get(java.util.Calendar.DAY_OF_MONTH)
+                                val parts = profile!!.birthday!!.split("-")
+                                if (parts.size == 3) {
+                                    parts[1].toIntOrNull() == month && parts[2].toIntOrNull() == day
+                                } else if (parts.size == 2) {
+                                    parts[0].toIntOrNull() == month && parts[1].toIntOrNull() == day
+                                } else false
+                            } catch (e: Exception) { false }
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            MetaInfoItem(NuruIcons.Cake, profile!!.birthday!!)
+                            if (isToday) {
+                                Surface(
+                                    color = Color(0xFFFFEBEE),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.padding(start = 4.dp)
+                                ) {
+                                    Text(
+                                        "今日は誕生日！",
+                                        color = Color(0xFFE91E63),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -286,6 +311,34 @@ fun ProfileTabs(
             HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
         }
     }
+}
+
+@Composable
+fun ProfileAbout(about: String) {
+    val nuruColors = LocalNuruColors.current
+    val annotated = remember(about) {
+        buildAnnotatedString {
+            val regex = Regex("(https?://[^\\s]+|nostr:(?:note1|nevent1|npub1|nprofile1|naddr1)[a-z0-9]{58,})")
+            var lastIdx = 0
+            regex.findAll(about).forEach { match ->
+                append(about.substring(lastIdx, match.range.first))
+                val value = match.value
+                withStyle(SpanStyle(color = nuruColors.lineGreen)) {
+                    append(if (value.length > 40) value.take(40) + "..." else value)
+                }
+                lastIdx = match.range.last + 1
+            }
+            append(about.substring(lastIdx))
+        }
+    }
+
+    Text(
+        text = annotated,
+        style = MaterialTheme.typography.bodySmall,
+        color = TextSecondary,
+        modifier = Modifier.padding(top = 4.dp),
+        lineHeight = 20.sp
+    )
 }
 
 @Composable
