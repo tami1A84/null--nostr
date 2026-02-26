@@ -9,6 +9,187 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
 object NuruIcons {
+    val Close: ImageVector = ImageVector.Builder(
+        name = "Close",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <line x1="18" y1="6" x2="6" y2="18" />
+        moveTo(18f, 6f)
+        lineTo(6f, 18f)
+        // <line x1="6" y1="6" x2="18" y2="18" />
+        moveTo(6f, 6f)
+        lineTo(18f, 18f)
+    }.build()
+
+    val Video: ImageVector = ImageVector.Builder(
+        name = "Video",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <polygon points="23 7 16 12 23 17 23 7"></polygon>
+        moveTo(23f, 7f)
+        lineTo(16f, 12f)
+        lineTo(23f, 17f)
+        close()
+        // <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+        moveTo(3f, 5f)
+        horizontalLineTo(14f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, 2f)
+        verticalLineToRelative(10f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+        horizontalLineTo(3f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+        verticalLineTo(7f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+        close()
+    }.build()
+
+    val Image: ImageVector = ImageVector.Builder(
+        name = "Image",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+        moveTo(5f, 3f)
+        horizontalLineTo(19f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, 2f)
+        verticalLineToRelative(14f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+        horizontalLineTo(5f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+        verticalLineTo(5f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+        close()
+        // <circle cx="8.5" cy="8.5" r="1.5" />
+        moveTo(8.5f, 10f)
+        arcToRelative(1.5f, 1.5f, 0f, true, false, 0f, -3f)
+        arcToRelative(1.5f, 1.5f, 0f, false, false, 0f, 3f)
+        close()
+        // <polyline points="21 15 16 10 5 21" />
+        moveTo(21f, 15f)
+        lineTo(16f, 10f)
+        lineTo(5f, 21f)
+    }.build()
+
+    val Warning: ImageVector = ImageVector.Builder(
+        name = "Warning",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        moveTo(10.29f, 3.86f)
+        lineTo(1.82f, 18f)
+        arcToRelative(2f, 2f, 0f, false, false, 1.71f, 3f)
+        horizontalLineToRelative(16.94f)
+        arcToRelative(2f, 2f, 0f, false, false, 1.71f, -3f)
+        lineTo(13.71f, 3.86f)
+        arcToRelative(2f, 2f, 0f, false, false, -3.42f, 0f)
+        close()
+        // <line x1="12" y1="9" x2="12" y2="13"/>
+        moveTo(12f, 9f)
+        verticalLineToRelative(4f)
+        // <line x1="12" y1="17" x2="12.01" y2="17"/>
+        moveTo(12f, 17f)
+        horizontalLineToRelative(0.01f)
+    }.build()
+
+    val Emoji: ImageVector = ImageVector.Builder(
+        name = "Emoji",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <circle cx="12" cy="12" r="10" />
+        moveTo(22f, 12f)
+        arcToRelative(10f, 10f, 0f, true, true, -20f, 0f)
+        arcToRelative(10f, 10f, 0f, true, true, 20f, 0f)
+        close()
+        // <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+        moveTo(8f, 14f)
+        reflectiveCurveToRelative(1.5f, 2f, 4f, 2f)
+        reflectiveCurveToRelative(4f, -2f, 4f, -2f)
+        // <line x1="9" y1="9" x2="9.01" y2="9" />
+        moveTo(9f, 9f)
+        horizontalLineToRelative(0.01f)
+        // <line x1="15" y1="9" x2="15.01" y2="9" />
+        moveTo(15f, 9f)
+        horizontalLineToRelative(0.01f)
+    }.build()
+
+    val Mic: ImageVector = ImageVector.Builder(
+        name = "Mic",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+        moveTo(12f, 1f)
+        arcToRelative(3f, 3f, 0f, false, false, -3f, 3f)
+        verticalLineToRelative(8f)
+        arcToRelative(3f, 3f, 0f, false, false, 6f, 0f)
+        verticalLineTo(4f)
+        arcToRelative(3f, 3f, 0f, false, false, -3f, -3f)
+        close()
+        // <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        moveTo(19f, 10f)
+        verticalLineToRelative(2f)
+        arcToRelative(7f, 7f, 0f, false, true, -14f, 0f)
+        verticalLineToRelative(-2f)
+        // <line x1="12" y1="19" x2="12" y2="23"/>
+        moveTo(12f, 19f)
+        verticalLineToRelative(4f)
+        // <line x1="8" y1="23" x2="16" y2="23"/>
+        moveTo(8f, 23f)
+        horizontalLineTo(16f)
+    }.build()
+
     fun Like(filled: Boolean): ImageVector {
         return ImageVector.Builder(
             name = "Like",
@@ -323,37 +504,24 @@ object NuruIcons {
         ).path(
             fill = if (filled) SolidColor(Color.White) else null,
             stroke = SolidColor(Color.White),
-            strokeLineWidth = if (filled) 0f else 1.8f,
+            strokeLineWidth = 1.8f,
             strokeLineCap = StrokeCap.Round,
             strokeLineJoin = StrokeJoin.Round
         ) {
-            if (filled) {
-                moveTo(12f, 2f)
-                curveTo(6.48f, 2f, 2f, 5.58f, 2f, 10f)
-                curveToRelative(0f, 2.62f, 1.34f, 4.98f, 3.5f, 6.56f)
-                verticalLineTo(21f)
-                lineToRelative(4.22f, -2.33f)
-                curveToRelative(0.73f, 0.18f, 1.49f, 0.33f, 2.28f, 0.33f)
-                curveToRelative(5.52f, 0f, 10f, -3.58f, 10f, -8f)
-                reflectiveCurveTo(17.52f, 2f, 12f, 2f)
-                close()
-            } else {
-                moveTo(8f, 12f)
-                horizontalLineTo(8.01f)
-                moveTo(12f, 12f)
-                horizontalLineTo(12.01f)
-                moveTo(16f, 12f)
-                horizontalLineTo(16.01f)
-                moveTo(21f, 12f)
-                curveToRelative(0f, 4.42f, -4.03f, 8f, -9f, 8f)
-                curveToRelative(-1.5f, 0f, -2.92f, -0.32f, -4.19f, -0.88f)
-                lineTo(3f, 21f)
-                lineToRelative(1.9f, -3.8f)
-                curveTo(3.71f, 15.77f, 3f, 14.01f, 3f, 12f)
-                curveToRelative(0f, -4.42f, 4.03f, -8f, 9f, -8f)
-                reflectiveCurveToRelative(9f, 3.58f, 9f, 8f)
-                close()
-            }
+            // M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z
+            moveTo(21f, 11.5f)
+            arcToRelative(8.38f, 8.38f, 0f, false, true, -0.9f, 3.8f)
+            arcToRelative(8.5f, 8.5f, 0f, false, true, -7.6f, 4.7f)
+            arcToRelative(8.38f, 8.38f, 0f, false, true, -3.8f, -0.9f)
+            lineTo(3f, 21f)
+            lineToRelative(1.9f, -5.7f)
+            arcToRelative(8.38f, 8.38f, 0f, false, true, -0.9f, -3.8f)
+            arcToRelative(8.5f, 8.5f, 0f, false, true, 4.7f, -7.6f)
+            arcToRelative(8.38f, 8.38f, 0f, false, true, 3.8f, -0.9f)
+            horizontalLineToRelative(0.5f)
+            arcToRelative(8.48f, 8.48f, 0f, false, true, 8f, 8f)
+            verticalLineToRelative(0.5f)
+            close()
         }.build()
     }
 

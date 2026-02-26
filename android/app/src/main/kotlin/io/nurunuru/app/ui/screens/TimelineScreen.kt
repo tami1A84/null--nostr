@@ -111,11 +111,14 @@ fun TimelineScreen(
     // Post composition modal
     if (showPostModal) {
         PostModal(
+            myPubkey = myPubkey,
             pictureUrl = myPictureUrl,
             displayName = myDisplayName,
+            repository = repository,
             onDismiss = { showPostModal = false },
-            onPublish = { content, cw ->
-                viewModel.publishNote(content, cw)
+            onSuccess = {
+                showPostModal = false
+                viewModel.refresh()
             }
         )
     }

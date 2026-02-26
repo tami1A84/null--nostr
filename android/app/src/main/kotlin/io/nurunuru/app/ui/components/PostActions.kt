@@ -31,6 +31,7 @@ fun PostActions(
     val nuruColors = LocalNuruColors.current
     val context = LocalContext.current
     val profile = post.profile
+    val toastState = LocalToastState.current
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -59,9 +60,9 @@ fun PostActions(
             count = (post.zapAmount / 1000).toInt(),
             onClick = {
                 if (profile?.lud16 != null) {
-                    android.widget.Toast.makeText(context, "⚡ Zap送信: ${profile.lud16}", android.widget.Toast.LENGTH_SHORT).show()
+                    toastState.show("⚡ Zap送信: ${profile.lud16}", ToastType.SUCCESS)
                 } else {
-                    android.widget.Toast.makeText(context, "Lightningアドレスが設定されていません", android.widget.Toast.LENGTH_SHORT).show()
+                    toastState.show("Lightningアドレスが設定されていません", ToastType.WARNING)
                 }
             },
             tint = nuruColors.textTertiary,

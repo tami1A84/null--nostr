@@ -19,6 +19,11 @@ class NostrRepository(
     // ─── Timeline ─────────────────────────────────────────────────────────────
 
     /** Fetch global timeline (recent text notes). */
+    /** General fetchEvents method. */
+    suspend fun fetchEvents(filter: NostrClient.Filter, timeoutMs: Long = 5_000): List<NostrEvent> {
+        return client.fetchEvents(filter, timeoutMs)
+    }
+
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
@@ -391,7 +396,9 @@ class NostrRepository(
     suspend fun publishNote(
         content: String,
         replyToId: String? = null,
-        contentWarning: String? = null
+        contentWarning: String? = null,
+        customTags: List<List<String>> = emptyList(),
+        kind: Int = NostrKind.TEXT_NOTE
     ): NostrEvent? {
         val tags = mutableListOf<List<String>>()
         if (replyToId != null) tags.add(listOf("e", replyToId, "", "reply"))
@@ -399,8 +406,9 @@ class NostrRepository(
 
         // Add client tag matching web
         tags.add(listOf("client", "nullnull"))
+        tags.addAll(customTags)
 
-        return client.publishNote(content, tags)
+        return client.publish(kind, content, tags)
     }
 
     suspend fun sendDm(recipientPubkeyHex: String, content: String): Boolean =
@@ -411,7 +419,7 @@ class NostrRepository(
             kind = NostrKind.DELETION,
             content = reason,
             tags = listOf(listOf("e", eventId))
-        )
+        ) != null
     }
 
     suspend fun followUser(myPubkeyHex: String, targetPubkeyHex: String): Boolean {
@@ -434,7 +442,7 @@ class NostrRepository(
             kind = NostrKind.CONTACT_LIST,
             content = latest?.content ?: "",
             tags = tags
-        )
+        ) != null
     }
 
     suspend fun unfollowUser(myPubkeyHex: String, targetPubkeyHex: String): Boolean {
@@ -452,7 +460,7 @@ class NostrRepository(
             kind = NostrKind.CONTACT_LIST,
             content = latest.content,
             tags = newTags
-        )
+        ) != null
     }
 
     fun getUploadServer(): String = prefs.uploadServer
@@ -525,7 +533,7 @@ class NostrRepository(
         return client.publish(
             kind = NostrKind.METADATA,
             content = content
-        )
+        ) != null
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontWeight
@@ -28,7 +29,11 @@ import io.nurunuru.app.viewmodel.HomeViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
+fun HomeScreen(
+    viewModel: HomeViewModel,
+    repository: io.nurunuru.app.data.NostrRepository,
+    onLogout: () -> Unit = {}
+) {
     val uiState by viewModel.uiState.collectAsState()
     val profile = uiState.profile
     val clipboardManager = LocalClipboardManager.current
@@ -133,8 +138,13 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
                         }
                     } else {
                         items(displayPosts, key = { (if (uiState.activeTab == 1) "like_" else "") + it.event.id }) { post ->
+                            val alpha = remember { androidx.compose.animation.core.Animatable(0f) }
+                            LaunchedEffect(post.event.id) {
+                                alpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(300))
+                            }
                             Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
                                 PostItem(
+                                    modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
                                     post = post,
                                     onLike = { viewModel.likePost(post.event.id) },
                                     onRepost = { viewModel.repostPost(post.event.id) },
@@ -179,10 +189,15 @@ fun HomeScreen(viewModel: HomeViewModel, onLogout: () -> Unit = {}) {
 
     if (showPostModal) {
         PostModal(
+            myPubkey = viewModel.myPubkeyHex,
             pictureUrl = profile?.picture,
             displayName = profile?.displayedName ?: "",
+            repository = repository,
             onDismiss = { showPostModal = false },
-            onPublish = { content, cw -> viewModel.publishNote(content, cw); showPostModal = false }
+            onSuccess = {
+                showPostModal = false
+                viewModel.refresh()
+            }
         )
     }
 
