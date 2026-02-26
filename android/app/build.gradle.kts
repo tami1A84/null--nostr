@@ -61,6 +61,14 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.androidx.appcompat)
 
+    // CameraX
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.video)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.androidx.camera.extensions)
+
     // Official rust-nostr SDK
     implementation(libs.rust.nostr.sdk)
     implementation("net.java.dev.jna:jna:5.15.0@aar")

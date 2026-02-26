@@ -79,17 +79,18 @@ class NostrClient(
         }
     }
 
-    suspend fun publish(kind: Int, content: String, tags: List<List<String>> = emptyList()): Boolean {
-        val client = sdkClient ?: return false
+    suspend fun publish(kind: Int, content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
+        val client = sdkClient ?: return null
         return withContext(Dispatchers.IO) {
             try {
                 val sdkTags = tags.map { Tag.parse(it) }
                 val builder = EventBuilder(Kind(kind.toUShort()), content).tags(sdkTags)
-                client.sendEventBuilder(builder)
-                true
+                val result = client.sendEventBuilder(builder)
+                val event = client.database().eventById(result.id)
+                event?.let { mapSdkEvent(it) }
             } catch (e: Exception) {
                 Log.w(TAG, "Publish failed for kind $kind: ${e.message}")
-                false
+                null
             }
         }
     }

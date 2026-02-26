@@ -152,7 +152,7 @@ fun MainScreen(
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             when (activeTab) {
-                BottomTab.HOME -> HomeScreen(viewModel = homeVM)
+                BottomTab.HOME -> HomeScreen(viewModel = homeVM, repository = repository)
                 BottomTab.TALK -> TalkScreen(viewModel = talkVM)
                 BottomTab.TIMELINE -> TimelineScreen(
                     viewModel = timelineVM,

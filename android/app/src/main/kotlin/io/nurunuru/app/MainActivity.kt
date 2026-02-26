@@ -26,18 +26,21 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             NuruNuruTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    val authViewModel: AuthViewModel = viewModel()
-                    val authState by authViewModel.authState.collectAsState()
+                io.nurunuru.app.ui.components.ToastProvider {
+                    Surface(modifier = Modifier.fillMaxSize()) {
+                        val authViewModel: AuthViewModel = viewModel()
+                        val authState by authViewModel.authState.collectAsState()
 
-                    when (val state = authState) {
-                        is AuthState.LoggedIn -> MainScreen(
-                            pubkeyHex = state.pubkeyHex,
-                            privateKeyHex = state.privateKeyHex,
-                            authViewModel = authViewModel,
-                            app = app
-                        )
-                        else -> LoginScreen(viewModel = authViewModel)
+                        when (val state = authState) {
+                            is AuthState.LoggedIn -> MainScreen(
+                                pubkeyHex = state.pubkeyHex,
+                                privateKeyHex = state.privateKeyHex,
+                                authViewModel = authViewModel,
+                                app = app
+                            )
+
+                            else -> LoginScreen(viewModel = authViewModel)
+                        }
                     }
                 }
             }
