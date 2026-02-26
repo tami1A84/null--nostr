@@ -5,10 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,7 +32,8 @@ private val CONTEXT_TYPE_LABELS = mapOf(
 @Composable
 fun BirdwatchDisplay(
     notes: List<NostrEvent>,
-    onRate: (String, String) -> Unit = { _, _ -> }
+    onRate: (String, String) -> Unit = { _, _ -> },
+    onAuthorClick: (String) -> Unit = {}
 ) {
     if (notes.isEmpty()) return
     val nuruColors = LocalNuruColors.current
@@ -82,7 +83,7 @@ fun BirdwatchDisplay(
             // Notes
             Column(modifier = Modifier.padding(horizontal = 12.dp)) {
                 displayNotes.forEachIndexed { index, note ->
-                    BirdwatchNoteItem(note = note, onRate = onRate)
+                    BirdwatchNoteItem(note = note, onRate = onRate, onAuthorClick = onAuthorClick)
                     if (index < displayNotes.size - 1) {
                         HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
                     }
@@ -124,7 +125,8 @@ fun BirdwatchDisplay(
 @Composable
 private fun BirdwatchNoteItem(
     note: NostrEvent,
-    onRate: (String, String) -> Unit
+    onRate: (String, String) -> Unit,
+    onAuthorClick: (String) -> Unit
 ) {
     val nuruColors = LocalNuruColors.current
     val contextType = note.getTagValue("l") ?: "missing_context"
@@ -168,7 +170,7 @@ private fun BirdwatchNoteItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Icon(Icons.Default.OpenInNew, null, tint = Color(0xFF2196F3), modifier = Modifier.size(12.dp))
+                Icon(Icons.AutoMirrored.Filled.OpenInNew, null, tint = Color(0xFF2196F3), modifier = Modifier.size(12.dp))
                 Text("ソースを表示", color = Color(0xFF2196F3), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
             }
         }
@@ -178,11 +180,16 @@ private fun BirdwatchNoteItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.clickable { onAuthorClick(note.pubkey) }
+            ) {
                 Text(
                     text = NostrKeyUtils.shortenPubkey(note.pubkey),
                     style = MaterialTheme.typography.labelSmall,
-                    color = nuruColors.textSecondary
+                    color = nuruColors.textSecondary,
+                    fontWeight = FontWeight.Medium
                 )
                 Text("·", color = nuruColors.textTertiary)
                 Text(

@@ -24,6 +24,30 @@ import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import kotlinx.coroutines.launch
 
+@Composable
+private fun PresetButton(
+    preset: Int,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val nuruColors = LocalNuruColors.current
+    Surface(
+        modifier = modifier.clickable { onClick() },
+        shape = RoundedCornerShape(20.dp),
+        color = if (isSelected) Color(0xFFFFC107) else nuruColors.bgSecondary,
+        contentColor = if (isSelected) Color.Black else nuruColors.textPrimary
+    ) {
+        Text(
+            text = "⚡$preset",
+            modifier = Modifier.padding(vertical = 8.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ZapModal(
@@ -99,26 +123,35 @@ fun ZapModal(
                 }
 
                 // Presets
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    presetAmounts.forEach { preset ->
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { amount = preset.toString() },
-                            shape = RoundedCornerShape(20.dp),
-                            color = if (amount == preset.toString()) Color(0xFFFFC107) else nuruColors.bgSecondary,
-                            contentColor = if (amount == preset.toString()) Color.Black else nuruColors.textPrimary
-                        ) {
-                            Text(
-                                text = "⚡$preset",
-                                modifier = Modifier.padding(vertical = 8.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        presetAmounts.take(3).forEach { preset ->
+                            PresetButton(
+                                preset = preset,
+                                isSelected = amount == preset.toString(),
+                                onClick = { amount = preset.toString() },
+                                modifier = Modifier.weight(1f)
                             )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        presetAmounts.drop(3).forEach { preset ->
+                            PresetButton(
+                                preset = preset,
+                                isSelected = amount == preset.toString(),
+                                onClick = { amount = preset.toString() },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        // Spacer to keep buttons same width if only 2 in row
+                        if (presetAmounts.drop(3).size == 2) {
+                            Spacer(modifier = Modifier.weight(1f))
                         }
                     }
                 }

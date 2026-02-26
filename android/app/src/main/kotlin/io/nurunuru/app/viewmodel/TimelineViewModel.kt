@@ -98,6 +98,22 @@ class TimelineViewModel(
         }
     }
 
+    fun deletePost(eventId: String) {
+        viewModelScope.launch {
+            try {
+                val success = repository.deleteEvent(eventId)
+                if (success) {
+                    _uiState.update { state ->
+                        state.copy(
+                            globalPosts = state.globalPosts.filter { it.event.id != eventId },
+                            followingPosts = state.followingPosts.filter { it.event.id != eventId }
+                        )
+                    }
+                }
+            } catch (e: Exception) { /* ignore */ }
+        }
+    }
+
     fun loadFollowingTimeline(isRefresh: Boolean = false) {
         viewModelScope.launch {
             _uiState.update {

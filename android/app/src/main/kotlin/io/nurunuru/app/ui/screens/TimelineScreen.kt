@@ -106,7 +106,8 @@ fun TimelineScreen(
                 viewModel = viewModel,
                 repository = repository,
                 feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING,
-                onProfileClick = { viewingPubkey = it }
+                onProfileClick = { viewingPubkey = it },
+                myPubkey = myPubkey
             )
         }
     }
@@ -151,7 +152,8 @@ private fun TimelineContent(
     viewModel: TimelineViewModel,
     repository: io.nurunuru.app.data.NostrRepository,
     feedType: FeedType,
-    onProfileClick: (String) -> Unit
+    onProfileClick: (String) -> Unit,
+    myPubkey: String
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
@@ -206,6 +208,10 @@ private fun TimelineContent(
                             alpha.animateTo(1f, animationSpec = tween(300))
                         }
 
+                        val notInterestedCallback = if (feedType == FeedType.GLOBAL) {
+                            { viewModel.setNotInterested(post.event.id) }
+                        } else null
+
                         if (post.event.kind == 30023) {
                             LongFormPostItem(
                                 post = post,
@@ -213,11 +219,13 @@ private fun TimelineContent(
                                 onRepost = { viewModel.repostPost(post.event.id) },
                                 onProfileClick = onProfileClick,
                                 repository = repository,
+                                onDelete = if (post.event.pubkey == myPubkey) { { viewModel.deletePost(post.event.id) } } else null,
                                 onMute = { viewModel.muteUser(post.event.pubkey) },
                                 onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
                                 onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
-                                onNotInterested = { viewModel.setNotInterested(post.event.id) },
-                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
+                                onNotInterested = notInterestedCallback,
+                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
+                                isOwnPost = post.event.pubkey == myPubkey
                             )
                         } else {
                             PostItem(
@@ -227,11 +235,13 @@ private fun TimelineContent(
                                 onRepost = { viewModel.repostPost(post.event.id) },
                                 onProfileClick = onProfileClick,
                                 repository = repository,
+                                onDelete = if (post.event.pubkey == myPubkey) { { viewModel.deletePost(post.event.id) } } else null,
                                 onMute = { viewModel.muteUser(post.event.pubkey) },
                                 onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
                                 onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
-                                onNotInterested = { viewModel.setNotInterested(post.event.id) },
-                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
+                                onNotInterested = notInterestedCallback,
+                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
+                                isOwnPost = post.event.pubkey == myPubkey
                             )
                         }
                     }

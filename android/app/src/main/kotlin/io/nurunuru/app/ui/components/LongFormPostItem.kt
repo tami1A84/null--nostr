@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -60,7 +60,7 @@ fun LongFormPostItem(
             .fillMaxWidth()
             .background(nuruColors.bgPrimary)
     ) {
-        PostIndicators(post = post)
+        PostIndicators(post = post, onProfileClick = onProfileClick)
 
         Row(
             modifier = Modifier
@@ -102,7 +102,7 @@ fun LongFormPostItem(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(Icons.Default.Article, null, tint = nuruColors.lineGreen, modifier = Modifier.size(12.dp))
+                    Icon(Icons.AutoMirrored.Filled.Article, null, tint = nuruColors.lineGreen, modifier = Modifier.size(12.dp))
                         Text("長文記事", color = nuruColors.lineGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -156,7 +156,7 @@ fun LongFormPostItem(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (birdwatchNotes.isNotEmpty()) {
-                    BirdwatchDisplay(notes = birdwatchNotes)
+                    BirdwatchDisplay(notes = birdwatchNotes, onAuthorClick = onProfileClick)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
@@ -176,7 +176,8 @@ fun LongFormPostItem(
             post = post,
             title = title,
             image = image,
-            onDismiss = { showReader = false }
+            onDismiss = { showReader = false },
+            onProfileClick = onProfileClick
         )
     }
 
@@ -216,7 +217,8 @@ fun ArticleReaderModal(
     post: ScoredPost,
     title: String?,
     image: String?,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onProfileClick: (String) -> Unit
 ) {
     val nuruColors = LocalNuruColors.current
     Dialog(
@@ -225,23 +227,43 @@ fun ArticleReaderModal(
     ) {
         Scaffold(
             topBar = {
-                Surface(color = nuruColors.bgPrimary, shadowElevation = 4.dp) {
+                Surface(
+                    color = nuruColors.bgPrimary,
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, nuruColors.border)
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .windowInsetsPadding(WindowInsets.statusBars)
                             .height(56.dp)
-                            .padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "戻る")
+                        IconButton(onClick = onDismiss, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "戻る", tint = nuruColors.textPrimary)
                         }
+
+                        Surface(
+                            color = nuruColors.lineGreen.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                            Icon(Icons.AutoMirrored.Filled.Article, null, tint = nuruColors.lineGreen, modifier = Modifier.size(14.dp))
+                                Text("長文記事", color = nuruColors.lineGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(Modifier.weight(1f))
+
                         Text(
-                            text = "長文記事",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(start = 8.dp)
+                            text = formatPostTimestamp(post.event.createdAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = nuruColors.textTertiary
                         )
                     }
                 }
@@ -281,6 +303,10 @@ fun ArticleReaderModal(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 20.dp)
+                            .clickable {
+                                onDismiss()
+                                onProfileClick(post.event.pubkey)
+                            }
                     ) {
                         UserAvatar(
                             pictureUrl = post.profile?.picture,

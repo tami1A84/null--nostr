@@ -173,7 +173,7 @@ fun HomeScreen(
                                         onMute = { viewModel.muteUser(post.event.pubkey) },
                                         onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
                                         onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
-                                        onNotInterested = { /* Home doesn't need this for now */ },
+                                        onNotInterested = null,
                                         isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
                                         isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false
                                     )

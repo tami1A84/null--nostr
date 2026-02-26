@@ -411,6 +411,38 @@ object NuruIcons {
         }.build()
     }
 
+    val NotInterested: ImageVector = ImageVector.Builder(
+        name = "NotInterested",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // Speech bubble
+        moveTo(21f, 11.5f)
+        arcToRelative(8.38f, 8.38f, 0f, false, true, -0.9f, 3.8f)
+        arcToRelative(8.5f, 8.5f, 0f, false, true, -7.6f, 4.7f)
+        arcToRelative(8.38f, 8.38f, 0f, false, true, -3.8f, -0.9f)
+        lineTo(3f, 21f)
+        lineToRelative(1.9f, -5.7f)
+        arcToRelative(8.38f, 8.38f, 0f, false, true, -0.9f, -3.8f)
+        arcToRelative(8.5f, 8.5f, 0f, false, true, 4.7f, -7.6f)
+        arcToRelative(8.38f, 8.38f, 0f, false, true, 3.8f, -0.9f)
+        horizontalLineToRelative(0.5f)
+        arcToRelative(8.48f, 8.48f, 0f, false, true, 8f, 8f)
+        verticalLineToRelative(0.5f)
+        close()
+        // Dash inside
+        moveTo(9f, 12f)
+        horizontalLineToRelative(6f)
+    }.build()
+
     val Edit: ImageVector = ImageVector.Builder(
         name = "Edit",
         defaultWidth = 24.dp,

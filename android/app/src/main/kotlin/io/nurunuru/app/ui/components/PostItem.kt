@@ -59,7 +59,7 @@ fun PostItem(
             .fillMaxWidth()
             .background(nuruColors.bgPrimary)
     ) {
-        PostIndicators(post = post)
+        PostIndicators(post = post, onProfileClick = onProfileClick)
 
         Row(
             modifier = Modifier
@@ -99,14 +99,14 @@ fun PostItem(
                         PostCWHeader(reason = cwReason, onCollapse = { isCWExpanded = false })
                     }
 
-                    PostContent(post = post, repository = repository)
+                    PostContent(post = post, repository = repository, onProfileClick = onProfileClick)
                     PostMedia(post = post)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 if (birdwatchNotes.isNotEmpty()) {
-                    BirdwatchDisplay(notes = birdwatchNotes)
+                    BirdwatchDisplay(notes = birdwatchNotes, onAuthorClick = onProfileClick)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 

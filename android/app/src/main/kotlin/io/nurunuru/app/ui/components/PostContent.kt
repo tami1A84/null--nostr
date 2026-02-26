@@ -3,6 +3,7 @@ package io.nurunuru.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
@@ -31,13 +32,14 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
-fun PostIndicators(post: ScoredPost) {
+fun PostIndicators(post: ScoredPost, onProfileClick: (String) -> Unit) {
     val nuruColors = LocalNuruColors.current
     if (post.repostedBy != null) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 48.dp, top = 8.dp, end = 16.dp),
+                .padding(start = 48.dp, top = 8.dp, end = 16.dp)
+                .clickable { onProfileClick(post.repostedBy.pubkey) },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -58,7 +60,8 @@ fun PostIndicators(post: ScoredPost) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 48.dp, top = 8.dp, end = 16.dp),
+                .padding(start = 48.dp, top = 8.dp, end = 16.dp)
+                .clickable { replyPubkey?.let { onProfileClick(it) } },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -175,45 +178,54 @@ fun PostHeader(
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                    modifier = Modifier.background(nuruColors.bgPrimary)
                 ) {
                     if (onNotInterested != null && !isOwnPost) {
                         DropdownMenuItem(
-                            text = { Text("この投稿に興味がない") },
+                            text = { Text("この投稿に興味がない", color = nuruColors.textPrimary) },
                             onClick = { showMenu = false; onNotInterested() },
-                            leadingIcon = { Icon(NuruIcons.Talk(false), null) } // Using Talk as placeholder for not interested
+                            leadingIcon = { Icon(NuruIcons.NotInterested, null, tint = nuruColors.textSecondary, modifier = Modifier.size(18.dp)) }
                         )
                     }
                     if (onBirdwatch != null && !isOwnPost) {
                         DropdownMenuItem(
-                            text = { Text("Birdwatch", color = Color(0xFF2196F3)) },
+                            text = { Text("Birdwatch", color = Color(0xFF2196F3), fontWeight = FontWeight.Medium) },
                             onClick = { showMenu = false; onBirdwatch() },
-                            leadingIcon = { Icon(Icons.Default.Check, null, tint = Color(0xFF2196F3)) }
+                            leadingIcon = {
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .background(Color(0xFF2196F3), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(12.dp))
+                                }
+                            }
                         )
                     }
                     if (onReport != null && !isOwnPost) {
                         DropdownMenuItem(
-                            text = { Text("通報", color = Color(0xFFFF9800)) },
+                            text = { Text("通報", color = Color(0xFFFF9800), fontWeight = FontWeight.Medium) },
                             onClick = { showMenu = false; onReport() },
-                            leadingIcon = { Icon(Icons.Default.Warning, null, tint = Color(0xFFFF9800)) }
+                            leadingIcon = { Icon(Icons.Default.Warning, null, tint = Color(0xFFFF9800), modifier = Modifier.size(18.dp)) }
                         )
                     }
                     if (onMute != null && !isOwnPost) {
                         DropdownMenuItem(
-                            text = { Text("ミュート", color = Color.Red) },
+                            text = { Text("ミュート", color = Color.Red, fontWeight = FontWeight.Medium) },
                             onClick = { showMenu = false; onMute() },
-                            leadingIcon = { Icon(Icons.Default.Block, null, tint = Color.Red) }
+                            leadingIcon = { Icon(Icons.Default.Block, null, tint = Color.Red, modifier = Modifier.size(18.dp)) }
                         )
                     }
                     if (isOwnPost && onDelete != null) {
                         DropdownMenuItem(
-                            text = { Text("削除", color = Color.Red) },
+                            text = { Text("削除", color = Color.Red, fontWeight = FontWeight.Medium) },
                             onClick = {
                                 showMenu = false
                                 onDelete()
                             },
                             leadingIcon = {
-                                Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red)
+                                Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
                             }
                         )
                     }
@@ -224,7 +236,11 @@ fun PostHeader(
 }
 
 @Composable
-fun PostContent(post: ScoredPost, repository: io.nurunuru.app.data.NostrRepository) {
+fun PostContent(
+    post: ScoredPost,
+    repository: io.nurunuru.app.data.NostrRepository,
+    onProfileClick: (String) -> Unit
+) {
     val nuruColors = LocalNuruColors.current
     val content = post.event.content
     val cleanContent = removeImageUrls(content).trim()
@@ -300,7 +316,11 @@ fun PostContent(post: ScoredPost, repository: io.nurunuru.app.data.NostrReposito
         parts.forEach { part ->
             when (part) {
                 is ContentPart.Link -> URLPreview(url = part.url)
-                is ContentPart.Nostr -> EmbeddedNostrContent(link = part.link, repository = repository)
+                is ContentPart.Nostr -> EmbeddedNostrContent(
+                    link = part.link,
+                    repository = repository,
+                    onProfileClick = onProfileClick
+                )
                 else -> {}
             }
         }
@@ -316,7 +336,11 @@ sealed class ContentPart {
 }
 
 @Composable
-fun EmbeddedNostrContent(link: String, repository: io.nurunuru.app.data.NostrRepository) {
+fun EmbeddedNostrContent(
+    link: String,
+    repository: io.nurunuru.app.data.NostrRepository,
+    onProfileClick: (String) -> Unit
+) {
     val bech32 = link.removePrefix("nostr:")
     var note by remember { mutableStateOf<ScoredPost?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -337,12 +361,16 @@ fun EmbeddedNostrContent(link: String, repository: io.nurunuru.app.data.NostrRep
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .clickable { /* TODO: Navigate to note */ },
+                .clickable { onProfileClick(note!!.event.pubkey) },
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
             border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.clickable { onProfileClick(note!!.event.pubkey) }
+                ) {
                     UserAvatar(pictureUrl = note!!.profile?.picture, displayName = note!!.profile?.displayedName ?: "", size = 20.dp)
                     Text(text = note!!.profile?.displayedName ?: NostrKeyUtils.shortenPubkey(note!!.event.pubkey), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 }
