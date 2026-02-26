@@ -127,10 +127,10 @@ fun TimelineLoadingState(
                         animationSpec = infiniteRepeatable(
                             animation = keyframes {
                                 durationMillis = 1400
-                                0.6f at 0 with FastOutSlowInEasing
-                                1.0f at 400 with FastOutSlowInEasing
-                                0.6f at 800 with FastOutSlowInEasing
-                                0.6f at 1400 with FastOutSlowInEasing
+                                0.6f at 0 using FastOutSlowInEasing
+                                1.0f at 400 using FastOutSlowInEasing
+                                0.6f at 800 using FastOutSlowInEasing
+                                0.6f at 1400 using FastOutSlowInEasing
                             },
                             repeatMode = RepeatMode.Restart,
                             initialStartOffset = StartOffset(index * 160)
@@ -142,10 +142,10 @@ fun TimelineLoadingState(
                         animationSpec = infiniteRepeatable(
                             animation = keyframes {
                                 durationMillis = 1400
-                                0.5f at 0 with FastOutSlowInEasing
-                                1.0f at 400 with FastOutSlowInEasing
-                                0.5f at 800 with FastOutSlowInEasing
-                                0.5f at 1400 with FastOutSlowInEasing
+                                0.5f at 0 using FastOutSlowInEasing
+                                1.0f at 400 using FastOutSlowInEasing
+                                0.5f at 800 using FastOutSlowInEasing
+                                0.5f at 1400 using FastOutSlowInEasing
                             },
                             repeatMode = RepeatMode.Restart,
                             initialStartOffset = StartOffset(index * 160)
@@ -157,10 +157,10 @@ fun TimelineLoadingState(
                         animationSpec = infiniteRepeatable(
                             animation = keyframes {
                                 durationMillis = 1400
-                                0f at 0 with FastOutSlowInEasing
-                                -4f at 400 with FastOutSlowInEasing
-                                0f at 800 with FastOutSlowInEasing
-                                0f at 1400 with FastOutSlowInEasing
+                                0f at 0 using FastOutSlowInEasing
+                                -4f at 400 using FastOutSlowInEasing
+                                0f at 800 using FastOutSlowInEasing
+                                0f at 1400 using FastOutSlowInEasing
                             },
                             repeatMode = RepeatMode.Restart,
                             initialStartOffset = StartOffset(index * 160)
