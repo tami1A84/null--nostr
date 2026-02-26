@@ -60,6 +60,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
 
     // CameraX
     implementation(libs.androidx.camera.core)

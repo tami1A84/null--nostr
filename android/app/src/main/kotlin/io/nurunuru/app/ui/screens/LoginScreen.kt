@@ -22,6 +22,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.nurunuru.app.R
@@ -42,6 +43,7 @@ fun LoginScreen(
     var showKey by remember { mutableStateOf(false) }
     var showSignUp by remember { mutableStateOf(false) }
     var showNsecLogin by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     val isLoading = authState is AuthState.Checking
     val errorMsg = (authState as? AuthState.Error)?.message
@@ -141,7 +143,7 @@ fun LoginScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(64.dp)
-                            .shadow(8.dp, RoundedCornerShape(20.dp), spotColor = LineGreen.copy(alpha = 0.2f)),
+                            .shadow(8.dp, RoundedCornerShape(20.dp), spotColor = LineGreen.copy(alpha = 0.1f)),
                         colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
                         shape = RoundedCornerShape(20.dp)
                     ) {
@@ -155,7 +157,7 @@ fun LoginScreen(
                         }
                     }
 
-                    // Toggle Login
+                    // Login Button (Combined)
                     Button(
                         onClick = { showNsecLogin = true },
                         modifier = Modifier
@@ -171,12 +173,65 @@ fun LoginScreen(
                                 modifier = Modifier.size(20.dp),
                                 tint = nuruColors.textPrimary
                             )
-                            Text("既存のアカウントでログイン", fontSize = 16.sp, color = nuruColors.textPrimary)
+                            Text("ログイン", fontSize = 16.sp, color = nuruColors.textPrimary)
                         }
                     }
                 } else {
-                    // Key input (nsec)
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Login options: Passkey or nsec
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        // Passkey Login Button
+                        Button(
+                            onClick = { viewModel.loginWithPasskey(context) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = LineGreen.copy(alpha = 0.1f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LineGreen),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.Fingerprint,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = LineGreen
+                                )
+                                Text("パスキーでログイン", fontSize = 16.sp, color = LineGreen, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = nuruColors.bgTertiary)
+                            Text("または", modifier = Modifier.padding(horizontal = 16.dp), fontSize = 12.sp, color = nuruColors.textTertiary)
+                            HorizontalDivider(modifier = Modifier.weight(1f), color = nuruColors.bgTertiary)
+                        }
+
+                    // External Signer Button (NIP-55)
+                    Button(
+                        onClick = { /* TODO: Implement NIP-55 Intent */ },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = nuruColors.bgSecondary),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.AppShortcut,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = nuruColors.textPrimary
+                            )
+                            Text("外部アプリでログイン (Amber等)", fontSize = 16.sp, color = nuruColors.textPrimary)
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = nuruColors.bgTertiary)
+                        Text("または秘密鍵を入力", modifier = Modifier.padding(horizontal = 16.dp), fontSize = 12.sp, color = nuruColors.textTertiary)
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = nuruColors.bgTertiary)
+                    }
+
                         OutlinedTextField(
                             value = nsecInput,
                             onValueChange = {

@@ -1,6 +1,12 @@
 package io.nurunuru.app.viewmodel
 
 import android.app.Application
+import android.content.Context
+import androidx.credentials.CreatePublicKeyCredentialRequest
+import androidx.credentials.CreatePublicKeyCredentialResponse
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.nurunuru.app.data.NostrClient
@@ -18,6 +24,7 @@ sealed class AuthState {
     object LoggedOut : AuthState()
     data class LoggedIn(val pubkeyHex: String, val privateKeyHex: String) : AuthState()
     data class Error(val message: String) : AuthState()
+    object ExternalSignerWaiting : AuthState()
 }
 
 data class GeneratedAccount(
@@ -71,6 +78,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         pubKeyHex: String,
         name: String,
         about: String,
+        picture: String = "",
+        banner: String = "",
+        nip05: String = "",
+        lud16: String = "",
+        website: String = "",
+        birthday: String = "",
         relays: List<Triple<String, Boolean, Boolean>>? = null
     ): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -94,7 +107,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 pubkey = pubKeyHex,
                 name = name,
                 displayName = name,
-                about = about
+                about = about,
+                picture = picture,
+                banner = banner,
+                nip05 = nip05,
+                lud16 = lud16,
+                website = website,
+                birthday = birthday
             )
             repository.updateProfile(profile)
 
@@ -138,6 +157,63 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             prefs.privateKeyHex = privKeyHex
             prefs.publicKeyHex = pubKeyHex
             _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex)
+        }
+    }
+
+    /**
+     * Passkey login simulation (Android Credential Manager)
+     */
+    fun loginWithPasskey(context: Context) {
+        viewModelScope.launch {
+            _authState.value = AuthState.Checking
+            try {
+                val credentialManager = CredentialManager.create(context)
+                val getPublicKeyCredentialOption = GetPublicKeyCredentialOption(
+                    requestJson = "{\"challenge\":\"Y2hhbGxlbmdl\",\"allowCredentials\":[],\"timeout\":60000,\"userVerification\":\"required\"}"
+                )
+                val getCredRequest = GetCredentialRequest(listOf(getPublicKeyCredentialOption))
+
+                // Note: In a real implementation with a backend/PRF, we would get the seed here.
+                // For now, if we have a stored key, we simulate the 'unlock' UX.
+                val result = credentialManager.getCredential(context, getCredRequest)
+
+                val storedPrivKey = prefs.privateKeyHex
+                val storedPubKey = prefs.publicKeyHex
+
+                if (storedPrivKey != null && storedPubKey != null) {
+                    _authState.value = AuthState.LoggedIn(storedPubKey, storedPrivKey)
+                } else {
+                    _authState.value = AuthState.Error("パスキーに対応するアカウントが見つかりません。新規登録してください。")
+                }
+            } catch (e: Exception) {
+                _authState.value = AuthState.Error("パスキー認証に失敗しました: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Passkey signup simulation
+     */
+    suspend fun signUpWithPasskey(context: Context): Boolean {
+        return try {
+            val credentialManager = CredentialManager.create(context)
+            val requestJson = """
+                {
+                    "challenge": "Y2hhbGxlbmdl",
+                    "rp": { "name": "ぬるぬる", "id": "nurunuru.app" },
+                    "user": { "id": "dXNlcmlk", "name": "user", "displayName": "Nostr User" },
+                    "pubKeyCredParams": [{ "type": "public-key", "alg": -7 }],
+                    "timeout": 60000,
+                    "attestation": "none",
+                    "authenticatorSelection": { "authenticatorAttachment": "platform", "userVerification": "required" }
+                }
+            """.trimIndent()
+
+            val createPublicKeyCredentialRequest = CreatePublicKeyCredentialRequest(requestJson)
+            credentialManager.createCredential(context, createPublicKeyCredentialRequest)
+            true
+        } catch (e: Exception) {
+            false
         }
     }
 

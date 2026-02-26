@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -94,22 +95,33 @@ fun SignUpModal(
                         verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
                         when (step) {
-                            "welcome" -> WelcomeStep(
-                                onNext = {
-                                    isLoading = true
-                                    val acc = viewModel.generateNewAccount()
-                                    if (acc != null) {
-                                        generatedAccount = acc
-                                        step = "backup"
-                                    } else {
-                                        error = "アカウント作成に失敗しました"
-                                    }
-                                    isLoading = false
-                                },
-                                onClose = onClose,
-                                isLoading = isLoading,
-                                error = error
-                            )
+                            "welcome" -> {
+                                val context = LocalContext.current
+                                val coroutineScope = rememberCoroutineScope()
+                                WelcomeStep(
+                                    onNext = {
+                                        isLoading = true
+                                        coroutineScope.launch {
+                                            val success = viewModel.signUpWithPasskey(context)
+                                            if (success) {
+                                                val acc = viewModel.generateNewAccount()
+                                                if (acc != null) {
+                                                    generatedAccount = acc
+                                                    step = "backup"
+                                                } else {
+                                                    error = "アカウント作成に失敗しました"
+                                                }
+                                            } else {
+                                                error = "パスキーの作成に失敗しました"
+                                            }
+                                            isLoading = false
+                                        }
+                                    },
+                                    onClose = onClose,
+                                    isLoading = isLoading,
+                                    error = error
+                                )
+                            }
                             "backup" -> BackupStep(
                                 account = generatedAccount!!,
                                 onNext = { step = "relay" }
@@ -123,16 +135,22 @@ fun SignUpModal(
                             "profile" -> {
                                 val coroutineScope = rememberCoroutineScope()
                                 ProfileStep(
-                                    onFinish = { name, about ->
+                                    onFinish = { name, about, picture, banner, nip05, lud16, website, birthday ->
                                         isLoading = true
                                         coroutineScope.launch {
                                             // Publish metadata and relay list
                                             viewModel.publishInitialMetadata(
-                                                generatedAccount!!.privateKeyHex,
-                                                generatedAccount!!.pubkeyHex,
-                                                name,
-                                                about,
-                                                selectedRelays
+                                                privKeyHex = generatedAccount!!.privateKeyHex,
+                                                pubKeyHex = generatedAccount!!.pubkeyHex,
+                                                name = name,
+                                                about = about,
+                                                picture = picture,
+                                                banner = banner,
+                                                nip05 = nip05,
+                                                lud16 = lud16,
+                                                website = website,
+                                                birthday = birthday,
+                                                relays = selectedRelays
                                             )
                                             // Complete registration locally
                                             viewModel.completeRegistration(
@@ -411,10 +429,17 @@ fun RelayStep(onRelaysSelected: (List<Triple<String, Boolean, Boolean>>) -> Unit
 }
 
 @Composable
-fun ProfileStep(onFinish: (String, String) -> Unit, isLoading: Boolean) {
+fun ProfileStep(onFinish: (String, String, String, String, String, String, String, String) -> Unit, isLoading: Boolean) {
     val nuruColors = LocalNuruColors.current
     var name by remember { mutableStateOf("") }
     var about by remember { mutableStateOf("") }
+    var picture by remember { mutableStateOf("") }
+    var banner by remember { mutableStateOf("") }
+    var nip05 by remember { mutableStateOf("") }
+    var lud16 by remember { mutableStateOf("") }
+    var website by remember { mutableStateOf("") }
+    var birthday by remember { mutableStateOf("") }
+    var showAdvanced by remember { mutableStateOf(false) }
 
     IconBox(icon = Icons.Default.AccountCircle, containerColor = LineGreen.copy(alpha = 0.1f), iconColor = LineGreen)
 
@@ -433,6 +458,17 @@ fun ProfileStep(onFinish: (String, String) -> Unit, isLoading: Boolean) {
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
             shape = RoundedCornerShape(12.dp)
         )
+
+        OutlinedTextField(
+            value = picture,
+            onValueChange = { picture = it },
+            label = { Text("アイコン画像URL") },
+            placeholder = { Text("https://...") },
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
+            shape = RoundedCornerShape(12.dp)
+        )
+
         OutlinedTextField(
             value = about,
             onValueChange = { about = it },
@@ -441,10 +477,57 @@ fun ProfileStep(onFinish: (String, String) -> Unit, isLoading: Boolean) {
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
             shape = RoundedCornerShape(12.dp)
         )
+
+        TextButton(onClick = { showAdvanced = !showAdvanced }) {
+            Text(if (showAdvanced) "詳細設定を隠す" else "詳細設定を表示", color = LineGreen, fontSize = 12.sp)
+        }
+
+        if (showAdvanced) {
+            OutlinedTextField(
+                value = banner,
+                onValueChange = { banner = it },
+                label = { Text("バナー画像URL") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
+                shape = RoundedCornerShape(12.dp)
+            )
+            OutlinedTextField(
+                value = nip05,
+                onValueChange = { nip05 = it },
+                label = { Text("NIP-05 (認証)") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
+                shape = RoundedCornerShape(12.dp)
+            )
+            OutlinedTextField(
+                value = lud16,
+                onValueChange = { lud16 = it },
+                label = { Text("ライトニングアドレス") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
+                shape = RoundedCornerShape(12.dp)
+            )
+            OutlinedTextField(
+                value = website,
+                onValueChange = { website = it },
+                label = { Text("ウェブサイト") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
+                shape = RoundedCornerShape(12.dp)
+            )
+            OutlinedTextField(
+                value = birthday,
+                onValueChange = { birthday = it },
+                label = { Text("誕生日 (MM-DD)") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
     }
 
     Button(
-        onClick = { onFinish(name, about) },
+        onClick = { onFinish(name, about, picture, banner, nip05, lud16, website, birthday) },
         modifier = Modifier.fillMaxWidth().height(56.dp),
         colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
         shape = RoundedCornerShape(16.dp),
