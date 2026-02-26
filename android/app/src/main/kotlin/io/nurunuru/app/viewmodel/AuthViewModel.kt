@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 sealed class AuthState {
     object Checking : AuthState()
     object LoggedOut : AuthState()
-    data class LoggedIn(val pubkeyHex: String, val privateKeyHex: String) : AuthState()
+    data class LoggedIn(val pubkeyHex: String, val privateKeyHex: String?, val isExternal: Boolean = false) : AuthState()
     data class Error(val message: String) : AuthState()
     object ExternalSignerWaiting : AuthState()
 }
@@ -49,8 +49,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             val privKey = prefs.privateKeyHex
             val pubKey = prefs.publicKeyHex
-            if (privKey != null && pubKey != null) {
-                _authState.value = AuthState.LoggedIn(pubKey, privKey)
+            val isExternal = prefs.isExternalSigner
+            if (pubKey != null && (privKey != null || isExternal)) {
+                _authState.value = AuthState.LoggedIn(pubKey, privKey, isExternal)
             } else {
                 _authState.value = AuthState.LoggedOut
             }
@@ -134,7 +135,17 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             prefs.privateKeyHex = privKeyHex
             prefs.publicKeyHex = pubKeyHex
-            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex)
+            prefs.isExternalSigner = false
+            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex, false)
+        }
+    }
+
+    fun loginWithAmber(pubkey: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            prefs.privateKeyHex = null
+            prefs.publicKeyHex = pubkey
+            prefs.isExternalSigner = true
+            _authState.value = AuthState.LoggedIn(pubkey, null, true)
         }
     }
 
@@ -156,7 +167,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
             prefs.privateKeyHex = privKeyHex
             prefs.publicKeyHex = pubKeyHex
-            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex)
+            prefs.isExternalSigner = false
+            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex, false)
         }
     }
 
@@ -169,7 +181,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val credentialManager = CredentialManager.create(context)
                 val getPublicKeyCredentialOption = GetPublicKeyCredentialOption(
-                    requestJson = "{\"challenge\":\"Y2hhbGxlbmdl\",\"allowCredentials\":[],\"timeout\":60000,\"userVerification\":\"required\"}"
+                    requestJson = "{\"challenge\":\"Y2hhbGxlbmdl\",\"allowCredentials\":[],\"timeout\":60000,\"userVerification\":\"required\",\"rpId\":\"www.nullnull.app\"}"
                 )
                 val getCredRequest = GetCredentialRequest(listOf(getPublicKeyCredentialOption))
 
@@ -181,7 +193,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 val storedPubKey = prefs.publicKeyHex
 
                 if (storedPrivKey != null && storedPubKey != null) {
-                    _authState.value = AuthState.LoggedIn(storedPubKey, storedPrivKey)
+                    _authState.value = AuthState.LoggedIn(storedPubKey, storedPrivKey, false)
                 } else {
                     _authState.value = AuthState.Error("パスキーに対応するアカウントが見つかりません。新規登録してください。")
                 }
@@ -200,7 +212,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             val requestJson = """
                 {
                     "challenge": "Y2hhbGxlbmdl",
-                    "rp": { "name": "ぬるぬる", "id": "nurunuru.app" },
+                    "rp": { "name": "ぬるぬる", "id": "www.nullnull.app" },
                     "user": { "id": "dXNlcmlk", "name": "user", "displayName": "Nostr User" },
                     "pubKeyCredParams": [{ "type": "public-key", "alg": -7 }],
                     "timeout": 60000,

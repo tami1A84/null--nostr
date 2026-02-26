@@ -22,10 +22,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.text.style.TextAlign
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.nurunuru.app.R
+import io.nurunuru.app.data.ExternalSigner
 import io.nurunuru.app.ui.components.SignUpModal
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -44,6 +47,15 @@ fun LoginScreen(
     var showSignUp by remember { mutableStateOf(false) }
     var showNsecLogin by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    val amberLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val pubkey = result.data?.getStringExtra("signature") ?: result.data?.getStringExtra("pubKey")
+            if (pubkey != null) {
+                viewModel.loginWithAmber(pubkey)
+            }
+        }
+    }
 
     val isLoading = authState is AuthState.Checking
     val errorMsg = (authState as? AuthState.Error)?.message
@@ -208,7 +220,9 @@ fun LoginScreen(
 
                     // External Signer Button (NIP-55)
                     Button(
-                        onClick = { /* TODO: Implement NIP-55 Intent */ },
+                        onClick = {
+                            amberLauncher.launch(ExternalSigner.createGetPublicKeyIntent())
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),

@@ -134,6 +134,7 @@ fun SignUpModal(
                             )
                             "profile" -> {
                                 val coroutineScope = rememberCoroutineScope()
+                                val context = LocalContext.current
                                 ProfileStep(
                                     onFinish = { name, about, picture, banner, nip05, lud16, website, birthday ->
                                         isLoading = true
@@ -429,7 +430,12 @@ fun RelayStep(onRelaysSelected: (List<Triple<String, Boolean, Boolean>>) -> Unit
 }
 
 @Composable
-fun ProfileStep(onFinish: (String, String, String, String, String, String, String, String) -> Unit, isLoading: Boolean) {
+fun ProfileStep(
+    onFinish: (String, String, String, String, String, String, String, String) -> Unit,
+    isLoading: Boolean
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val nuruColors = LocalNuruColors.current
     var name by remember { mutableStateOf("") }
     var about by remember { mutableStateOf("") }
@@ -440,6 +446,37 @@ fun ProfileStep(onFinish: (String, String, String, String, String, String, Strin
     var website by remember { mutableStateOf("") }
     var birthday by remember { mutableStateOf("") }
     var showAdvanced by remember { mutableStateOf(false) }
+
+    var uploadingPicture by remember { mutableStateOf(false) }
+    var uploadingBanner by remember { mutableStateOf(false) }
+
+    val pictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            coroutineScope.launch {
+                uploadingPicture = true
+                val bytes = context.contentResolver.openInputStream(it)?.readBytes()
+                if (bytes != null) {
+                    val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg")
+                    if (url != null) picture = url
+                }
+                uploadingPicture = false
+            }
+        }
+    }
+
+    val bannerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            coroutineScope.launch {
+                uploadingBanner = true
+                val bytes = context.contentResolver.openInputStream(it)?.readBytes()
+                if (bytes != null) {
+                    val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg")
+                    if (url != null) banner = url
+                }
+                uploadingBanner = false
+            }
+        }
+    }
 
     IconBox(icon = Icons.Default.AccountCircle, containerColor = LineGreen.copy(alpha = 0.1f), iconColor = LineGreen)
 
@@ -466,7 +503,13 @@ fun ProfileStep(onFinish: (String, String, String, String, String, String, Strin
             placeholder = { Text("https://...") },
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(12.dp),
+            trailingIcon = {
+                IconButton(onClick = { pictureLauncher.launch("image/*") }, enabled = !uploadingPicture) {
+                    if (uploadingPicture) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = LineGreen)
+                    else Icon(Icons.Default.CloudUpload, contentDescription = "Upload")
+                }
+            }
         )
 
         OutlinedTextField(
@@ -489,7 +532,13 @@ fun ProfileStep(onFinish: (String, String, String, String, String, String, Strin
                 label = { Text("バナー画像URL") },
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                trailingIcon = {
+                    IconButton(onClick = { bannerLauncher.launch("image/*") }, enabled = !uploadingBanner) {
+                        if (uploadingBanner) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = LineGreen)
+                        else Icon(Icons.Default.CloudUpload, contentDescription = "Upload")
+                    }
+                }
             )
             OutlinedTextField(
                 value = nip05,

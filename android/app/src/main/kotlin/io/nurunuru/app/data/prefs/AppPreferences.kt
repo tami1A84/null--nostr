@@ -48,6 +48,10 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_BLOSSOM_URL, "https://blossom.nostr.build") ?: "https://blossom.nostr.build"
         set(value) = prefs.edit().putString(KEY_BLOSSOM_URL, value).apply()
 
+    var isExternalSigner: Boolean
+        get() = prefs.getBoolean(KEY_IS_EXTERNAL_SIGNER, false)
+        set(value) = prefs.edit().putBoolean(KEY_IS_EXTERNAL_SIGNER, value).apply()
+
     var recentSearches: List<String>
         get() {
             val jsonStr = prefs.getString(KEY_RECENT_SEARCHES, "[]") ?: "[]"
@@ -63,7 +67,7 @@ class AppPreferences(context: Context) {
         }
 
     val isLoggedIn: Boolean
-        get() = privateKeyHex != null && publicKeyHex != null
+        get() = publicKeyHex != null && (privateKeyHex != null || isExternalSigner)
 
     fun clear() {
         prefs.edit().clear().apply()
@@ -76,5 +80,6 @@ class AppPreferences(context: Context) {
         private const val KEY_UPLOAD_SERVER = "upload_server"
         private const val KEY_BLOSSOM_URL = "blossom_url"
         private const val KEY_RECENT_SEARCHES = "recent_searches"
+        private const val KEY_IS_EXTERNAL_SIGNER = "is_external_signer"
     }
 }

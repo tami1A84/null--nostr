@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { nip19 } from 'nostr-tools'
-import { savePubkey, setStoredPrivateKey } from '@/lib/nostr'
+import { savePubkey, setStoredPrivateKey, hexToBytes } from '@/lib/nostr'
 import SignUpModal from './SignUpModal'
 
 export default function LoginScreen({ onLogin }) {
@@ -175,6 +175,10 @@ export default function LoginScreen({ onLogin }) {
     try {
       const manager = nosskeyManagerRef.current
       if (!manager) throw new Error('Manager not initialized')
+
+      // Check for redirect_uri for app login
+      const urlParams = new URLSearchParams(window.location.search)
+      const redirectUri = urlParams.get('redirect_uri')
       
       // First check for stored key info
       let keyInfo = manager.getCurrentKeyInfo()
@@ -185,6 +189,20 @@ export default function LoginScreen({ onLogin }) {
       
       // If we have stored key info, use it
       if (keyInfo && storedPubkey) {
+        // Handle app redirect if requested
+        if (redirectUri) {
+          try {
+            const privateKeyHex = await manager.exportNostrKey(keyInfo)
+            if (privateKeyHex) {
+              const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
+              window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+              return
+            }
+          } catch (e) {
+            console.error('Failed to export key for redirect:', e)
+          }
+        }
+
         savePubkey(storedPubkey)
         localStorage.setItem('nurunuru_login_method', 'nosskey')
         window.nosskeyManager = manager
@@ -204,6 +222,21 @@ export default function LoginScreen({ onLogin }) {
         if (result && result.pubkey) {
           // Save the key info
           manager.setCurrentKeyInfo(result)
+
+          // Handle app redirect if requested
+          if (redirectUri) {
+            try {
+              const privateKeyHex = await manager.exportNostrKey(result)
+              if (privateKeyHex) {
+                const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
+                window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+                return
+              }
+            } catch (e) {
+              console.error('Failed to export key for redirect:', e)
+            }
+          }
+
           savePubkey(result.pubkey)
           localStorage.setItem('nurunuru_login_method', 'nosskey')
           window.nosskeyManager = manager

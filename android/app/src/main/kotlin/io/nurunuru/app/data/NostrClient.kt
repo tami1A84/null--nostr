@@ -20,7 +20,7 @@ private const val TAG = "NostrClient"
 class NostrClient(
     private val context: Context,
     private val relays: List<String>,
-    private val privateKeyHex: String,
+    private val privateKeyHex: String?,
     private val publicKeyHex: String
 ) {
     private var sdkClient: Client? = null
@@ -33,7 +33,8 @@ class NostrClient(
 
     // ─── Connection ───────────────────────────────────────────────────────────
 
-    fun getSigner(): NostrSigner {
+    fun getSigner(): NostrSigner? {
+        if (privateKeyHex.isNullOrBlank()) return null
         val keys = Keys.parse(privateKeyHex)
         return NostrSigner.keys(keys)
     }
@@ -46,8 +47,14 @@ class NostrClient(
                 val database = NostrDatabase.lmdb(dbPath)
 
                 // 2. Setup signer
-                val keys = Keys.parse(privateKeyHex)
-                val signer: NostrSigner = NostrSigner.keys(keys)
+                val signer: NostrSigner = if (!privateKeyHex.isNullOrBlank()) {
+                    val keys = Keys.parse(privateKeyHex)
+                    NostrSigner.keys(keys)
+                } else {
+                    // Use a random key for the client internal operations if no private key
+                    // We'll handle actual event signing manually via ExternalSigner
+                    NostrSigner.keys(Keys.generate())
+                }
 
                 // 3. Build SDK Client
                 val client = ClientBuilder()
@@ -79,19 +86,31 @@ class NostrClient(
         }
     }
 
-    suspend fun publish(kind: Int, content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
+    private suspend fun signAndSend(builder: EventBuilder): Event? {
         val client = sdkClient ?: return null
-        return withContext(Dispatchers.IO) {
-            try {
-                val sdkTags = tags.map { Tag.parse(it) }
-                val builder = EventBuilder(Kind(kind.toUShort()), content).tags(sdkTags)
-                val result = client.sendEventBuilder(builder)
-                val event = client.database().eventById(result.id)
-                event?.let { mapSdkEvent(it) }
-            } catch (e: Exception) {
-                Log.w(TAG, "Publish failed for kind $kind: ${e.message}")
-                null
+        return try {
+            if (privateKeyHex.isNullOrBlank()) {
+                val publicKey = PublicKey.parse(publicKeyHex)
+                val unsignedEvent = builder.build(publicKey)
+                val signedJson = ExternalSigner.signEvent(context, unsignedEvent.asJson(), publicKeyHex) ?: return null
+                val signedEvent = Event.fromJson(signedJson)
+                client.sendEvent(signedEvent)
+                signedEvent
+            } else {
+                val output = client.sendEventBuilder(builder)
+                client.database().eventById(output.id)
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Sign and send failed", e)
+            null
+        }
+    }
+
+    suspend fun publish(kind: Int, content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
+        return withContext(Dispatchers.IO) {
+            val sdkTags = tags.map { Tag.parse(it) }
+            val builder = EventBuilder(Kind(kind.toUShort()), content).tags(sdkTags)
+            signAndSend(builder)?.let { mapSdkEvent(it) }
         }
     }
 
@@ -220,31 +239,20 @@ class NostrClient(
     }
 
     suspend fun publishNote(content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
-        val client = sdkClient ?: return null
         return withContext(Dispatchers.IO) {
-            try {
-                val sdkTags = tags.map { Tag.parse(it) }
-                val builder = EventBuilder.textNote(content).tags(sdkTags)
-                val output = client.sendEventBuilder(builder)
-                val event = client.database().eventById(output.id)
-                event?.let { mapSdkEvent(it) }
-            } catch (e: Exception) {
-                Log.w(TAG, "Publish note failed: ${e.message}")
-                null
-            }
+            val sdkTags = tags.map { Tag.parse(it) }
+            val builder = EventBuilder.textNote(content).tags(sdkTags)
+            signAndSend(builder)?.let { mapSdkEvent(it) }
         }
     }
 
     suspend fun publishReaction(eventId: String, emoji: String = "+"): Boolean {
-        val client = sdkClient ?: return false
         return withContext(Dispatchers.IO) {
             try {
                 val id = EventId.parse(eventId)
-                // Use safe Tag.event(id) for reactions
                 val tags = listOf(Tag.event(id))
                 val builder = EventBuilder(Kind(7u), emoji).tags(tags)
-                client.sendEventBuilder(builder)
-                true
+                signAndSend(builder) != null
             } catch (e: Exception) {
                 false
             }
@@ -252,15 +260,12 @@ class NostrClient(
     }
 
     suspend fun publishRepost(eventId: String): Boolean {
-        val client = sdkClient ?: return false
         return withContext(Dispatchers.IO) {
             try {
                 val id = EventId.parse(eventId)
-                // Use safe Tag.event(id) for reposts
                 val tags = listOf(Tag.event(id))
                 val builder = EventBuilder(Kind(6u), "").tags(tags)
-                client.sendEventBuilder(builder)
-                true
+                signAndSend(builder) != null
             } catch (e: Exception) {
                 false
             }
