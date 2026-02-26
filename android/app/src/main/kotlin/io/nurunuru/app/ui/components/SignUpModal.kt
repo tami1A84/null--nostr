@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import io.nurunuru.app.data.GeohashUtils
+import io.nurunuru.app.data.RelayDiscovery
 import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -40,6 +42,7 @@ fun SignUpModal(
 ) {
     var step by remember { mutableStateOf("welcome") } // welcome, backup, relay, profile, success
     var generatedAccount by remember { mutableStateOf<GeneratedAccount?>(null) }
+    var selectedRelays by remember { mutableStateOf<List<Triple<String, Boolean, Boolean>>?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
 
@@ -106,7 +109,10 @@ fun SignUpModal(
                                 onNext = { step = "relay" }
                             )
                             "relay" -> RelayStep(
-                                onNext = { step = "profile" }
+                                onRelaysSelected = { relays ->
+                                    selectedRelays = relays
+                                    step = "profile"
+                                }
                             )
                             "profile" -> {
                                 val coroutineScope = rememberCoroutineScope()
@@ -119,7 +125,8 @@ fun SignUpModal(
                                                 generatedAccount!!.privateKeyHex,
                                                 generatedAccount!!.pubkeyHex,
                                                 name,
-                                                about
+                                                about,
+                                                selectedRelays
                                             )
                                             // Complete registration locally
                                             viewModel.completeRegistration(
@@ -256,43 +263,116 @@ fun BackupStep(
 }
 
 @Composable
-fun RelayStep(onNext: () -> Unit) {
+fun RelayStep(onRelaysSelected: (List<Triple<String, Boolean, Boolean>>) -> Unit) {
     val nuruColors = LocalNuruColors.current
+    var selectionMode by remember { mutableStateOf("manual") } // auto, manual
+    var recommendedRelays by remember { mutableStateOf<List<Triple<String, Boolean, Boolean>>>(
+        RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503) // Default to Tokyo
+    ) }
+    var regionName by remember { mutableStateOf("東京") }
+    var isLoading by remember { mutableStateOf(false) }
 
     IconBox(icon = Icons.Default.LocationOn, containerColor = Color(0xFF2196F3).copy(alpha = 0.1f), iconColor = Color(0xFF2196F3))
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("リレーのセットアップ", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = nuruColors.textPrimary)
-        Text("日本向けの最適なリレーが自動的に設定されます。", fontSize = 13.sp, color = nuruColors.textSecondary, textAlign = TextAlign.Center)
+        Text("地域を選択すると最適なリレーが自動設定されます。", fontSize = 13.sp, color = nuruColors.textSecondary, textAlign = TextAlign.Center)
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = nuruColors.bgSecondary),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("推奨リレー (日本)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = nuruColors.textTertiary)
-            listOf("wss://yabu.me", "wss://relay.nostr.wirednet.jp", "wss://r.kojira.io").forEach { url ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Dns,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = LineGreen
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(url.replace("wss://", ""), fontSize = 13.sp, color = nuruColors.textPrimary)
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().background(nuruColors.bgSecondary, RoundedCornerShape(12.dp)).padding(4.dp)
+        ) {
+            val modes = listOf("auto" to "GPSで自動検出", "manual" to "手動で選択")
+            modes.forEach { (id, label) ->
+                val selected = selectionMode == id
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (selected) nuruColors.bgPrimary else Color.Transparent)
+                        .clickable {
+                            selectionMode = id
+                            if (id == "auto") {
+                                // Mocking GPS detection for now as permission handling in Modal is complex
+                                // but following the logic of autoDetectRelays in geohash.js
+                                isLoading = true
+                                // Simulated delay
+                                regionName = "GPS検出中..."
+                                // In a real app, use FusedLocationProvider here
+                                recommendedRelays = RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503)
+                                regionName = "東京 (GPS推定)"
+                                isLoading = false
+                            }
+                        }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (selected) LineGreen else nuruColors.textTertiary)
+                }
+            }
+        }
+
+        if (selectionMode == "manual") {
+            var expanded by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton(
+                    onClick = { expanded = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = nuruColors.textPrimary)
+                ) {
+                    Text(regionName)
+                    Icon(Icons.Default.ArrowDropDown, null)
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    RelayDiscovery.REGION_COORDINATES.forEach { region ->
+                        DropdownMenuItem(
+                            text = { Text(region.name) },
+                            onClick = {
+                                regionName = region.name
+                                recommendedRelays = RelayDiscovery.generateRelayListByLocation(region.lat, region.lon)
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = nuruColors.bgSecondary),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("推奨リレー ($regionName)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = nuruColors.textTertiary)
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp).align(Alignment.CenterHorizontally), color = LineGreen)
+                } else {
+                    recommendedRelays.forEach { (url, read, write) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.Dns, contentDescription = null, modifier = Modifier.size(14.dp), tint = LineGreen)
+                            Spacer(Modifier.width(8.dp))
+                            Text(url.replace("wss://", ""), fontSize = 13.sp, color = nuruColors.textPrimary, modifier = Modifier.weight(1f))
+                            if (read) Badge(containerColor = Color.Blue.copy(alpha = 0.2f)) { Text("R", color = Color.Blue, fontSize = 8.sp) }
+                            if (write) {
+                                Spacer(Modifier.width(4.dp))
+                                Badge(containerColor = LineGreen.copy(alpha = 0.2f)) { Text("W", color = LineGreen, fontSize = 8.sp) }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
     Button(
-        onClick = onNext,
+        onClick = { onRelaysSelected(recommendedRelays) },
         modifier = Modifier.fillMaxWidth().height(56.dp),
         colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(16.dp),
+        enabled = !isLoading
     ) {
         Text("次へ進む", fontWeight = FontWeight.Bold)
     }

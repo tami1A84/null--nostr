@@ -1,6 +1,7 @@
 package io.nurunuru.app.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +45,48 @@ fun LoginScreen(
 
     val isLoading = authState is AuthState.Checking
     val errorMsg = (authState as? AuthState.Error)?.message
+
+    // Match Web version's initial loading state
+    if (isLoading && !showNsecLogin && !showSignUp) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(nuruColors.bgPrimary),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val infiniteTransition = rememberInfiniteTransition(label = "logo_pulse")
+                val scale by infiniteTransition.animateFloat(
+                    initialValue = 0.95f,
+                    targetValue = 1.05f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "scale"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .graphicsLayer(scaleX = scale, scaleY = scale)
+                        .clip(RoundedCornerShape(20.dp))
+                ) {
+                    androidx.compose.foundation.Image(
+                        painter = painterResource(id = R.drawable.logo),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = "読み込み中...",
+                    color = nuruColors.textTertiary,
+                    fontSize = 14.sp
+                )
+            }
+        }
+        return
+    }
 
     Box(
         modifier = Modifier

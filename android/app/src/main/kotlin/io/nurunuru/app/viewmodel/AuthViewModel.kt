@@ -70,14 +70,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         privKeyHex: String,
         pubKeyHex: String,
         name: String,
-        about: String
+        about: String,
+        relays: List<Triple<String, Boolean, Boolean>>? = null
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            // 1. Setup temporary client with default JP relays
-            val defaultRelays = listOf("wss://yabu.me", "wss://relay.nostr.wirednet.jp", "wss://r.kojira.io")
+            // 1. Setup temporary client with default JP relays or provided relays
+            val targetRelays = relays?.map { it.first } ?: listOf("wss://yabu.me", "wss://relay.nostr.wirednet.jp", "wss://r.kojira.io")
             val client = NostrClient(
                 context = getApplication(),
-                relays = defaultRelays,
+                relays = targetRelays,
                 privateKeyHex = privKeyHex,
                 publicKeyHex = pubKeyHex
             )
@@ -98,7 +99,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             repository.updateProfile(profile)
 
             // 3. Publish Kind 10002 (Relay List)
-            val relayList = defaultRelays.map { Triple(it, true, true) }
+            val relayList = relays ?: targetRelays.map { Triple(it, true, true) }
             repository.updateRelayList(relayList)
 
             // 4. Disconnect
