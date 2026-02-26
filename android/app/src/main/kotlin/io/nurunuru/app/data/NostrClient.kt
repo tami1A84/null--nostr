@@ -95,7 +95,15 @@ class NostrClient(
             } else {
                 val publicKey = PublicKey.parse(publicKeyHex)
                 val unsignedEvent = builder.build(publicKey)
-                val signedJson = signer.signEvent(unsignedEvent.asJson()) ?: return null
+                val unsignedJson = unsignedEvent.asJson()
+                Log.d(TAG, "Requesting external signature for: $unsignedJson")
+
+                val signedJson = signer.signEvent(unsignedJson) ?: run {
+                    Log.e(TAG, "External signer returned null")
+                    return null
+                }
+
+                Log.d(TAG, "Received signed JSON: $signedJson")
                 val signedEvent = Event.fromJson(signedJson)
                 client.sendEvent(signedEvent)
                 signedEvent

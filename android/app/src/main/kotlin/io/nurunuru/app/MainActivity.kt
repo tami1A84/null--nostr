@@ -92,9 +92,11 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         intent?.data?.let { uri ->
+            android.util.Log.d("MainActivity", "Handling deep link: $uri")
             if (uri.scheme == "io.nurunuru.app" && uri.host == "login") {
                 val nsec = uri.getQueryParameter("nsec")
                 if (!nsec.isNullOrBlank()) {
+                    android.util.Log.d("MainActivity", "Found nsec in deep link, logging in...")
                     authViewModel?.login(nsec)
                 }
             }

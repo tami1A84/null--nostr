@@ -183,6 +183,20 @@ export default function Home() {
   const handleLogin = (newPubkey) => {
     startBackgroundPrefetch(newPubkey)
     setPubkey(newPubkey)
+
+    // Check for redirect_uri and handle it immediately after login
+    const urlParams = new URLSearchParams(window.location.search)
+    const redirectUri = urlParams.get('redirect_uri')
+    if (redirectUri) {
+      const privateKeyHex = getPrivateKeyHex()
+      if (privateKeyHex) {
+        const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
+        window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+      } else {
+        // If logged in but no private key (unlikely here but for safety)
+        setActiveTab('app-redirect-prompt')
+      }
+    }
   }
 
   const handleLogout = () => {

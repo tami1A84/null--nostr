@@ -175,7 +175,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun loginWithPasskey(context: Context) {
         try {
-            val url = "https://www.nullnull.app/?redirect_uri=io.nurunuru.app://login"
+            val redirectUri = android.net.Uri.encode("io.nurunuru.app://login")
+            val url = "https://www.nullnull.app/?redirect_uri=$redirectUri"
             val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder()
                 .setShowTitle(true)
                 .build()

@@ -67,15 +67,10 @@ export default function LoginScreen({ onLogin }) {
           }
         }
 
-        // 3. Silently check for PRF support
-        // We do this after checking storage to avoid unnecessary prompts if possible
-        // Note: isPrfSupported() is generally safe but we call it only once
-        try {
-          const supported = await manager.isPrfSupported()
-          setNosskeySupported(supported)
-        } catch (e) {
-          console.warn('PRF support check failed:', e)
-          setNosskeySupported(false)
+        // 3. Check for Passkey support
+        const hasWebAuthn = !!window.PublicKeyCredential
+        if (hasWebAuthn) {
+          setNosskeySupported(true)
         }
       } catch (e) {
         console.error('Nosskey initialization failed:', e)
@@ -173,7 +168,7 @@ export default function LoginScreen({ onLogin }) {
     setNosskeyLoading(true)
     setError('')
     try {
-      const manager = nosskeyManagerRef.current
+      const manager = nosskeyManagerRef.current || window.nosskeyManager
       if (!manager) throw new Error('Manager not initialized')
 
       // Check for redirect_uri for app login
@@ -222,6 +217,16 @@ export default function LoginScreen({ onLogin }) {
         if (result && result.pubkey) {
           // Save the key info
           manager.setCurrentKeyInfo(result)
+
+          // Also try to export and store the private key immediately to facilitate redirection
+          try {
+            const privateKeyHex = await manager.exportNostrKey(result)
+            if (privateKeyHex) {
+              setStoredPrivateKey(result.pubkey, privateKeyHex)
+            }
+          } catch (e) {
+            console.warn('Failed to pre-export key:', e)
+          }
 
           // Handle app redirect if requested
           if (redirectUri) {

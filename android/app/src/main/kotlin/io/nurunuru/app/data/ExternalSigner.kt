@@ -66,7 +66,7 @@ object ExternalSigner : AppSigner {
             `package` = PACKAGE_NAME
             putExtra("type", "sign_event")
             putExtra("event", eventJson)
-            putExtra("current_user", pubkey)
+            putExtra("pubKey", pubkey)
             putExtra("returnType", "event")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
@@ -83,8 +83,8 @@ object ExternalSigner : AppSigner {
             `package` = PACKAGE_NAME
             putExtra("type", if (nip44) "nip44_decrypt" else "nip04_decrypt")
             putExtra("content", content)
-            putExtra("pubKey", pubkey)
-            putExtra("current_user", currentUser)
+            putExtra("pubKey", currentUser)
+            putExtra("pubkey", pubkey)
             putExtra("returnType", "signature")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
@@ -95,29 +95,61 @@ object ExternalSigner : AppSigner {
             `package` = PACKAGE_NAME
             putExtra("type", if (nip44) "nip44_encrypt" else "nip04_encrypt")
             putExtra("content", content)
-            putExtra("pubKey", pubkey)
-            putExtra("current_user", currentUser)
+            putExtra("pubKey", currentUser)
+            putExtra("pubkey", pubkey)
             putExtra("returnType", "signature")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
     }
 
     suspend fun signEvent(context: Context?, eventJson: String, pubkey: String): String? {
+        Log.d("ExternalSigner", "Requesting signature for event: $eventJson")
         val intent = createSignEventIntent(context, eventJson, pubkey)
-        val result = request(context, intent) ?: return null
-        return result.getStringExtra("event") ?: result.getStringExtra("signature")
+        val result = request(context, intent) ?: run {
+            Log.e("ExternalSigner", "Request failed or cancelled")
+            return null
+        }
+
+        // Log all extras for debugging
+        result.extras?.keySet()?.forEach { key ->
+            Log.d("ExternalSigner", "Result extra: $key = ${result.extras?.get(key)}")
+        }
+
+        val signedEvent = result.getStringExtra("event")
+        if (signedEvent != null && signedEvent.isNotBlank()) {
+            Log.d("ExternalSigner", "Received full signed event: $signedEvent")
+            return signedEvent
+        }
+
+        val signature = result.getStringExtra("signature") ?: result.getStringExtra("sig")
+        if (signature != null && signature.isNotBlank()) {
+            Log.d("ExternalSigner", "Received signature: $signature. Reconstructing event...")
+            // Reconstruct event if only signature is returned
+            return try {
+                val map = Json.parseToJsonElement(eventJson).jsonObject.toMutableMap()
+                map["sig"] = kotlinx.serialization.json.JsonPrimitive(signature)
+                val reconstructed = Json.encodeToString(JsonObject(map))
+                Log.d("ExternalSigner", "Reconstructed event: $reconstructed")
+                reconstructed
+            } catch (e: Exception) {
+                Log.e("ExternalSigner", "Failed to reconstruct event", e)
+                null
+            }
+        }
+        Log.e("ExternalSigner", "No event or signature found in result")
+        return null
     }
 
     suspend fun decrypt(context: Context?, content: String, pubkey: String, currentUser: String, nip44: Boolean): String? {
         val intent = createDecryptIntent(content, pubkey, currentUser, nip44)
         val result = request(context, intent) ?: return null
-        return result.getStringExtra("signature") ?: result.getStringExtra("content")
+        return result.getStringExtra("signature") ?: result.getStringExtra("content") ?: result.getStringExtra("result")
     }
 
     suspend fun encrypt(context: Context?, content: String, pubkey: String, currentUser: String, nip44: Boolean): String? {
         val intent = createEncryptIntent(content, pubkey, currentUser, nip44)
         val result = request(context, intent) ?: return null
-        return result.getStringExtra("signature") ?: result.getStringExtra("content")
+        return result.getStringExtra("signature") ?: result.getStringExtra("content") ?: result.getStringExtra("result")
     }
 
     private suspend fun request(context: Context?, intent: Intent): Intent? = mutex.withLock {
@@ -149,13 +181,12 @@ object ExternalSigner : AppSigner {
     private fun tryContentResolver(context: Context, intent: Intent): Intent? {
         val type = intent.getStringExtra("type") ?: return null
         val data = intent.getStringExtra("event") ?: intent.getStringExtra("content") ?: ""
-        val currentUser = intent.getStringExtra("current_user") ?: ""
         val pubKey = intent.getStringExtra("pubKey") ?: ""
 
-        val result = queryProvider(context, CONTENT_URI, type, data, currentUser, pubKey)
+        val result = queryProvider(context, CONTENT_URI, type, data, pubKey)
         if (result != null) return result
 
-        return queryProvider(context, CONTENT_URI_LEGACY, type, data, currentUser, pubKey)
+        return queryProvider(context, CONTENT_URI_LEGACY, type, data, pubKey)
     }
 
     private fun queryProvider(
@@ -163,13 +194,13 @@ object ExternalSigner : AppSigner {
         baseUri: String,
         type: String,
         data: String,
-        currentUser: String,
         pubKey: String
     ): Intent? {
         try {
+            Log.d("ExternalSigner", "Querying provider: $baseUri/$type with pubKey: $pubKey")
             val uri = Uri.parse("$baseUri/$type")
             val projection = arrayOf("signature", "event")
-            val selectionArgs = arrayOf(currentUser, pubKey)
+            val selectionArgs = arrayOf(pubKey)
 
             context.contentResolver.query(uri, projection, data, selectionArgs, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
@@ -192,23 +223,7 @@ object ExternalSigner : AppSigner {
     }
 
     override suspend fun signEvent(eventJson: String): String? {
-        val intent = createSignEventIntent(null, eventJson, getPublicKeyHex())
-        val result = request(null, intent) ?: return null
-        val signedEventJson = result.getStringExtra("event")
-        if (signedEventJson != null) return signedEventJson
-
-        val signature = result.getStringExtra("signature")
-        if (signature != null) {
-            // Reconstruct event if only signature is returned
-            return try {
-                val map = Json.parseToJsonElement(eventJson).jsonObject.toMutableMap()
-                map["sig"] = jsonPrimitive(signature)
-                Json.encodeToString(JsonObject(map))
-            } catch (e: Exception) {
-                null
-            }
-        }
-        return null
+        return signEvent(null, eventJson, getPublicKeyHex())
     }
 
     private fun jsonPrimitive(value: String) = kotlinx.serialization.json.JsonPrimitive(value)
