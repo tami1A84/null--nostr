@@ -47,12 +47,22 @@ class NostrRepository(
     /** Search for notes by text (NIP-50). */
     suspend fun searchNotes(query: String, limit: Int = 30): List<ScoredPost> {
         val filter = NostrClient.Filter(
-            kinds = listOf(NostrKind.TEXT_NOTE),
+            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
             search = query,
             limit = limit
         )
         val events = client.fetchEvents(filter, timeoutMs = 6_000)
         return enrichPosts(events)
+    }
+
+    /** Fetch a specific event by ID. */
+    suspend fun fetchEvent(eventId: String): ScoredPost? {
+        val filter = NostrClient.Filter(
+            ids = listOf(eventId),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        return enrichPosts(events).firstOrNull()
     }
 
     // ─── Profiles ─────────────────────────────────────────────────────────────
@@ -447,6 +457,19 @@ class NostrRepository(
 
     fun getUploadServer(): String = prefs.uploadServer
     fun setUploadServer(server: String) { prefs.uploadServer = server }
+
+    fun getRecentSearches(): List<String> = prefs.recentSearches
+    fun saveRecentSearch(query: String) {
+        val current = prefs.recentSearches
+        val updated = (listOf(query) + current.filter { it != query }).take(5)
+        prefs.recentSearches = updated
+    }
+    fun removeRecentSearch(query: String) {
+        prefs.recentSearches = prefs.recentSearches.filter { it != query }
+    }
+    fun clearRecentSearches() {
+        prefs.recentSearches = emptyList()
+    }
 
     suspend fun uploadImage(fileBytes: ByteArray, mimeType: String): String? {
         val server = prefs.uploadServer

@@ -3,12 +3,18 @@ package io.nurunuru.app.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import io.nurunuru.app.data.Nip05Utils
+import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.ScoredPost
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 enum class FeedType { GLOBAL, FOLLOWING }
+
+sealed class SearchNavigationEvent {
+    data class OpenProfile(val pubkey: String) : SearchNavigationEvent()
+}
 
 data class TimelineUiState(
     val globalPosts: List<ScoredPost> = emptyList(),
@@ -23,6 +29,7 @@ data class TimelineUiState(
     val searchQuery: String = "",
     val searchResults: List<ScoredPost> = emptyList(),
     val isSearching: Boolean = false,
+    val recentSearches: List<String> = emptyList(),
     val hasNewRecommendations: Boolean = false,
     val followList: List<String> = emptyList(),
     val birdwatchNotes: Map<String, List<io.nurunuru.app.data.models.NostrEvent>> = emptyMap()
@@ -39,10 +46,18 @@ class TimelineViewModel(
     ))
     val uiState: StateFlow<TimelineUiState> = _uiState.asStateFlow()
 
+    private val _navigationEvents = MutableSharedFlow<SearchNavigationEvent>()
+    val navigationEvents = _navigationEvents.asSharedFlow()
+
     init {
         loadFollowList()
         loadGlobalTimeline()
         loadFollowingTimeline()
+        loadRecentSearches()
+    }
+
+    private fun loadRecentSearches() {
+        _uiState.update { it.copy(recentSearches = repository.getRecentSearches()) }
     }
 
     private fun loadFollowList() {
@@ -151,10 +166,52 @@ class TimelineViewModel(
             _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false) }
             return
         }
-        _uiState.update { it.copy(searchQuery = query, isSearching = true) }
+
+        val trimmedQuery = query.trim()
+        repository.saveRecentSearch(trimmedQuery)
+        _uiState.update { it.copy(
+            searchQuery = trimmedQuery,
+            isSearching = true,
+            recentSearches = repository.getRecentSearches()
+        ) }
+
         viewModelScope.launch {
             try {
-                val results = repository.searchNotes(query, 30)
+                // 1. Check for npub or hex pubkey
+                val pubkey = NostrKeyUtils.parsePublicKey(trimmedQuery)
+                if (pubkey != null && trimmedQuery.startsWith("npub")) {
+                    _navigationEvents.emit(SearchNavigationEvent.OpenProfile(pubkey))
+                    _uiState.update { it.copy(isSearching = false) }
+                    return@launch
+                }
+
+                // 2. Check for NIP-05
+                if (trimmedQuery.contains("@") && !trimmedQuery.contains(" ")) {
+                    val resolved = Nip05Utils.resolveNip05(trimmedQuery)
+                    if (resolved != null) {
+                        _navigationEvents.emit(SearchNavigationEvent.OpenProfile(resolved))
+                        _uiState.update { it.copy(isSearching = false) }
+                        return@launch
+                    }
+                }
+
+                // 3. Check for specific event (note, nevent, or 64-char hex)
+                val isHex64 = trimmedQuery.length == 64 && trimmedQuery.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
+                if (trimmedQuery.startsWith("note") || trimmedQuery.startsWith("nevent") || isHex64) {
+                    val event = repository.fetchEvent(trimmedQuery)
+                    if (event != null) {
+                        _uiState.update { it.copy(searchResults = listOf(event), isSearching = false) }
+                        return@launch
+                    } else if (isHex64) {
+                        // If 64 char hex failed as event, try as pubkey
+                        _navigationEvents.emit(SearchNavigationEvent.OpenProfile(trimmedQuery.lowercase()))
+                        _uiState.update { it.copy(isSearching = false) }
+                        return@launch
+                    }
+                }
+
+                // 4. Default: Text search
+                val results = repository.searchNotes(trimmedQuery, 30)
                 _uiState.update { it.copy(searchResults = results, isSearching = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isSearching = false) }
@@ -164,6 +221,16 @@ class TimelineViewModel(
 
     fun clearSearch() {
         _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false) }
+    }
+
+    fun removeRecentSearch(query: String) {
+        repository.removeRecentSearch(query)
+        loadRecentSearches()
+    }
+
+    fun clearRecentSearches() {
+        repository.clearRecentSearches()
+        loadRecentSearches()
     }
 
     fun likePost(eventId: String) {
