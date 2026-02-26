@@ -1253,29 +1253,29 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
   return (
     <div className="min-h-full overflow-x-hidden">
       {/* Header with tabs - fixed position (mobile only) */}
-      <header className="fixed top-0 left-0 right-0 lg:left-[240px] xl:left-[280px] z-30 header-blur border-b border-[var(--border-color)]">
+      <header className="fixed top-0 left-0 right-0 lg:left-[240px] xl:left-[280px] z-30 bg-[var(--bg-primary)] border-b border-[var(--border-color)]">
         <div className="flex items-center justify-between px-4 h-14 lg:h-16">
-          {/* Tab Switcher (Mobile only) */}
-          <div className="flex items-center gap-1 lg:hidden">
+          {/* Tab Switcher (Mobile only) - Pill Style */}
+          <div className="flex items-center gap-2 p-1 bg-[var(--bg-secondary)] rounded-full lg:hidden">
             <button
               onClick={() => handleModeChange('global')}
-              className={`relative px-3 py-1.5 text-sm rounded-full transition-all ${
+              className={`relative px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 timelineMode === 'global'
-                  ? 'bg-[var(--line-green)] text-white font-medium shadow-sm'
-                  : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]'
+                  ? 'bg-[var(--line-green)] text-white shadow-sm'
+                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
               }`}
             >
               おすすめ
               {recommendedReady && timelineMode !== 'global' && (
-                <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-[var(--bg-primary)]" />
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[var(--bg-secondary)]" />
               )}
             </button>
             <button
               onClick={() => handleModeChange('following')}
-              className={`px-3 py-1.5 text-sm rounded-full transition-all ${
+              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                 timelineMode === 'following'
-                  ? 'bg-[var(--line-green)] text-white font-medium shadow-sm'
-                  : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]'
+                  ? 'bg-[var(--line-green)] text-white shadow-sm'
+                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
               }`}
             >
               フォロー
@@ -1752,61 +1752,48 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
             </div>
           </div>
         ) : posts.length === 0 || loadError ? (
-          /* Nintendo-style: 失敗しても責められない、励ましのメッセージ */
-          <div className="error-friendly animate-fadeIn">
-            <div className="error-friendly-icon">
-              {loadError ? (
-                /* 接続エラー - 優しいアイコン（警告マークではなく顔文字風） */
-                <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
-                  <line x1="9" y1="9" x2="9.01" y2="9"/>
-                  <line x1="15" y1="9" x2="15.01" y2="9"/>
-                </svg>
-              ) : timelineMode === 'following' ? (
-                <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                </svg>
-              ) : (
-                <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                  <line x1="3" y1="9" x2="21" y2="9"/>
-                  <line x1="9" y1="21" x2="9" y2="9"/>
-                </svg>
-              )}
-            </div>
-            {/* Nintendo-style: 励ましのメッセージ */}
-            <h2 className="error-friendly-title">
-              {loadError
-                ? 'うまく接続できませんでした'
-                : timelineMode === 'following'
-                  ? (followList.length === 0 ? 'まだ誰もフォローしていません' : 'まだ投稿がないようです')
-                  : 'まだ投稿がありません'}
-            </h2>
-            <p className="error-friendly-message">
-              {loadError
-                ? '通信状態を確認して、もう一度お試しください'
-                : timelineMode === 'following'
-                  ? (followList.length === 0 ? '素敵な人を見つけてフォローしてみましょう' : 'しばらくお待ちいただくか、更新してみてください')
-                  : '新しい投稿がまもなく届くかもしれません'}
-            </p>
+          <div className="flex flex-col items-center justify-center py-20 px-4 text-center animate-fadeIn">
             {loadError ? (
-              <button
-                onClick={() => loadTimeline()}
-                className="retry-button mt-4"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="23 4 23 10 17 10"/>
-                  <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
-                </svg>
-                もう一度試す
-              </button>
-            ) : timelineMode === 'following' && followList.length === 0 && (
-              <div className="error-friendly-hint mt-4">
-                💡 プロフィールページでユーザーをフォローしてみましょう
+              <>
+                <div className="w-16 h-16 bg-[var(--bg-secondary)] rounded-full flex items-center justify-center mb-4 text-2xl">
+                  🌐
+                </div>
+                <h2 className="text-lg font-bold text-[var(--text-primary)] mb-2">接続エラー</h2>
+                <p className="text-[var(--text-secondary)] mb-6">
+                  通信状態を確認して、もう一度お試しください
+                </p>
+                <button
+                  onClick={() => loadTimeline()}
+                  className="btn-line px-6 py-2 rounded-full text-sm"
+                >
+                  再試行
+                </button>
+              </>
+            ) : timelineMode === 'following' ? (
+              <div className="empty-friendly">
+                <div className="empty-friendly-icon">📭</div>
+                <p className="empty-friendly-text">
+                  {followList.length === 0 ? 'まだ誰もフォローしていません' : 'フォロー中のユーザーの投稿がありません'}
+                </p>
+                {followList.length === 0 && (
+                  <div className="mt-6">
+                    <div className="text-xs px-3 py-2 bg-[var(--bg-secondary)] rounded-lg text-[var(--text-tertiary)] inline-block">
+                      💡 プロフィールページでユーザーをフォローしてみましょう
+                    </div>
+                  </div>
+                )}
+                {followList.length > 0 && (
+                   <p className="text-xs text-[var(--text-tertiary)] mt-2">
+                     しばらくお待ちいただくか、更新してみてください
+                   </p>
+                )}
+              </div>
+            ) : (
+              <div className="empty-friendly">
+                <div className="empty-friendly-icon">📭</div>
+                <p className="empty-friendly-text">
+                  まだ投稿がありません<br/>新しい投稿がまもなく届くかもしれません
+                </p>
               </div>
             )}
           </div>
@@ -1933,9 +1920,11 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
                   {followList.length === 0 ? 'まだ誰もフォローしていません' : 'フォロー中のユーザーの投稿がありません'}
                 </p>
                 {followList.length === 0 && (
-                  <p className="text-xs text-[var(--text-tertiary)] mt-2">
-                    プロフィールページでユーザーをフォローしてみましょう
-                  </p>
+                  <div className="mt-4">
+                    <div className="text-xs px-3 py-2 bg-[var(--bg-secondary)] rounded-lg text-[var(--text-tertiary)] inline-block">
+                      💡 プロフィールページでユーザーをフォローしてみましょう
+                    </div>
+                  </div>
                 )}
               </div>
             ) : (

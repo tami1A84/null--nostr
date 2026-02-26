@@ -11,14 +11,20 @@ import kotlinx.coroutines.launch
 enum class FeedType { GLOBAL, FOLLOWING }
 
 data class TimelineUiState(
-    val posts: List<ScoredPost> = emptyList(),
-    val isLoading: Boolean = false,
-    val isRefreshing: Boolean = false,
-    val error: String? = null,
-    val feedType: FeedType = FeedType.GLOBAL,
+    val globalPosts: List<ScoredPost> = emptyList(),
+    val followingPosts: List<ScoredPost> = emptyList(),
+    val isGlobalLoading: Boolean = false,
+    val isFollowingLoading: Boolean = false,
+    val isGlobalRefreshing: Boolean = false,
+    val isFollowingRefreshing: Boolean = false,
+    val globalError: String? = null,
+    val followingError: String? = null,
+    val feedType: FeedType = FeedType.FOLLOWING,
     val searchQuery: String = "",
     val searchResults: List<ScoredPost> = emptyList(),
     val isSearching: Boolean = false,
+    val hasNewRecommendations: Boolean = false,
+    val followList: List<String> = emptyList(),
     val birdwatchNotes: Map<String, List<io.nurunuru.app.data.models.NostrEvent>> = emptyMap()
 )
 
@@ -27,61 +33,117 @@ class TimelineViewModel(
     private val pubkeyHex: String
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(TimelineUiState(isLoading = true))
+    private val _uiState = MutableStateFlow(TimelineUiState(
+        isGlobalLoading = true,
+        isFollowingLoading = true
+    ))
     val uiState: StateFlow<TimelineUiState> = _uiState.asStateFlow()
 
     init {
-        loadTimeline()
+        loadFollowList()
+        loadGlobalTimeline()
+        loadFollowingTimeline()
     }
 
-    fun loadTimeline() {
+    private fun loadFollowList() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                val posts = when (_uiState.value.feedType) {
-                    FeedType.GLOBAL -> repository.fetchGlobalTimeline(50)
-                    FeedType.FOLLOWING -> repository.fetchFollowTimeline(pubkeyHex, 50)
+                val follows = repository.fetchFollowList(pubkeyHex)
+                _uiState.update { it.copy(followList = follows) }
+            } catch (e: Exception) { /* Ignore */ }
+        }
+    }
+
+    fun loadGlobalTimeline(isRefresh: Boolean = false) {
+        viewModelScope.launch {
+            _uiState.update {
+                if (isRefresh) it.copy(isGlobalRefreshing = true, globalError = null)
+                else it.copy(isGlobalLoading = true, globalError = null)
+            }
+            try {
+                val posts = repository.fetchGlobalTimeline(50)
+                _uiState.update { state ->
+                    state.copy(
+                        globalPosts = posts,
+                        isGlobalLoading = false,
+                        isGlobalRefreshing = false,
+                        hasNewRecommendations = state.feedType != FeedType.GLOBAL
+                    )
                 }
-                _uiState.update { it.copy(posts = posts, isLoading = false) }
                 fetchBirdwatchForPosts(posts)
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = "タイムラインの読み込みに失敗しました", isLoading = false) }
+                _uiState.update {
+                    it.copy(
+                        globalError = if (isRefresh) "更新に失敗しました" else "おすすめの読み込みに失敗しました",
+                        isGlobalLoading = false,
+                        isGlobalRefreshing = false
+                    )
+                }
+            }
+        }
+    }
+
+    fun loadFollowingTimeline(isRefresh: Boolean = false) {
+        viewModelScope.launch {
+            _uiState.update {
+                if (isRefresh) it.copy(isFollowingRefreshing = true, followingError = null)
+                else it.copy(isFollowingLoading = true, followingError = null)
+            }
+            try {
+                val posts = repository.fetchFollowTimeline(pubkeyHex, 50)
+                _uiState.update { it.copy(
+                    followingPosts = posts,
+                    isFollowingLoading = false,
+                    isFollowingRefreshing = false
+                ) }
+                fetchBirdwatchForPosts(posts)
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        followingError = if (isRefresh) "更新に失敗しました" else "フォロー中の読み込みに失敗しました",
+                        isFollowingLoading = false,
+                        isFollowingRefreshing = false
+                    )
+                }
             }
         }
     }
 
     fun refresh() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true, error = null) }
-            try {
-                val posts = when (_uiState.value.feedType) {
-                    FeedType.GLOBAL -> repository.fetchGlobalTimeline(50)
-                    FeedType.FOLLOWING -> repository.fetchFollowTimeline(pubkeyHex, 50)
-                }
-                _uiState.update { it.copy(posts = posts, isRefreshing = false) }
-                fetchBirdwatchForPosts(posts)
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = "更新に失敗しました", isRefreshing = false) }
-            }
+        when (_uiState.value.feedType) {
+            FeedType.GLOBAL -> loadGlobalTimeline(isRefresh = true)
+            FeedType.FOLLOWING -> loadFollowingTimeline(isRefresh = true)
         }
     }
 
     private fun fetchBirdwatchForPosts(posts: List<ScoredPost>) {
+        if (posts.isEmpty()) return
         viewModelScope.launch {
             try {
                 val ids = posts.map { it.event.id }
                 val notes = repository.fetchBirdwatchNotes(ids)
-                _uiState.update { it.copy(birdwatchNotes = notes) }
-            } catch (e: Exception) {
-                // Silently ignore
-            }
+                _uiState.update { state ->
+                    val newNotes = state.birdwatchNotes.toMutableMap()
+                    newNotes.putAll(notes)
+                    state.copy(birdwatchNotes = newNotes)
+                }
+            } catch (e: Exception) { /* Silently ignore */ }
         }
     }
 
     fun switchFeed(feedType: FeedType) {
         if (_uiState.value.feedType == feedType) return
-        _uiState.update { it.copy(feedType = feedType, posts = emptyList()) }
-        loadTimeline()
+        _uiState.update {
+            it.copy(
+                feedType = feedType,
+                hasNewRecommendations = if (feedType == FeedType.GLOBAL) false else it.hasNewRecommendations
+            )
+        }
+        if (feedType == FeedType.GLOBAL && _uiState.value.globalPosts.isEmpty()) {
+            loadGlobalTimeline()
+        } else if (feedType == FeedType.FOLLOWING && _uiState.value.followingPosts.isEmpty()) {
+            loadFollowingTimeline()
+        }
     }
 
     fun search(query: String) {
@@ -108,13 +170,7 @@ class TimelineViewModel(
         viewModelScope.launch {
             val success = repository.likePost(eventId)
             if (success) {
-                _uiState.update { state ->
-                    state.copy(posts = state.posts.map { post ->
-                        if (post.event.id == eventId)
-                            post.copy(isLiked = true, likeCount = post.likeCount + 1)
-                        else post
-                    })
-                }
+                updatePostInteraction(eventId, isLike = true)
             }
         }
     }
@@ -123,14 +179,24 @@ class TimelineViewModel(
         viewModelScope.launch {
             val success = repository.repostPost(eventId)
             if (success) {
-                _uiState.update { state ->
-                    state.copy(posts = state.posts.map { post ->
-                        if (post.event.id == eventId)
-                            post.copy(isReposted = true, repostCount = post.repostCount + 1)
-                        else post
-                    })
-                }
+                updatePostInteraction(eventId, isLike = false)
             }
+        }
+    }
+
+    private fun updatePostInteraction(eventId: String, isLike: Boolean) {
+        _uiState.update { state ->
+            val updateFunc: (ScoredPost) -> ScoredPost = { post ->
+                if (post.event.id == eventId) {
+                    if (isLike) post.copy(isLiked = true, likeCount = post.likeCount + 1)
+                    else post.copy(isReposted = true, repostCount = post.repostCount + 1)
+                } else post
+            }
+            state.copy(
+                globalPosts = state.globalPosts.map(updateFunc),
+                followingPosts = state.followingPosts.map(updateFunc),
+                searchResults = state.searchResults.map(updateFunc)
+            )
         }
     }
 
@@ -138,9 +204,7 @@ class TimelineViewModel(
         viewModelScope.launch {
             try {
                 repository.publishNote(content, contentWarning = contentWarning)
-            } catch (e: Exception) {
-                // Publishing failed silently; do not crash
-            }
+            } catch (e: Exception) { /* Silently ignore */ }
             refresh()
         }
     }

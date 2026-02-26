@@ -83,6 +83,7 @@ fun MainScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             // Each screen should ideally handle its own top bar to manage internal state
             // but we need to coordinate insets.
@@ -155,6 +156,8 @@ fun MainScreen(
                 BottomTab.TALK -> TalkScreen(viewModel = talkVM)
                 BottomTab.TIMELINE -> TimelineScreen(
                     viewModel = timelineVM,
+                    repository = repository,
+                    myPubkey = pubkeyHex,
                     myPictureUrl = myProfile?.picture,
                     myDisplayName = myProfile?.displayedName ?: ""
                 )

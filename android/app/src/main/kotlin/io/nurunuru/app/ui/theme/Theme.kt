@@ -51,6 +51,8 @@ data class NuruColors(
     val zapColor: Color,
     val textSecondary: Color,
     val textTertiary: Color,
+    val bgPrimary: Color,
+    val bgSecondary: Color,
     val bgTertiary: Color,
     val border: Color
 )
@@ -61,6 +63,8 @@ val LocalNuruColors = staticCompositionLocalOf {
         zapColor = ColorZap,
         textSecondary = TextSecondary,
         textTertiary = TextTertiary,
+        bgPrimary = BgPrimary,
+        bgSecondary = BgSecondary,
         bgTertiary = BgTertiary,
         border = BorderColor
     )
@@ -78,6 +82,8 @@ fun NuruNuruTheme(
             zapColor = ColorZap,
             textSecondary = TextSecondary,
             textTertiary = TextTertiary,
+            bgPrimary = BgPrimary,
+            bgSecondary = BgSecondary,
             bgTertiary = BgTertiary,
             border = BorderColor
         )
@@ -87,6 +93,8 @@ fun NuruNuruTheme(
             zapColor = ColorZap,
             textSecondary = TextSecondaryLight,
             textTertiary = TextTertiaryLight,
+            bgPrimary = BgPrimaryLight,
+            bgSecondary = BgSecondaryLight,
             bgTertiary = BgTertiaryLight,
             border = BorderColorLight
         )

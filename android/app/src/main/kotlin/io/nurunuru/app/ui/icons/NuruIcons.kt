@@ -125,6 +125,53 @@ object NuruIcons {
         horizontalLineTo(17.01f)
     }.build()
 
+    val Search: ImageVector = ImageVector.Builder(
+        name = "Search",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <circle cx="11" cy="11" r="8"/>
+        moveTo(11f, 11f)
+        moveToRelative(-8f, 0f)
+        arcToRelative(8f, 8f, 0f, true, true, 16f, 0f)
+        arcToRelative(8f, 8f, 0f, true, true, -16f, 0f)
+        // <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        moveTo(21f, 21f)
+        lineTo(16.65f, 16.65f)
+    }.build()
+
+    val Notifications: ImageVector = ImageVector.Builder(
+        name = "Notifications",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        moveTo(18f, 8f)
+        arcToRelative(6f, 6f, 0f, false, false, -12f, 0f)
+        curveToRelative(0f, 7f, -3f, 9f, -3f, 9f)
+        horizontalLineToRelative(18f)
+        reflectiveCurveToRelative(-3f, -2f, -3f, -9f)
+        // <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        moveTo(13.73f, 21f)
+        arcToRelative(2f, 2f, 0f, false, true, -3.46f, 0f)
+    }.build()
+
     val Repost: ImageVector = ImageVector.Builder(
         name = "Repost",
         defaultWidth = 24.dp,

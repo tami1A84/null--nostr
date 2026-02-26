@@ -1,213 +1,109 @@
 package io.nurunuru.app.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import io.nurunuru.app.ui.components.PostItem
-import io.nurunuru.app.ui.components.PostModal
+import io.nurunuru.app.ui.components.*
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.FeedType
 import io.nurunuru.app.viewmodel.TimelineViewModel
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.ExperimentalFoundationApi
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TimelineScreen(
     viewModel: TimelineViewModel,
+    repository: io.nurunuru.app.data.NostrRepository,
+    myPubkey: String,
     myPictureUrl: String?,
     myDisplayName: String
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
-    val listState = rememberLazyListState()
-    var showPostModal by remember { mutableStateOf(false) }
-    var searchText by remember { mutableStateOf("") }
-    var showSearch by remember { mutableStateOf(false) }
 
-    val pullRefreshState = rememberPullToRefreshState()
-    if (pullRefreshState.isRefreshing) {
-        LaunchedEffect(Unit) {
-            viewModel.refresh()
+    var showPostModal by remember { mutableStateOf(false) }
+    var showSearchModal by remember { mutableStateOf(false) }
+    var showNotificationsModal by remember { mutableStateOf(false) }
+
+    // Pager state for Recommended (0) and Following (1)
+    // Default to Following (index 1)
+    val pagerState = rememberPagerState(
+        initialPage = 1
+    ) { 2 }
+
+    // Sync Pager -> ViewModel
+    LaunchedEffect(pagerState.currentPage) {
+        val targetFeed = if (pagerState.currentPage == 0) FeedType.GLOBAL else FeedType.FOLLOWING
+        if (uiState.feedType != targetFeed) {
+            viewModel.switchFeed(targetFeed)
         }
     }
-    LaunchedEffect(uiState.isRefreshing) {
-        if (!uiState.isRefreshing) pullRefreshState.endRefresh()
+
+    // Sync ViewModel -> Pager
+    LaunchedEffect(uiState.feedType) {
+        val targetPage = if (uiState.feedType == FeedType.GLOBAL) 0 else 1
+        if (pagerState.currentPage != targetPage) {
+            pagerState.animateScrollToPage(targetPage)
+        }
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            Column {
-                // Tab bar: Global / Following
-                TopAppBar(
-                    windowInsets = WindowInsets.statusBars,
-                    title = {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            FilterChip(
-                                selected = uiState.feedType == FeedType.GLOBAL,
-                                onClick = { viewModel.switchFeed(FeedType.GLOBAL) },
-                                label = { Text("おすすめ") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LineGreen,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                                )
-                            )
-                            FilterChip(
-                                selected = uiState.feedType == FeedType.FOLLOWING,
-                                onClick = { viewModel.switchFeed(FeedType.FOLLOWING) },
-                                label = { Text("フォロー") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LineGreen,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                                )
-                            )
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = {
-                            showSearch = !showSearch
-                            if (!showSearch) {
-                                searchText = ""
-                                viewModel.clearSearch()
-                            }
-                        }) {
-                            Icon(
-                                imageVector = if (showSearch) Icons.Outlined.Close else Icons.Default.Search,
-                                contentDescription = "検索",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        IconButton(onClick = { /* TODO: Notifications */ }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Notifications,
-                                contentDescription = "通知",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
-                    )
-                )
-
-                // Search bar
-                AnimatedVisibility(visible = showSearch) {
-                    OutlinedTextField(
-                        value = searchText,
-                        onValueChange = {
-                            searchText = it
-                            if (it.length >= 2) viewModel.search(it)
-                            else if (it.isEmpty()) viewModel.clearSearch()
-                        },
-                        placeholder = { Text("ノートを検索...") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = LineGreen,
-                            cursorColor = LineGreen
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-
-                HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
-            }
+            TimelineHeader(
+                feedType = uiState.feedType,
+                onFeedTypeChange = { viewModel.switchFeed(it) },
+                showRecommendedDot = uiState.hasNewRecommendations,
+                onSearchClick = { showSearchModal = true },
+                onNotificationsClick = { showNotificationsModal = true }
+            )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showPostModal = true },
                 containerColor = LineGreen,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                contentColor = Color.White,
+                shape = CircleShape
             ) {
                 Icon(Icons.Default.Add, contentDescription = "投稿する")
             }
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = nuruColors.bgPrimary
     ) { padding ->
-        Box(
+        HorizontalPager(
+            state = pagerState,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .nestedScroll(pullRefreshState.nestedScrollConnection)
-        ) {
-            val displayPosts = if (searchText.isNotBlank()) uiState.searchResults else uiState.posts
-
-            when {
-                uiState.isLoading && displayPosts.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = LineGreen)
-                    }
-                }
-                uiState.error != null && displayPosts.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Text(uiState.error!!, color = nuruColors.textTertiary)
-                            Button(
-                                onClick = { viewModel.loadTimeline() },
-                                colors = ButtonDefaults.buttonColors(containerColor = LineGreen)
-                            ) {
-                                Text("再読み込み")
-                            }
-                        }
-                    }
-                }
-                displayPosts.isEmpty() && searchText.isNotBlank() && !uiState.isSearching -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("「$searchText」の検索結果がありません", color = nuruColors.textTertiary)
-                    }
-                }
-                else -> {
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                        items(displayPosts, key = { it.event.id }) { post ->
-                            Surface(
-                                modifier = Modifier.padding(horizontal = 12.dp),
-                                color = MaterialTheme.colorScheme.background
-                            ) {
-                                PostItem(
-                                    post = post,
-                                    onLike = { viewModel.likePost(post.event.id) },
-                                    onRepost = { viewModel.repostPost(post.event.id) },
-                                    onProfileClick = { /* TODO: navigate to profile */ },
-                                    birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
-                                )
-                            }
-                        }
-                        item {
-                            Spacer(modifier = Modifier.height(80.dp))
-                        }
-                    }
-                }
-            }
-
-            PullToRefreshContainer(
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter),
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = LineGreen
+                .padding(padding),
+            verticalAlignment = Alignment.Top
+        ) { page ->
+            // Note: Each page has its own refresh state and list state
+            // But we simplify by using common logic for now
+            TimelineContent(
+                viewModel = viewModel,
+                feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING
             )
         }
     }
@@ -221,6 +117,104 @@ fun TimelineScreen(
             onPublish = { content, cw ->
                 viewModel.publishNote(content, cw)
             }
+        )
+    }
+
+    if (showSearchModal) {
+        SearchModal(
+            viewModel = viewModel,
+            onClose = { showSearchModal = false; viewModel.clearSearch() },
+            onProfileClick = { /* TODO */ }
+        )
+    }
+
+    if (showNotificationsModal) {
+        NotificationModal(
+            repository = repository,
+            myPubkey = myPubkey,
+            onClose = { showNotificationsModal = false },
+            onProfileClick = { /* TODO */ }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimelineContent(
+    viewModel: TimelineViewModel,
+    feedType: FeedType
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val nuruColors = LocalNuruColors.current
+    val listState = rememberLazyListState()
+
+    val pullRefreshState = rememberPullToRefreshState()
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(Unit) {
+            viewModel.refresh()
+        }
+    }
+    val isRefreshing = if (feedType == FeedType.GLOBAL) uiState.isGlobalRefreshing else uiState.isFollowingRefreshing
+    LaunchedEffect(isRefreshing) {
+        if (!isRefreshing) pullRefreshState.endRefresh()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(pullRefreshState.nestedScrollConnection)
+            .background(nuruColors.bgPrimary)
+    ) {
+        val displayPosts = if (feedType == FeedType.GLOBAL) uiState.globalPosts else uiState.followingPosts
+
+        val isLoading = if (feedType == FeedType.GLOBAL) uiState.isGlobalLoading else uiState.isFollowingLoading
+        val error = if (feedType == FeedType.GLOBAL) uiState.globalError else uiState.followingError
+
+        when {
+            isLoading && displayPosts.isEmpty() -> {
+                TimelineLoadingState()
+            }
+            error != null && displayPosts.isEmpty() -> {
+                TimelineErrorState(onRetry = {
+                    if (feedType == FeedType.GLOBAL) viewModel.loadGlobalTimeline()
+                    else viewModel.loadFollowingTimeline()
+                })
+            }
+            displayPosts.isEmpty() && !isLoading -> {
+                TimelineEmptyState(
+                    feedType = feedType,
+                    isFollowListEmpty = uiState.followList.isEmpty()
+                )
+            }
+            else -> {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(displayPosts, key = { it.event.id }) { post ->
+                        val alpha = remember { Animatable(0f) }
+                        LaunchedEffect(Unit) {
+                            alpha.animateTo(1f, animationSpec = tween(300))
+                        }
+
+                        PostItem(
+                            modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
+                            post = post,
+                            onLike = { viewModel.likePost(post.event.id) },
+                            onRepost = { viewModel.repostPost(post.event.id) },
+                            onProfileClick = { /* TODO: navigate to profile */ },
+                            birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
+                        )
+                    }
+                }
+            }
+        }
+
+        PullToRefreshContainer(
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = LineGreen
         )
     }
 }
