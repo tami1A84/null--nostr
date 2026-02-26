@@ -24,7 +24,6 @@ import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.FeedType
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimelineHeader(
     feedType: FeedType,
@@ -35,56 +34,70 @@ fun TimelineHeader(
 ) {
     val nuruColors = LocalNuruColors.current
 
-    Column(modifier = Modifier.background(nuruColors.bgPrimary)) {
-        TopAppBar(
-            windowInsets = WindowInsets.statusBars,
-            title = {
-                Row(
-                    modifier = Modifier
-                        .height(40.dp)
-                        .background(nuruColors.bgSecondary, RoundedCornerShape(20.dp))
-                        .padding(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Pill-style tabs
-                    TimelineTabButton(
-                        text = "おすすめ",
-                        selected = feedType == FeedType.GLOBAL,
-                        showDot = showRecommendedDot,
-                        onClick = { onFeedTypeChange(FeedType.GLOBAL) }
-                    )
+    Column(
+        modifier = Modifier
+            .background(nuruColors.bgPrimary)
+            .windowInsetsPadding(WindowInsets.statusBars)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Pill-style switcher (Mobile layout parity with Web)
+            Row(
+                modifier = Modifier
+                    .background(nuruColors.bgSecondary, RoundedCornerShape(20.dp))
+                    .padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TimelineTabButton(
+                    text = "おすすめ",
+                    selected = feedType == FeedType.GLOBAL,
+                    showDot = showRecommendedDot,
+                    onClick = { onFeedTypeChange(FeedType.GLOBAL) }
+                )
 
-                    TimelineTabButton(
-                        text = "フォロー",
-                        selected = feedType == FeedType.FOLLOWING,
-                        onClick = { onFeedTypeChange(FeedType.FOLLOWING) }
-                    )
-                }
-            },
-            actions = {
-                IconButton(onClick = onSearchClick) {
+                TimelineTabButton(
+                    text = "フォロー",
+                    selected = feedType == FeedType.FOLLOWING,
+                    onClick = { onFeedTypeChange(FeedType.FOLLOWING) }
+                )
+            }
+
+            // Actions
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                IconButton(
+                    onClick = onSearchClick,
+                    modifier = Modifier.size(40.dp)
+                ) {
                     Icon(
                         imageVector = NuruIcons.Search,
                         contentDescription = "検索",
                         tint = nuruColors.textSecondary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-                IconButton(onClick = onNotificationsClick) {
+                IconButton(
+                    onClick = onNotificationsClick,
+                    modifier = Modifier.size(40.dp)
+                ) {
                     Icon(
                         imageVector = NuruIcons.Notifications,
                         contentDescription = "通知",
                         tint = nuruColors.textSecondary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                scrolledContainerColor = Color.Transparent
-            )
-        )
+            }
+        }
 
         HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
     }
