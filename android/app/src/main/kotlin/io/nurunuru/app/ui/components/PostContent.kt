@@ -17,11 +17,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.*
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import io.nurunuru.app.data.NostrKeyUtils
+import io.nurunuru.app.data.*
 import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.ui.icons.NuruIcons
@@ -321,7 +322,7 @@ fun EmbeddedNostrContent(link: String, repository: io.nurunuru.app.data.NostrRep
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(link) {
-        val parsed = NostrKeyUtils.parseNostrLink(bech32)
+        val parsed = io.nurunuru.app.data.NostrKeyUtils.parseNostrLink(bech32)
         if (parsed != null && (parsed.type == "note" || parsed.type == "nevent")) {
             note = repository.fetchEvent(parsed.id)
         }

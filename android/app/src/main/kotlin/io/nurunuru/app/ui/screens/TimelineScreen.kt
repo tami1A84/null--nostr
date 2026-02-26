@@ -104,7 +104,9 @@ fun TimelineScreen(
             // But we simplify by using common logic for now
             TimelineContent(
                 viewModel = viewModel,
-                feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING
+                repository = repository,
+                feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING,
+                onProfileClick = { viewingPubkey = it }
             )
         }
     }
@@ -127,8 +129,9 @@ fun TimelineScreen(
     if (showSearchModal) {
         SearchModal(
             viewModel = viewModel,
+            repository = repository,
             onClose = { showSearchModal = false; viewModel.clearSearch() },
-            onProfileClick = { /* TODO */ }
+            onProfileClick = { viewingPubkey = it }
         )
     }
 
@@ -137,7 +140,7 @@ fun TimelineScreen(
             repository = repository,
             myPubkey = myPubkey,
             onClose = { showNotificationsModal = false },
-            onProfileClick = { /* TODO */ }
+            onProfileClick = { viewingPubkey = it }
         )
     }
 }
@@ -146,7 +149,9 @@ fun TimelineScreen(
 @Composable
 private fun TimelineContent(
     viewModel: TimelineViewModel,
-    feedType: FeedType
+    repository: io.nurunuru.app.data.NostrRepository,
+    feedType: FeedType,
+    onProfileClick: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
@@ -206,7 +211,7 @@ private fun TimelineContent(
                                 post = post,
                                 onLike = { viewModel.likePost(post.event.id) },
                                 onRepost = { viewModel.repostPost(post.event.id) },
-                                onProfileClick = { viewingPubkey = it },
+                                onProfileClick = onProfileClick,
                                 repository = repository,
                                 onMute = { viewModel.muteUser(post.event.pubkey) },
                                 onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
@@ -220,7 +225,7 @@ private fun TimelineContent(
                                 post = post,
                                 onLike = { viewModel.likePost(post.event.id) },
                                 onRepost = { viewModel.repostPost(post.event.id) },
-                                onProfileClick = { viewingPubkey = it },
+                                onProfileClick = onProfileClick,
                                 repository = repository,
                                 onMute = { viewModel.muteUser(post.event.pubkey) },
                                 onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },

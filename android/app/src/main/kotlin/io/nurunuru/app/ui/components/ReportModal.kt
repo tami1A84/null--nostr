@@ -182,7 +182,7 @@ fun ReportModal(
                         enabled = selectedType != null && !isSubmitting
                     ) {
                         if (isSubmitting) {
-                            CircularProgressIndicator(size = 20.dp, color = Color.White, strokeWidth = 2.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                         } else {
                             Text("通報する", color = Color.White, fontWeight = FontWeight.Bold)
                         }

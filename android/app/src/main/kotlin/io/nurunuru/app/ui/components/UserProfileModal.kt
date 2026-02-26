@@ -160,7 +160,7 @@ fun UserProfileModal(
                                     enabled = !uiState.isSearching && searchQuery.isNotBlank()
                                 ) {
                                     if (uiState.isSearching) {
-                                        CircularProgressIndicator(size = 18.dp, color = Color.White, strokeWidth = 2.dp)
+                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
                                     } else {
                                         Text("検索")
                                     }
@@ -279,7 +279,7 @@ fun UserProfileModal(
                                     onProfileClick = { viewModel.loadProfile(it) },
                                     repository = repository,
                                     onDelete = { /* N/A */ },
-                                    onMute = { viewModel.muteUser(it) },
+                                    onMute = { viewModel.muteUser(post.event.pubkey) },
                                     isOwnPost = post.event.pubkey == viewModel.myPubkeyHex
                                 )
                             }

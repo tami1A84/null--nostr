@@ -204,7 +204,7 @@ fun BirdwatchModal(
                         enabled = selectedType != null && noteContent.isNotBlank() && !isSubmitting
                     ) {
                         if (isSubmitting) {
-                            CircularProgressIndicator(size = 20.dp, color = Color.White, strokeWidth = 2.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                         } else {
                             Text("追加する", color = Color.White, fontWeight = FontWeight.Bold)
                         }

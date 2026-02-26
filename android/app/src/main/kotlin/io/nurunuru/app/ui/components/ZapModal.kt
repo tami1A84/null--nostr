@@ -188,7 +188,7 @@ fun ZapModal(
                     enabled = !isZapping && amount.isNotBlank()
                 ) {
                     if (isZapping) {
-                        CircularProgressIndicator(size = 24.dp, color = Color.Black, strokeWidth = 2.dp)
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
                     } else {
                         Text("⚡ ${amount.ifBlank { "0" }} sats のインボイスを作成", fontWeight = FontWeight.Bold)
                     }
