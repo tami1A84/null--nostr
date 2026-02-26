@@ -112,6 +112,20 @@ fun TimelineScreen(
         }
     }
 
+    if (viewingPubkey != null) {
+        val homeViewModel: io.nurunuru.app.viewmodel.HomeViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+            key = "profile_$viewingPubkey",
+            factory = io.nurunuru.app.viewmodel.HomeViewModel.Factory(repository, myPubkey)
+        )
+        UserProfileModal(
+            pubkey = viewingPubkey!!,
+            viewModel = homeViewModel,
+            repository = repository,
+            onDismiss = { viewingPubkey = null },
+            onStartDM = { /* TODO */ }
+        )
+    }
+
     // Post composition modal
     if (showPostModal) {
         PostModal(

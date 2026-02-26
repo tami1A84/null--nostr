@@ -235,6 +235,9 @@ fun UserProfileModal(
                         items(5) {
                             PostSkeleton()
                         }
+                        item {
+                            FriendlyLoading(message = "プロフィールを読み込み中...")
+                        }
                     } else {
                         if (uiState.searchResults.isNotEmpty() || uiState.searchQuery.isNotBlank()) {
                             item {
@@ -349,14 +352,16 @@ fun BirthdayAnimationOverlay(name: String) {
                 scaleY = 1.1f
             }
         ) {
-            AsyncImage(
-                model = "/birthday-character.jpg", // Needs to be in android assets or a valid URL
-                contentDescription = "Happy Birthday",
+            // Use a birthday cake emoji or a placeholder if local asset is missing
+            Box(
                 modifier = Modifier
                     .size(240.dp)
-                    .clip(RoundedCornerShape(24.dp)),
-                contentScale = ContentScale.Crop
-            )
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color.White.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("🎂", fontSize = 120.sp)
+            }
 
             Spacer(Modifier.height(16.dp))
 

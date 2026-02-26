@@ -58,7 +58,7 @@ fun BirdwatchDisplay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.Info,
+                    imageVector = io.nurunuru.app.ui.icons.NuruIcons.BirdwatchCheck,
                     contentDescription = null,
                     tint = Color(0xFF2196F3),
                     modifier = Modifier.size(16.dp)

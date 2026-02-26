@@ -177,7 +177,7 @@ fun SearchModal(
                 Box(modifier = Modifier.fillMaxSize()) {
                     if (uiState.isSearching) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = LineGreen)
+                            FriendlyLoading(message = "検索結果を取得中...")
                         }
                     } else if (uiState.searchResults.isEmpty() && uiState.searchQuery.isNotEmpty()) {
                         Column(
