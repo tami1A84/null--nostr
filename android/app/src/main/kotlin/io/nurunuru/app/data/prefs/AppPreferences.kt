@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import io.nurunuru.app.data.models.DEFAULT_RELAYS
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class AppPreferences(context: Context) {
 
@@ -46,6 +48,20 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_BLOSSOM_URL, "https://blossom.nostr.build") ?: "https://blossom.nostr.build"
         set(value) = prefs.edit().putString(KEY_BLOSSOM_URL, value).apply()
 
+    var recentSearches: List<String>
+        get() {
+            val jsonStr = prefs.getString(KEY_RECENT_SEARCHES, "[]") ?: "[]"
+            return try {
+                Json.decodeFromString(jsonStr)
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+        set(value) {
+            val jsonStr = Json.encodeToString(value)
+            prefs.edit().putString(KEY_RECENT_SEARCHES, jsonStr).apply()
+        }
+
     val isLoggedIn: Boolean
         get() = privateKeyHex != null && publicKeyHex != null
 
@@ -59,5 +75,6 @@ class AppPreferences(context: Context) {
         private const val KEY_RELAYS = "relays"
         private const val KEY_UPLOAD_SERVER = "upload_server"
         private const val KEY_BLOSSOM_URL = "blossom_url"
+        private const val KEY_RECENT_SEARCHES = "recent_searches"
     }
 }

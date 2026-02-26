@@ -1,24 +1,29 @@
 package io.nurunuru.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -26,9 +31,10 @@ import androidx.compose.ui.window.DialogProperties
 import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
+import io.nurunuru.app.viewmodel.SearchNavigationEvent
 import io.nurunuru.app.viewmodel.TimelineViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SearchModal(
     viewModel: TimelineViewModel,
@@ -38,6 +44,19 @@ fun SearchModal(
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
     var query by remember { mutableStateOf(uiState.searchQuery) }
+    var isFocused by remember { mutableStateOf(false) }
+
+    // Handle navigation events from ViewModel
+    LaunchedEffect(viewModel.navigationEvents) {
+        viewModel.navigationEvents.collect { event ->
+            when (event) {
+                is SearchNavigationEvent.OpenProfile -> {
+                    onClose()
+                    onProfileClick(event.pubkey)
+                }
+            }
+        }
+    }
 
     Dialog(
         onDismissRequest = onClose,
@@ -53,50 +72,101 @@ fun SearchModal(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
-                        .padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    IconButton(onClick = onClose) {
-                        Icon(Icons.Default.Close, contentDescription = "閉じる", tint = MaterialTheme.colorScheme.onBackground)
+                    IconButton(
+                        onClick = onClose,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "閉じる",
+                            tint = nuruColors.textPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
 
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(vertical = 8.dp),
-                        placeholder = { Text("ノートを検索...", fontSize = 14.sp) },
-                        leadingIcon = {
-                            Icon(NuruIcons.Search, contentDescription = null, modifier = Modifier.size(18.dp))
-                        },
-                        trailingIcon = {
-                            if (query.isNotEmpty()) {
-                                IconButton(onClick = { query = ""; viewModel.clearSearch() }) {
-                                    Icon(Icons.Default.Close, contentDescription = "クリア", modifier = Modifier.size(18.dp))
+                    Box(modifier = Modifier.weight(1f)) {
+                        BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp)
+                                .background(nuruColors.bgSecondary, CircleShape)
+                                .border(
+                                    width = 1.5.dp,
+                                    color = if (isFocused) LineGreen else Color.Transparent,
+                                    shape = CircleShape
+                                )
+                                .onFocusChanged { isFocused = it.isFocused },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                color = nuruColors.textPrimary,
+                                fontSize = 14.sp
+                            ),
+                            cursorBrush = SolidColor(LineGreen),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = {
+                                if (query.isNotBlank()) viewModel.search(query)
+                            }),
+                            decorationBox = { innerTextField ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = NuruIcons.Search,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = nuruColors.textTertiary
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        if (query.isEmpty()) {
+                                            Text(
+                                                text = "キーワード / npub / NIP-05 / note",
+                                                fontSize = 14.sp,
+                                                color = nuruColors.textTertiary
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
+                                    if (query.isNotEmpty()) {
+                                        IconButton(
+                                            onClick = { query = ""; viewModel.clearSearch() },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "クリア",
+                                                modifier = Modifier.size(16.dp),
+                                                tint = nuruColors.textTertiary
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(20.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = nuruColors.bgSecondary,
-                            unfocusedContainerColor = nuruColors.bgSecondary,
-                            focusedBorderColor = Color.Transparent,
-                            unfocusedBorderColor = Color.Transparent,
-                            cursorColor = LineGreen
-                        ),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            if (query.isNotBlank()) viewModel.search(query)
-                        })
-                    )
+                        )
+                    }
 
-                    TextButton(
+                    Button(
                         onClick = { if (query.isNotBlank()) viewModel.search(query) },
-                        enabled = query.isNotBlank() && !uiState.isSearching
+                        enabled = query.isNotBlank() && !uiState.isSearching,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LineGreen,
+                            contentColor = Color.White,
+                            disabledContainerColor = LineGreen.copy(alpha = 0.5f)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        modifier = Modifier.height(36.dp),
+                        shape = CircleShape
                     ) {
-                        Text("検索", color = if (query.isNotBlank()) LineGreen else nuruColors.textTertiary)
+                        Text("検索", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -126,7 +196,7 @@ fun SearchModal(
                             Text(
                                 "「${uiState.searchQuery}」に一致する結果が見つかりませんでした",
                                 color = nuruColors.textSecondary,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                textAlign = TextAlign.Center,
                                 fontSize = 14.sp
                             )
                         }
@@ -156,30 +226,115 @@ fun SearchModal(
                                 )
                             }
                         }
-                    } else {
-                        // Empty state / Recent searches placeholder
-                        Column(
-                            modifier = Modifier.fillMaxSize().padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .background(nuruColors.bgSecondary, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(NuruIcons.Search, contentDescription = null, modifier = Modifier.size(32.dp), tint = nuruColors.textTertiary)
+                    } else if (uiState.searchQuery.isEmpty()) {
+                        // Empty state / Recent searches
+                        LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                            if (uiState.recentSearches.isNotEmpty()) {
+                                item {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            "最近の検索",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = nuruColors.textSecondary
+                                        )
+                                        TextButton(onClick = { viewModel.clearRecentSearches() }) {
+                                            Text("すべてクリア", fontSize = 12.sp, color = nuruColors.textTertiary)
+                                        }
+                                    }
+                                }
+
+                                item {
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        uiState.recentSearches.forEach { search ->
+                                            RecentSearchChip(
+                                                text = search,
+                                                onSearch = {
+                                                    query = it
+                                                    viewModel.search(it)
+                                                },
+                                                onDelete = { viewModel.removeRecentSearch(it) }
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                item {
+                                    Column(
+                                        modifier = Modifier.fillParentMaxSize(),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(64.dp)
+                                                .background(nuruColors.bgSecondary, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(NuruIcons.Search, contentDescription = null, modifier = Modifier.size(32.dp), tint = nuruColors.textTertiary)
+                                        }
+                                        Spacer(Modifier.height(16.dp))
+                                        Text(
+                                            "キーワード、npub、note、NIP-05で検索",
+                                            color = nuruColors.textSecondary,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                }
                             }
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                "キーワード、npub、note、NIP-05で検索",
-                                color = nuruColors.textSecondary,
-                                fontSize = 14.sp
-                            )
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun RecentSearchChip(
+    text: String,
+    onSearch: (String) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    val nuruColors = LocalNuruColors.current
+    Surface(
+        modifier = Modifier
+            .height(32.dp)
+            .clickable { onSearch(text) },
+        shape = CircleShape,
+        color = nuruColors.bgSecondary
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = text,
+                fontSize = 13.sp,
+                color = nuruColors.textPrimary,
+                modifier = Modifier.weight(1f, false),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.width(4.dp))
+            IconButton(
+                onClick = { onDelete(text) },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "削除",
+                    tint = nuruColors.textTertiary,
+                    modifier = Modifier.size(14.dp)
+                )
             }
         }
     }

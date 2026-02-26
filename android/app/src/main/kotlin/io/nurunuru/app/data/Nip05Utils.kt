@@ -56,4 +56,41 @@ object Nip05Utils {
             false
         }
     }
+
+    suspend fun resolveNip05(nip05: String): String? = withContext(Dispatchers.IO) {
+        // Normalize NIP-05 format
+        val normalizedNip05 = if (!nip05.contains("@")) {
+            "_@$nip05"
+        } else {
+            nip05
+        }
+
+        val parts = normalizedNip05.split("@")
+        if (parts.size != 2) return@withContext null
+
+        val name = parts[0]
+        val domain = parts[1]
+
+        val url = "https://$domain/.well-known/nostr.json?name=$name"
+
+        try {
+            val request = Request.Builder()
+                .url(url)
+                .addHeader("Accept", "application/json")
+                .addHeader("User-Agent", "NuruNuru-Android/1.0")
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext null
+
+                val body = response.body?.string() ?: return@withContext null
+                val root = json.parseToJsonElement(body).jsonObject
+                val names = root["names"]?.jsonObject ?: return@withContext null
+                return@withContext names[name]?.jsonPrimitive?.content
+            }
+        } catch (e: Exception) {
+            Log.w("Nip05Utils", "Resolution failed for $nip05: ${e.message}")
+            null
+        }
+    }
 }
