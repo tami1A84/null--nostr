@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
@@ -457,7 +458,11 @@ fun ProfileStep(
                 val bytes = context.contentResolver.openInputStream(it)?.readBytes()
                 if (bytes != null) {
                     val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg")
-                    if (url != null) picture = url
+                    if (url != null) {
+                        picture = url
+                    } else {
+                        Toast.makeText(context, "画像のアップロードに失敗しました", Toast.LENGTH_SHORT).show()
+                    }
                 }
                 uploadingPicture = false
             }
@@ -471,7 +476,11 @@ fun ProfileStep(
                 val bytes = context.contentResolver.openInputStream(it)?.readBytes()
                 if (bytes != null) {
                     val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg")
-                    if (url != null) banner = url
+                    if (url != null) {
+                        banner = url
+                    } else {
+                        Toast.makeText(context, "画像のアップロードに失敗しました", Toast.LENGTH_SHORT).show()
+                    }
                 }
                 uploadingBanner = false
             }

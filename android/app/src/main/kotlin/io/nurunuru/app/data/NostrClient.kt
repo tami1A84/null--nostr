@@ -275,12 +275,10 @@ class NostrClient(
     // ─── DMs ─────────────────────────────────────────────────────────────────
 
     suspend fun sendEncryptedDm(recipientPubkeyHex: String, content: String): Boolean {
-        val client = sdkClient ?: return false
         return withContext(Dispatchers.IO) {
             try {
-                val receiver = PublicKey.parse(recipientPubkeyHex)
-                client.sendPrivateMsg(receiver, content, emptyList())
-                true
+                val encrypted = encryptNip04(recipientPubkeyHex, content) ?: return@withContext false
+                publish(4, encrypted, listOf(listOf("p", recipientPubkeyHex))) != null
             } catch (e: Exception) {
                 false
             }
@@ -290,10 +288,13 @@ class NostrClient(
     suspend fun decryptNip04(senderPubkeyHex: String, encryptedContent: String): String? {
         val client = sdkClient ?: return null
         return try {
-            val sender = PublicKey.parse(senderPubkeyHex)
-            val signer = client.signer()
-            // In 0.44.2, Signer has suspend nip04Decrypt
-            signer.nip04Decrypt(sender, encryptedContent)
+            if (privateKeyHex.isNullOrBlank()) {
+                ExternalSigner.decrypt(context, encryptedContent, senderPubkeyHex, publicKeyHex, false)
+            } else {
+                val sender = PublicKey.parse(senderPubkeyHex)
+                val signer = client.signer()
+                signer.nip04Decrypt(sender, encryptedContent)
+            }
         } catch (e: Exception) {
             null
         }
@@ -302,9 +303,43 @@ class NostrClient(
     suspend fun decryptNip44(senderPubkeyHex: String, encryptedContent: String): String? {
         val client = sdkClient ?: return null
         return try {
-            val sender = PublicKey.parse(senderPubkeyHex)
-            val signer = client.signer()
-            signer.nip44Decrypt(sender, encryptedContent)
+            if (privateKeyHex.isNullOrBlank()) {
+                ExternalSigner.decrypt(context, encryptedContent, senderPubkeyHex, publicKeyHex, true)
+            } else {
+                val sender = PublicKey.parse(senderPubkeyHex)
+                val signer = client.signer()
+                signer.nip44Decrypt(sender, encryptedContent)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun encryptNip04(receiverPubkeyHex: String, content: String): String? {
+        val client = sdkClient ?: return null
+        return try {
+            if (privateKeyHex.isNullOrBlank()) {
+                ExternalSigner.encrypt(context, content, receiverPubkeyHex, publicKeyHex, false)
+            } else {
+                val receiver = PublicKey.parse(receiverPubkeyHex)
+                val signer = client.signer()
+                signer.nip04Encrypt(receiver, content)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun encryptNip44(receiverPubkeyHex: String, content: String): String? {
+        val client = sdkClient ?: return null
+        return try {
+            if (privateKeyHex.isNullOrBlank()) {
+                ExternalSigner.encrypt(context, content, receiverPubkeyHex, publicKeyHex, true)
+            } else {
+                val receiver = PublicKey.parse(receiverPubkeyHex)
+                val signer = client.signer()
+                signer.nip44Encrypt(receiver, content)
+            }
         } catch (e: Exception) {
             null
         }

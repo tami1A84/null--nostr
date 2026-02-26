@@ -575,7 +575,7 @@ class NostrRepository(
             ImageUploadUtils.uploadToNostrBuild(fileBytes, mimeType, client.getSigner())
         } else {
             // Assume Blossom URL
-            ImageUploadUtils.uploadToBlossom(fileBytes, mimeType, client.getSigner()!!, server)
+            ImageUploadUtils.uploadToBlossom(fileBytes, mimeType, client.getSigner(), server)
         }
     }
 

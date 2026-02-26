@@ -44,7 +44,7 @@ fun BottomTab.getIcon(isSelected: Boolean): ImageVector {
 @Composable
 fun MainScreen(
     pubkeyHex: String,
-    privateKeyHex: String,
+    privateKeyHex: String?,
     authViewModel: AuthViewModel,
     app: NuruNuruApp
 ) {

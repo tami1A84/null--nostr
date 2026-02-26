@@ -20,33 +20,36 @@ object ImageUploadUtils {
     suspend fun uploadToBlossom(
         fileBytes: ByteArray,
         mimeType: String,
-        signer: NostrSigner,
+        signer: NostrSigner?,
         blossomUrl: String = "https://blossom.nostr.build"
     ): String? = withContext(Dispatchers.IO) {
         try {
-            // Blossom NIP-98 Auth (Kind 24242)
-            val hash = java.security.MessageDigest.getInstance("SHA-256")
-                .digest(fileBytes)
-                .joinToString("") { "%02x".format(it) }
-
-            val now = System.currentTimeMillis() / 1000
-            val authEventBuilder = EventBuilder(Kind(24242u), "Upload to Blossom")
-                .tags(listOf(
-                    Tag.parse(listOf("t", "upload")),
-                    Tag.parse(listOf("x", hash)),
-                    Tag.parse(listOf("expiration", (now + 300).toString()))
-                ))
-
-            val publicKey = signer.getPublicKey()
-            val unsignedEvent = authEventBuilder.build(publicKey)
-            val authEvent = signer.signEvent(unsignedEvent)
-            val authHeader = Base64.encodeToString(authEvent.asJson().toByteArray(), Base64.NO_WRAP)
-
-            val request = okhttp3.Request.Builder()
+            val requestBuilder = okhttp3.Request.Builder()
                 .url("$blossomUrl/upload")
                 .put(fileBytes.toRequestBody(mimeType.toMediaTypeOrNull()))
-                .addHeader("Authorization", "Nostr $authHeader")
-                .build()
+
+            // Blossom NIP-98 Auth (Kind 24242)
+            if (signer != null) {
+                val hash = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(fileBytes)
+                    .joinToString("") { "%02x".format(it) }
+
+                val now = System.currentTimeMillis() / 1000
+                val authEventBuilder = EventBuilder(Kind(24242u), "Upload to Blossom")
+                    .tags(listOf(
+                        Tag.parse(listOf("t", "upload")),
+                        Tag.parse(listOf("x", hash)),
+                        Tag.parse(listOf("expiration", (now + 300).toString()))
+                    ))
+
+                val publicKey = signer.getPublicKey()
+                val unsignedEvent = authEventBuilder.build(publicKey)
+                val authEvent = signer.signEvent(unsignedEvent)
+                val authHeader = Base64.encodeToString(authEvent.asJson().toByteArray(), Base64.NO_WRAP)
+                requestBuilder.addHeader("Authorization", "Nostr $authHeader")
+            }
+
+            val request = requestBuilder.build()
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
