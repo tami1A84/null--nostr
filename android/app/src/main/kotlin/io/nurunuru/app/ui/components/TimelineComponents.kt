@@ -36,7 +36,7 @@ fun TimelineHeader(
 
     Column(
         modifier = Modifier
-            .background(nuruColors.bgPrimary)
+            .background(Color.Black)
             .windowInsetsPadding(WindowInsets.statusBars)
     ) {
         Row(
@@ -50,7 +50,7 @@ fun TimelineHeader(
             // Pill-style switcher (Mobile layout parity with Web)
             Row(
                 modifier = Modifier
-                    .background(nuruColors.bgSecondary, RoundedCornerShape(20.dp))
+                    .background(Color.Black, RoundedCornerShape(20.dp))
                     .padding(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
