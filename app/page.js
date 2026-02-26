@@ -8,7 +8,7 @@ import HomeTab from '@/components/HomeTab'
 import TalkTab from '@/components/TalkTab'
 import TimelineTab from '@/components/TimelineTab'
 import MiniAppTab from '@/components/MiniAppTab'
-import { loadPubkey, clearPubkey, getLoginMethod, startBackgroundPrefetch, clearPrefetchPromises, setStoredPrivateKey, clearStoredPrivateKey } from '@/lib/nostr'
+import { loadPubkey, clearPubkey, getLoginMethod, startBackgroundPrefetch, clearPrefetchPromises, setStoredPrivateKey, clearStoredPrivateKey, getPrivateKeyHex, nip19, hexToBytes } from '@/lib/nostr'
 import { initCache } from '@/lib/cache'
 
 // Desktop sidebar navigation items
@@ -104,9 +104,23 @@ export default function Home() {
     }
     
     const init = async () => {
+      // Check for redirect_uri and handle it if already logged in
+      const urlParams = new URLSearchParams(window.location.search)
+      const redirectUri = urlParams.get('redirect_uri')
+
       // Check for stored pubkey on mount
       const storedPubkey = loadPubkey()
       if (storedPubkey) {
+        // If already logged in and redirect_uri is present, redirect back to app
+        if (redirectUri) {
+          const privateKeyHex = getPrivateKeyHex()
+          if (privateKeyHex) {
+            const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
+            window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+            return
+          }
+        }
+
         // Restore Nosskey manager if logged in via Nosskey
         const loginMethod = getLoginMethod()
         if (loginMethod === 'nosskey') {

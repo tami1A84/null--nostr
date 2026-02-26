@@ -175,14 +175,23 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun loginWithPasskey(context: Context) {
         try {
-            val intent = android.content.Intent(
-                android.content.Intent.ACTION_VIEW,
-                android.net.Uri.parse("https://www.nullnull.app/?redirect_uri=io.nurunuru.app://login")
-            )
-            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
+            val url = "https://www.nullnull.app/?redirect_uri=io.nurunuru.app://login"
+            val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder()
+                .setShowTitle(true)
+                .build()
+            customTabsIntent.launchUrl(context, android.net.Uri.parse(url))
         } catch (e: Exception) {
-            _authState.value = AuthState.Error("ブラウザを開けませんでした: ${e.message}")
+            // Fallback to standard browser intent
+            try {
+                val intent = android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://www.nullnull.app/?redirect_uri=io.nurunuru.app://login")
+                )
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            } catch (e2: Exception) {
+                _authState.value = AuthState.Error("ブラウザを開けませんでした: ${e2.message}")
+            }
         }
     }
 

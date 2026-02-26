@@ -34,12 +34,15 @@ object ExternalSigner : AppSigner {
     private const val ACTION_GET_PUBLIC_KEY_LEGACY = "com.greenart7c3.nostr.signer.GET_PUBLIC_KEY"
     private const val ACTION_SIGN_EVENT_LEGACY = "com.greenart7c3.nostr.signer.SIGN_EVENT"
 
+    private const val CONTENT_URI = "content://com.greenart7c3.nostrsigner"
+
     private var pendingRequest: CompletableDeferred<Intent>? = null
     private val mutex = kotlinx.coroutines.sync.Mutex()
 
     fun createGetPublicKeyIntent(context: Context?): Intent {
         val intent = Intent(ACTION_GET_PUBLIC_KEY).apply {
             `package` = PACKAGE_NAME
+            putExtra("type", "get_public_key")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
 
@@ -117,14 +120,19 @@ object ExternalSigner : AppSigner {
     }
 
     private suspend fun request(context: Context?, intent: Intent): Intent? = mutex.withLock {
+        val ctx = context ?: MainActivity.instance ?: return null
+
+        // Try Content Resolver first (Silent signing)
+        val resultIntent = tryContentResolver(ctx, intent)
+        if (resultIntent != null) return resultIntent
+
+        // Fallback to Intent (App switching)
         val deferred = CompletableDeferred<Intent>()
         pendingRequest = deferred
 
-        if (context is MainActivity) {
-            context.launchExternalSigner(intent)
+        if (ctx is MainActivity) {
+            ctx.launchExternalSigner(intent)
         } else {
-            // Fallback for when context is not MainActivity (try to use a global reference if we have one)
-            // For now, if it's not MainActivity, we might fail unless we implement the tracker
             MainActivity.instance?.launchExternalSigner(intent) ?: return null
         }
 
@@ -135,6 +143,38 @@ object ExternalSigner : AppSigner {
         } finally {
             pendingRequest = null
         }
+    }
+
+    private fun tryContentResolver(context: Context, intent: Intent): Intent? {
+        val type = intent.getStringExtra("type") ?: return null
+        try {
+            val contentResolver = context.contentResolver
+            val uri = Uri.parse("$CONTENT_URI/$type")
+
+            val projection = arrayOf("signature", "event")
+
+            // Re-map NIP-44 and NIP-04 type for content resolver if necessary
+            // Amber's content provider expects specific types
+            val selectionArgs = arrayOf(
+                intent.getStringExtra("event") ?: intent.getStringExtra("content") ?: "",
+                intent.getStringExtra("current_user") ?: "",
+                intent.getStringExtra("pubKey") ?: ""
+            )
+
+            contentResolver.query(uri, projection, type, selectionArgs, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val signature = cursor.getString(cursor.getColumnIndexOrThrow("signature"))
+                    val event = cursor.getString(cursor.getColumnIndexOrThrow("event"))
+                    return Intent().apply {
+                        putExtra("signature", signature)
+                        putExtra("event", event)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.d("ExternalSigner", "ContentResolver failed, fallback to Intent: ${e.message}")
+        }
+        return null
     }
 
     override fun getPublicKeyHex(): String {
