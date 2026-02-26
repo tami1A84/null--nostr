@@ -3,13 +3,15 @@ package io.nurunuru.app.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.nurunuru.app.data.NostrClient
 import io.nurunuru.app.data.NostrKeyUtils
+import io.nurunuru.app.data.NostrRepository
+import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.data.prefs.AppPreferences
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 
 sealed class AuthState {
     object Checking : AuthState()
@@ -17,6 +19,13 @@ sealed class AuthState {
     data class LoggedIn(val pubkeyHex: String, val privateKeyHex: String) : AuthState()
     data class Error(val message: String) : AuthState()
 }
+
+data class GeneratedAccount(
+    val privateKeyHex: String,
+    val pubkeyHex: String,
+    val nsec: String,
+    val npub: String
+)
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -38,6 +47,74 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 _authState.value = AuthState.LoggedOut
             }
+        }
+    }
+
+    fun generateNewAccount(): GeneratedAccount? {
+        return try {
+            val keys = NostrKeyUtils.generateKeys()
+            val privHex = keys.secretKey().toHex()
+            val pubHex = keys.publicKey().toHex()
+            GeneratedAccount(
+                privateKeyHex = privHex,
+                pubkeyHex = pubHex,
+                nsec = NostrKeyUtils.encodeNsec(privHex) ?: "",
+                npub = NostrKeyUtils.encodeNpub(pubHex) ?: ""
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun publishInitialMetadata(
+        privKeyHex: String,
+        pubKeyHex: String,
+        name: String,
+        about: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            // 1. Setup temporary client with default JP relays
+            val defaultRelays = listOf("wss://yabu.me", "wss://relay.nostr.wirednet.jp", "wss://r.kojira.io")
+            val client = NostrClient(
+                context = getApplication(),
+                relays = defaultRelays,
+                privateKeyHex = privKeyHex,
+                publicKeyHex = pubKeyHex
+            )
+            client.connect()
+
+            // Give it a moment to connect
+            delay(1500)
+
+            val repository = NostrRepository(client, prefs)
+
+            // 2. Publish Kind 0 (Metadata)
+            val profile = UserProfile(
+                pubkey = pubKeyHex,
+                name = name,
+                displayName = name,
+                about = about
+            )
+            repository.updateProfile(profile)
+
+            // 3. Publish Kind 10002 (Relay List)
+            val relayList = defaultRelays.map { Triple(it, true, true) }
+            repository.updateRelayList(relayList)
+
+            // 4. Disconnect
+            delay(1000) // Wait for sends to finish
+            client.disconnect()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun completeRegistration(privKeyHex: String, pubKeyHex: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            prefs.privateKeyHex = privKeyHex
+            prefs.publicKeyHex = pubKeyHex
+            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex)
         }
     }
 
