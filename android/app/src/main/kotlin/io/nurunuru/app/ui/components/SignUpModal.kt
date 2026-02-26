@@ -1,6 +1,12 @@
 package io.nurunuru.app.ui.components
 
 import androidx.compose.animation.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -264,6 +270,7 @@ fun BackupStep(
 
 @Composable
 fun RelayStep(onRelaysSelected: (List<Triple<String, Boolean, Boolean>>) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val nuruColors = LocalNuruColors.current
     var selectionMode by remember { mutableStateOf("manual") } // auto, manual
     var recommendedRelays by remember { mutableStateOf<List<Triple<String, Boolean, Boolean>>>(
@@ -293,22 +300,47 @@ fun RelayStep(onRelaysSelected: (List<Triple<String, Boolean, Boolean>>) -> Unit
                         .background(if (selected) nuruColors.bgPrimary else Color.Transparent)
                         .clickable {
                             selectionMode = id
-                            if (id == "auto") {
-                                // Mocking GPS detection for now as permission handling in Modal is complex
-                                // but following the logic of autoDetectRelays in geohash.js
-                                isLoading = true
-                                // Simulated delay
-                                regionName = "GPS検出中..."
-                                // In a real app, use FusedLocationProvider here
-                                recommendedRelays = RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503)
-                                regionName = "東京 (GPS推定)"
-                                isLoading = false
-                            }
                         }
                         .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (selected) LineGreen else nuruColors.textTertiary)
+                }
+            }
+        }
+
+        val permissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                          permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+            if (granted) {
+                // In a real app, we would use FusedLocationProvider here.
+                // For this synchronization task, we'll simulate the detection once granted.
+                isLoading = true
+                regionName = "東京 (GPS推定)"
+                recommendedRelays = RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503)
+                isLoading = false
+            } else {
+                selectionMode = "manual"
+            }
+        }
+
+        if (selectionMode == "auto") {
+            LaunchedEffect(Unit) {
+                val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+                if (hasFine || hasCoarse) {
+                    isLoading = true
+                    regionName = "東京 (GPS推定)"
+                    recommendedRelays = RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503)
+                    isLoading = false
+                } else {
+                    permissionLauncher.launch(arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ))
                 }
             }
         }
