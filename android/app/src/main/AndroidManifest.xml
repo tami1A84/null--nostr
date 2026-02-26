@@ -6,6 +6,16 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
+    <queries>
+        <package android:name="com.greenart7c3.nostrsigner" />
+        <intent>
+            <action android:name="com.greenart7c3.nostr.signer.GET_PUBLIC_KEY" />
+        </intent>
+        <intent>
+            <action android:name="com.greenart7c3.nostr.signer.SIGN_EVENT" />
+        </intent>
+    </queries>
+
     <application
         android:name=".NuruNuruApp"
         android:allowBackup="false"

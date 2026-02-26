@@ -105,16 +105,24 @@ object ImageUploadUtils {
                 .build()
 
             client.newCall(request).execute().use { response ->
+                val body = response.body?.string() ?: ""
                 if (!response.isSuccessful) {
-                    Log.w("ImageUploadUtils", "Upload failed: ${response.code} ${response.message}")
+                    Log.w("ImageUploadUtils", "Upload failed: ${response.code} ${response.message} body: $body")
                     return@withContext null
                 }
 
-                val body = response.body?.string() ?: return@withContext null
+                Log.d("ImageUploadUtils", "Upload response: $body")
                 val root = json.parseToJsonElement(body).jsonObject
+
+                // nostr.build V2 response handling
                 if (root["status"]?.jsonPrimitive?.content == "success") {
                     val data = root["data"]?.jsonArray?.getOrNull(0)?.jsonObject
                     return@withContext data?.get("url")?.jsonPrimitive?.content
+                } else {
+                    // Fallback for different response formats or errors
+                    Log.w("ImageUploadUtils", "Upload status not success: $body")
+                    val url = root["url"]?.jsonPrimitive?.content
+                    if (url != null) return@withContext url
                 }
             }
         } catch (e: Exception) {

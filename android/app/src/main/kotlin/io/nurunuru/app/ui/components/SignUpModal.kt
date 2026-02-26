@@ -23,6 +23,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -487,9 +489,49 @@ fun ProfileStep(
         }
     }
 
-    IconBox(icon = Icons.Default.AccountCircle, containerColor = LineGreen.copy(alpha = 0.1f), iconColor = LineGreen)
+    // Avatar Upload
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .clip(CircleShape)
+                .background(nuruColors.bgSecondary)
+                .clickable { pictureLauncher.launch("image/*") },
+            contentAlignment = Alignment.Center
+        ) {
+            if (picture.isNotEmpty()) {
+                AsyncImage(
+                    model = picture,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.AddAPhoto,
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    tint = nuruColors.textTertiary
+                )
+            }
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (uploadingPicture) {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = LineGreen, modifier = Modifier.size(24.dp))
+                }
+            }
+        }
+        Text("アイコン画像をアップロード", fontSize = 12.sp, color = nuruColors.textTertiary)
+    }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("プロフィールの設定", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = nuruColors.textPrimary)
         Text("あなたの情報を入力しましょう。", fontSize = 13.sp, color = nuruColors.textSecondary)
     }
@@ -512,13 +554,7 @@ fun ProfileStep(
             placeholder = { Text("https://...") },
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
-            shape = RoundedCornerShape(12.dp),
-            trailingIcon = {
-                IconButton(onClick = { pictureLauncher.launch("image/*") }, enabled = !uploadingPicture) {
-                    if (uploadingPicture) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = LineGreen)
-                    else Icon(Icons.Default.CloudUpload, contentDescription = "Upload")
-                }
-            }
+            shape = RoundedCornerShape(12.dp)
         )
 
         OutlinedTextField(

@@ -173,33 +173,18 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Passkey login simulation (Android Credential Manager)
+     * Passkey login by redirecting to web
      */
     fun loginWithPasskey(context: Context) {
-        viewModelScope.launch {
-            _authState.value = AuthState.Checking
-            try {
-                val credentialManager = CredentialManager.create(context)
-                val getPublicKeyCredentialOption = GetPublicKeyCredentialOption(
-                    requestJson = "{\"challenge\":\"Y2hhbGxlbmdl\",\"allowCredentials\":[],\"timeout\":60000,\"userVerification\":\"required\",\"rpId\":\"www.nullnull.app\"}"
-                )
-                val getCredRequest = GetCredentialRequest(listOf(getPublicKeyCredentialOption))
-
-                // Note: In a real implementation with a backend/PRF, we would get the seed here.
-                // For now, if we have a stored key, we simulate the 'unlock' UX.
-                val result = credentialManager.getCredential(context, getCredRequest)
-
-                val storedPrivKey = prefs.privateKeyHex
-                val storedPubKey = prefs.publicKeyHex
-
-                if (storedPrivKey != null && storedPubKey != null) {
-                    _authState.value = AuthState.LoggedIn(storedPubKey, storedPrivKey, false)
-                } else {
-                    _authState.value = AuthState.Error("パスキーに対応するアカウントが見つかりません。新規登録してください。")
-                }
-            } catch (e: Exception) {
-                _authState.value = AuthState.Error("パスキー認証に失敗しました: ${e.message}")
-            }
+        try {
+            val intent = android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse("https://www.nullnull.app/login?redirect_uri=io.nurunuru.app://login")
+            )
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            _authState.value = AuthState.Error("ブラウザを開けませんでした: ${e.message}")
         }
     }
 

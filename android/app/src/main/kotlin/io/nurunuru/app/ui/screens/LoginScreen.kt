@@ -221,7 +221,11 @@ fun LoginScreen(
                     // External Signer Button (NIP-55)
                     Button(
                         onClick = {
-                            amberLauncher.launch(ExternalSigner.createGetPublicKeyIntent())
+                            try {
+                                amberLauncher.launch(ExternalSigner.createGetPublicKeyIntent())
+                            } catch (e: Exception) {
+                                android.widget.Toast.makeText(context, "外部署名アプリが見つかりません", android.widget.Toast.LENGTH_SHORT).show()
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()

@@ -12,7 +12,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 object ExternalSigner {
-    private const val PACKAGE_NAME = "com.greenart7c3.nostr.signer"
+    private const val PACKAGE_NAME = "com.greenart7c3.nostrsigner"
 
     // NIP-55 Actions
     private const val ACTION_GET_PUBLIC_KEY = "com.greenart7c3.nostr.signer.GET_PUBLIC_KEY"
@@ -35,8 +35,10 @@ object ExternalSigner {
     fun createSignEventIntent(eventJson: String, pubkey: String): Intent {
         return Intent(ACTION_SIGN_EVENT).apply {
             `package` = PACKAGE_NAME
+            putExtra("type", "sign_event")
             putExtra("event", eventJson)
             putExtra("current_user", pubkey)
+            putExtra("returnType", "event")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
     }
@@ -44,9 +46,11 @@ object ExternalSigner {
     fun createDecryptIntent(content: String, pubkey: String, currentUser: String, nip44: Boolean): Intent {
         return Intent(if (nip44) ACTION_NIP44_DECRYPT else ACTION_NIP04_DECRYPT).apply {
             `package` = PACKAGE_NAME
+            putExtra("type", if (nip44) "nip44_decrypt" else "nip04_decrypt")
             putExtra("content", content)
             putExtra("pubKey", pubkey)
             putExtra("current_user", currentUser)
+            putExtra("returnType", "signature")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
     }
@@ -54,9 +58,11 @@ object ExternalSigner {
     fun createEncryptIntent(content: String, pubkey: String, currentUser: String, nip44: Boolean): Intent {
         return Intent(if (nip44) ACTION_NIP44_ENCRYPT else ACTION_NIP04_ENCRYPT).apply {
             `package` = PACKAGE_NAME
+            putExtra("type", if (nip44) "nip44_encrypt" else "nip04_encrypt")
             putExtra("content", content)
             putExtra("pubKey", pubkey)
             putExtra("current_user", currentUser)
+            putExtra("returnType", "signature")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
     }
