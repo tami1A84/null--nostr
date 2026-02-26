@@ -118,6 +118,10 @@ export default function Home() {
             const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
             window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
             return
+          } else {
+            // Logged in but no private key (maybe session was cleared)
+            // Show a prompt to re-auth via passkey to get the key
+            setActiveTab('app-redirect-prompt')
           }
         }
 
@@ -384,6 +388,46 @@ export default function Home() {
             style={{ zIndex: 1 }}
           >
             <MiniAppTab pubkey={pubkey} onLogout={handleLogout} />
+          </div>
+        )}
+
+        {/* App Redirect Prompt */}
+        {activeTab === 'app-redirect-prompt' && (
+          <div className="fixed inset-0 flex items-center justify-center bg-[var(--bg-primary)] z-50 p-6">
+            <div className="max-w-sm w-full text-center space-y-6 animate-scaleIn">
+              <div className="w-20 h-20 mx-auto bg-green-500/10 rounded-3xl flex items-center justify-center">
+                 <img src="/nurunuru-star.png" alt="ぬるぬる" className="w-14 h-14" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-[var(--text-primary)]">アプリに戻る</h2>
+                <p className="text-[var(--text-secondary)] mt-2">
+                  Androidアプリへのログインを完了するには、もう一度認証が必要です。
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  if (window.nosskeyManager) {
+                    try {
+                      const keyInfo = window.nosskeyManager.getCurrentKeyInfo()
+                      const privKey = await window.nosskeyManager.exportNostrKey(keyInfo)
+                      if (privKey) {
+                        const nsec = nip19.nsecEncode(hexToBytes(privKey))
+                        const redirectUri = new URLSearchParams(window.location.search).get('redirect_uri')
+                        window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+                      }
+                    } catch (e) {
+                      console.error('Export failed:', e)
+                    }
+                  } else {
+                    // Force refresh to login screen if manager is missing
+                    window.location.reload()
+                  }
+                }}
+                className="w-full btn-line py-4 text-lg font-bold"
+              >
+                認証してアプリに戻る
+              </button>
+            </div>
           </div>
         )}
       </div>

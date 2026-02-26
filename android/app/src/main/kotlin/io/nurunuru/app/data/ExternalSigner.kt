@@ -34,7 +34,8 @@ object ExternalSigner : AppSigner {
     private const val ACTION_GET_PUBLIC_KEY_LEGACY = "com.greenart7c3.nostr.signer.GET_PUBLIC_KEY"
     private const val ACTION_SIGN_EVENT_LEGACY = "com.greenart7c3.nostr.signer.SIGN_EVENT"
 
-    private const val CONTENT_URI = "content://com.greenart7c3.nostrsigner"
+    private const val CONTENT_URI = "content://com.nostr.signer"
+    private const val CONTENT_URI_LEGACY = "content://com.greenart7c3.nostrsigner"
 
     private var pendingRequest: CompletableDeferred<Intent>? = null
     private val mutex = kotlinx.coroutines.sync.Mutex()
@@ -147,21 +148,30 @@ object ExternalSigner : AppSigner {
 
     private fun tryContentResolver(context: Context, intent: Intent): Intent? {
         val type = intent.getStringExtra("type") ?: return null
+        val data = intent.getStringExtra("event") ?: intent.getStringExtra("content") ?: ""
+        val currentUser = intent.getStringExtra("current_user") ?: ""
+        val pubKey = intent.getStringExtra("pubKey") ?: ""
+
+        val result = queryProvider(context, CONTENT_URI, type, data, currentUser, pubKey)
+        if (result != null) return result
+
+        return queryProvider(context, CONTENT_URI_LEGACY, type, data, currentUser, pubKey)
+    }
+
+    private fun queryProvider(
+        context: Context,
+        baseUri: String,
+        type: String,
+        data: String,
+        currentUser: String,
+        pubKey: String
+    ): Intent? {
         try {
-            val contentResolver = context.contentResolver
-            val uri = Uri.parse("$CONTENT_URI/$type")
-
+            val uri = Uri.parse("$baseUri/$type")
             val projection = arrayOf("signature", "event")
+            val selectionArgs = arrayOf(currentUser, pubKey)
 
-            // Re-map NIP-44 and NIP-04 type for content resolver if necessary
-            // Amber's content provider expects specific types
-            val selectionArgs = arrayOf(
-                intent.getStringExtra("event") ?: intent.getStringExtra("content") ?: "",
-                intent.getStringExtra("current_user") ?: "",
-                intent.getStringExtra("pubKey") ?: ""
-            )
-
-            contentResolver.query(uri, projection, type, selectionArgs, null)?.use { cursor ->
+            context.contentResolver.query(uri, projection, data, selectionArgs, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val signature = cursor.getString(cursor.getColumnIndexOrThrow("signature"))
                     val event = cursor.getString(cursor.getColumnIndexOrThrow("event"))

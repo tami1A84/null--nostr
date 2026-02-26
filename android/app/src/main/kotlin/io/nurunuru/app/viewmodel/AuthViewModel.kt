@@ -179,6 +179,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder()
                 .setShowTitle(true)
                 .build()
+
+            // Try to force Chrome if available to ensure session/passkey sharing
+            customTabsIntent.intent.setPackage("com.android.chrome")
             customTabsIntent.launchUrl(context, android.net.Uri.parse(url))
         } catch (e: Exception) {
             // Fallback to standard browser intent

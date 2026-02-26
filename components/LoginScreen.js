@@ -297,7 +297,7 @@ export default function LoginScreen({ onLogin }) {
 
         {/* Login options */}
         <div className="space-y-4">
-          {nosskeyHasKey ? (
+          {(nosskeyHasKey || nosskeySupported) ? (
             /* Passkey User: Prominent Passkey Login */
             <div className="animate-slideUp space-y-4">
               <button
