@@ -55,11 +55,18 @@ fun MainScreen(
 
     // Create shared NostrClient and Repository
     val nostrClient = remember {
+        val signer = if (privateKeyHex != null) {
+            io.nurunuru.app.data.InternalSigner(privateKeyHex)
+        } else {
+            io.nurunuru.app.data.ExternalSigner.apply {
+                setCurrentUser(pubkeyHex)
+            }
+        }
+
         NostrClient(
             context = context,
             relays = app.prefs.relays.toList(),
-            privateKeyHex = privateKeyHex,
-            publicKeyHex = pubkeyHex
+            signer = signer
         ).also { it.connect() }
     }
     val repository = remember { NostrRepository(nostrClient, app.prefs) }

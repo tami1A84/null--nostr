@@ -11,7 +11,13 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-object ExternalSigner {
+object ExternalSigner : AppSigner {
+    private var currentUserPubkey: String = ""
+
+    fun setCurrentUser(pubkey: String) {
+        currentUserPubkey = pubkey
+    }
+
     private const val PACKAGE_NAME = "com.greenart7c3.nostrsigner"
 
     // NIP-55 Actions
@@ -67,25 +73,25 @@ object ExternalSigner {
         }
     }
 
-    suspend fun signEvent(context: Context, eventJson: String, pubkey: String): String? {
+    suspend fun signEvent(context: Context?, eventJson: String, pubkey: String): String? {
         val intent = createSignEventIntent(eventJson, pubkey)
         val result = request(context, intent) ?: return null
         return result.getStringExtra("event") ?: result.getStringExtra("signature")
     }
 
-    suspend fun decrypt(context: Context, content: String, pubkey: String, currentUser: String, nip44: Boolean): String? {
+    suspend fun decrypt(context: Context?, content: String, pubkey: String, currentUser: String, nip44: Boolean): String? {
         val intent = createDecryptIntent(content, pubkey, currentUser, nip44)
         val result = request(context, intent) ?: return null
         return result.getStringExtra("signature") ?: result.getStringExtra("content")
     }
 
-    suspend fun encrypt(context: Context, content: String, pubkey: String, currentUser: String, nip44: Boolean): String? {
+    suspend fun encrypt(context: Context?, content: String, pubkey: String, currentUser: String, nip44: Boolean): String? {
         val intent = createEncryptIntent(content, pubkey, currentUser, nip44)
         val result = request(context, intent) ?: return null
         return result.getStringExtra("signature") ?: result.getStringExtra("content")
     }
 
-    private suspend fun request(context: Context, intent: Intent): Intent? = mutex.withLock {
+    private suspend fun request(context: Context?, intent: Intent): Intent? = mutex.withLock {
         val deferred = CompletableDeferred<Intent>()
         pendingRequest = deferred
 
@@ -102,6 +108,32 @@ object ExternalSigner {
         } finally {
             pendingRequest = null
         }
+    }
+
+    override fun getPublicKeyHex(): String {
+        return currentUserPubkey
+    }
+
+    override suspend fun signEvent(eventJson: String): String? {
+        val intent = createSignEventIntent(eventJson, getPublicKeyHex())
+        val result = request(null, intent) ?: return null
+        return result.getStringExtra("event") ?: result.getStringExtra("signature")
+    }
+
+    override suspend fun nip04Encrypt(receiverPubkeyHex: String, content: String): String? {
+        return encrypt(null, content, receiverPubkeyHex, "", false)
+    }
+
+    override suspend fun nip04Decrypt(senderPubkeyHex: String, content: String): String? {
+        return decrypt(null, content, senderPubkeyHex, "", false)
+    }
+
+    override suspend fun nip44Encrypt(receiverPubkeyHex: String, content: String): String? {
+        return encrypt(null, content, receiverPubkeyHex, "", true)
+    }
+
+    override suspend fun nip44Decrypt(senderPubkeyHex: String, content: String): String? {
+        return decrypt(null, content, senderPubkeyHex, "", true)
     }
 
     fun onResult(intent: Intent?) {

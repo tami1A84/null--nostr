@@ -20,10 +20,10 @@ private const val TAG = "NostrClient"
 class NostrClient(
     private val context: Context,
     private val relays: List<String>,
-    private val privateKeyHex: String?,
-    private val publicKeyHex: String
+    private val signer: AppSigner
 ) {
     private var sdkClient: Client? = null
+    private val publicKeyHex = signer.getPublicKeyHex()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val _events = MutableSharedFlow<NostrEvent>(extraBufferCapacity = 100)
@@ -33,11 +33,7 @@ class NostrClient(
 
     // ─── Connection ───────────────────────────────────────────────────────────
 
-    fun getSigner(): NostrSigner? {
-        if (privateKeyHex.isNullOrBlank()) return null
-        val keys = Keys.parse(privateKeyHex)
-        return NostrSigner.keys(keys)
-    }
+    fun getSigner(): AppSigner = signer
 
     fun connect() {
         scope.launch {
@@ -46,19 +42,19 @@ class NostrClient(
                 val dbPath = context.filesDir.absolutePath + "/nostrdb"
                 val database = NostrDatabase.lmdb(dbPath)
 
-                // 2. Setup signer
-                val signer: NostrSigner = if (!privateKeyHex.isNullOrBlank()) {
-                    val keys = Keys.parse(privateKeyHex)
+                // 2. Setup internal SDK signer (dummy if external)
+                val sdkSigner: NostrSigner = if (signer is InternalSigner) {
+                    val keys = Keys.parse(privateKeyHexForSdk())
                     NostrSigner.keys(keys)
                 } else {
-                    // Use a random key for the client internal operations if no private key
-                    // We'll handle actual event signing manually via ExternalSigner
+                    // For external signers, we use a random key internally in the SDK Client
+                    // because we intercept signing calls manually.
                     NostrSigner.keys(Keys.generate())
                 }
 
                 // 3. Build SDK Client
                 val client = ClientBuilder()
-                    .signer(signer)
+                    .signer(sdkSigner)
                     .database(database)
                     .build()
 
@@ -86,19 +82,23 @@ class NostrClient(
         }
     }
 
+    private fun privateKeyHexForSdk(): String {
+        return (signer as? InternalSigner)?.privateKeyHex ?: ""
+    }
+
     private suspend fun signAndSend(builder: EventBuilder): Event? {
         val client = sdkClient ?: return null
         return try {
-            if (privateKeyHex.isNullOrBlank()) {
+            if (signer is InternalSigner) {
+                val output = client.sendEventBuilder(builder)
+                client.database().eventById(output.id)
+            } else {
                 val publicKey = PublicKey.parse(publicKeyHex)
                 val unsignedEvent = builder.build(publicKey)
-                val signedJson = ExternalSigner.signEvent(context, unsignedEvent.asJson(), publicKeyHex) ?: return null
+                val signedJson = signer.signEvent(unsignedEvent.asJson()) ?: return null
                 val signedEvent = Event.fromJson(signedJson)
                 client.sendEvent(signedEvent)
                 signedEvent
-            } else {
-                val output = client.sendEventBuilder(builder)
-                client.database().eventById(output.id)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Sign and send failed", e)
@@ -286,62 +286,18 @@ class NostrClient(
     }
 
     suspend fun decryptNip04(senderPubkeyHex: String, encryptedContent: String): String? {
-        val client = sdkClient ?: return null
-        return try {
-            if (privateKeyHex.isNullOrBlank()) {
-                ExternalSigner.decrypt(context, encryptedContent, senderPubkeyHex, publicKeyHex, false)
-            } else {
-                val sender = PublicKey.parse(senderPubkeyHex)
-                val signer = client.signer()
-                signer.nip04Decrypt(sender, encryptedContent)
-            }
-        } catch (e: Exception) {
-            null
-        }
+        return signer.nip04Decrypt(senderPubkeyHex, encryptedContent)
     }
 
     suspend fun decryptNip44(senderPubkeyHex: String, encryptedContent: String): String? {
-        val client = sdkClient ?: return null
-        return try {
-            if (privateKeyHex.isNullOrBlank()) {
-                ExternalSigner.decrypt(context, encryptedContent, senderPubkeyHex, publicKeyHex, true)
-            } else {
-                val sender = PublicKey.parse(senderPubkeyHex)
-                val signer = client.signer()
-                signer.nip44Decrypt(sender, encryptedContent)
-            }
-        } catch (e: Exception) {
-            null
-        }
+        return signer.nip44Decrypt(senderPubkeyHex, encryptedContent)
     }
 
     suspend fun encryptNip04(receiverPubkeyHex: String, content: String): String? {
-        val client = sdkClient ?: return null
-        return try {
-            if (privateKeyHex.isNullOrBlank()) {
-                ExternalSigner.encrypt(context, content, receiverPubkeyHex, publicKeyHex, false)
-            } else {
-                val receiver = PublicKey.parse(receiverPubkeyHex)
-                val signer = client.signer()
-                signer.nip04Encrypt(receiver, content)
-            }
-        } catch (e: Exception) {
-            null
-        }
+        return signer.nip04Encrypt(receiverPubkeyHex, content)
     }
 
     suspend fun encryptNip44(receiverPubkeyHex: String, content: String): String? {
-        val client = sdkClient ?: return null
-        return try {
-            if (privateKeyHex.isNullOrBlank()) {
-                ExternalSigner.encrypt(context, content, receiverPubkeyHex, publicKeyHex, true)
-            } else {
-                val receiver = PublicKey.parse(receiverPubkeyHex)
-                val signer = client.signer()
-                signer.nip44Encrypt(receiver, content)
-            }
-        } catch (e: Exception) {
-            null
-        }
+        return signer.nip44Encrypt(receiverPubkeyHex, content)
     }
 }

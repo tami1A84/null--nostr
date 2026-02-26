@@ -143,9 +143,9 @@ fun SignUpModal(
                                         isLoading = true
                                         coroutineScope.launch {
                                             // Publish metadata and relay list
+                                            val internalSigner = io.nurunuru.app.data.InternalSigner(generatedAccount!!.privateKeyHex)
                                             viewModel.publishInitialMetadata(
-                                                privKeyHex = generatedAccount!!.privateKeyHex,
-                                                pubKeyHex = generatedAccount!!.pubkeyHex,
+                                                signer = internalSigner,
                                                 name = name,
                                                 about = about,
                                                 picture = picture,

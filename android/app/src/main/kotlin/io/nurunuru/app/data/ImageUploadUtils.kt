@@ -20,7 +20,7 @@ object ImageUploadUtils {
     suspend fun uploadToBlossom(
         fileBytes: ByteArray,
         mimeType: String,
-        signer: NostrSigner?,
+        signer: AppSigner?,
         blossomUrl: String = "https://blossom.nostr.build"
     ): String? = withContext(Dispatchers.IO) {
         try {
@@ -42,10 +42,10 @@ object ImageUploadUtils {
                         Tag.parse(listOf("expiration", (now + 300).toString()))
                     ))
 
-                val publicKey = signer.getPublicKey()
+                val publicKey = PublicKey.parse(signer.getPublicKeyHex())
                 val unsignedEvent = authEventBuilder.build(publicKey)
-                val authEvent = signer.signEvent(unsignedEvent)
-                val authHeader = Base64.encodeToString(authEvent.asJson().toByteArray(), Base64.NO_WRAP)
+                val signedJson = signer.signEvent(unsignedEvent.asJson()) ?: return@withContext null
+                val authHeader = Base64.encodeToString(signedJson.toByteArray(), Base64.NO_WRAP)
                 requestBuilder.addHeader("Authorization", "Nostr $authHeader")
             }
 
@@ -66,7 +66,7 @@ object ImageUploadUtils {
     suspend fun uploadToNostrBuild(
         fileBytes: ByteArray,
         mimeType: String,
-        signer: NostrSigner? = null
+        signer: AppSigner? = null
     ): String? = withContext(Dispatchers.IO) {
         try {
             val url = "https://nostr.build/api/v2/upload/files"
@@ -81,10 +81,10 @@ object ImageUploadUtils {
                             Tag.parse(listOf("method", "POST"))
                         ))
 
-                    val publicKey = signer.getPublicKey()
+                    val publicKey = PublicKey.parse(signer.getPublicKeyHex())
                     val unsignedEvent = authEventBuilder.build(publicKey)
-                    val authEvent = signer.signEvent(unsignedEvent)
-                    val authHeader = Base64.encodeToString(authEvent.asJson().toByteArray(), Base64.NO_WRAP)
+                    val signedJson = signer.signEvent(unsignedEvent.asJson()) ?: throw Exception("Signing failed")
+                    val authHeader = Base64.encodeToString(signedJson.toByteArray(), Base64.NO_WRAP)
                     requestBuilder.addHeader("Authorization", "Nostr $authHeader")
                 } catch (e: Exception) {
                     Log.w("ImageUploadUtils", "Failed to create NIP-98 header", e)

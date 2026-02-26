@@ -75,8 +75,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun publishInitialMetadata(
-        privKeyHex: String,
-        pubKeyHex: String,
+        signer: io.nurunuru.app.data.AppSigner,
         name: String,
         about: String,
         picture: String = "",
@@ -93,8 +92,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             val client = NostrClient(
                 context = getApplication(),
                 relays = targetRelays,
-                privateKeyHex = privKeyHex,
-                publicKeyHex = pubKeyHex
+                signer = signer
             )
             client.connect()
 
@@ -105,7 +103,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
             // 2. Publish Kind 0 (Metadata)
             val profile = UserProfile(
-                pubkey = pubKeyHex,
+                pubkey = signer.getPublicKeyHex(),
                 name = name,
                 displayName = name,
                 about = about,
