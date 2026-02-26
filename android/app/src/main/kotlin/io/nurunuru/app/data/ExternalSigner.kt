@@ -67,6 +67,7 @@ object ExternalSigner : AppSigner {
             putExtra("type", "sign_event")
             putExtra("event", eventJson)
             putExtra("pubKey", pubkey)
+            putExtra("id", Json.parseToJsonElement(eventJson).jsonObject["id"]?.jsonPrimitive?.content)
             putExtra("returnType", "event")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }

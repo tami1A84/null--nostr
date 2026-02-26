@@ -116,7 +116,9 @@ export default function Home() {
           const privateKeyHex = getPrivateKeyHex()
           if (privateKeyHex) {
             const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
-            window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+            const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+            console.log('Immediate redirect to app:', targetUrl)
+            window.location.replace(targetUrl)
             return
           } else {
             // Logged in but no private key (maybe session was cleared)
@@ -191,7 +193,9 @@ export default function Home() {
       const privateKeyHex = getPrivateKeyHex()
       if (privateKeyHex) {
         const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
-        window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+        const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+        console.log('Login redirect to app:', targetUrl)
+        window.location.replace(targetUrl)
       } else {
         // If logged in but no private key (unlikely here but for safety)
         setActiveTab('app-redirect-prompt')
