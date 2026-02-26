@@ -38,6 +38,7 @@ import io.nurunuru.app.viewmodel.TimelineViewModel
 @Composable
 fun SearchModal(
     viewModel: TimelineViewModel,
+    repository: io.nurunuru.app.data.NostrRepository,
     onClose: () -> Unit,
     onProfileClick: (String) -> Unit
 ) {
@@ -176,7 +177,7 @@ fun SearchModal(
                 Box(modifier = Modifier.fillMaxSize()) {
                     if (uiState.isSearching) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = LineGreen)
+                            FriendlyLoading(message = "検索結果を取得中...")
                         }
                     } else if (uiState.searchResults.isEmpty() && uiState.searchQuery.isNotEmpty()) {
                         Column(
@@ -222,6 +223,7 @@ fun SearchModal(
                                     onLike = { viewModel.likePost(post.event.id) },
                                     onRepost = { viewModel.repostPost(post.event.id) },
                                     onProfileClick = { onProfileClick(post.event.pubkey) },
+                                    repository = repository,
                                     birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
                                 )
                             }

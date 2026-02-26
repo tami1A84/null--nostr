@@ -411,6 +411,149 @@ object NuruIcons {
         }.build()
     }
 
+    val NotInterested: ImageVector = ImageVector.Builder(
+        name = "NotInterested",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // Circle
+        moveTo(22f, 12f)
+        arcToRelative(10f, 10f, 0f, true, true, -20f, 0f)
+        arcToRelative(10f, 10f, 0f, true, true, 20f, 0f)
+        close()
+        // Mouth
+        moveTo(8f, 15f)
+        horizontalLineToRelative(8f)
+        // Eyes
+        moveTo(9f, 9f)
+        horizontalLineToRelative(0.01f)
+        moveTo(15f, 9f)
+        horizontalLineToRelative(0.01f)
+    }.build()
+
+    val Flag: ImageVector = ImageVector.Builder(
+        name = "Flag",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+        moveTo(4f, 15f)
+        reflectiveCurveToRelative(1f, -1f, 4f, -1f)
+        reflectiveCurveToRelative(5f, 2f, 8f, 2f)
+        reflectiveCurveToRelative(4f, -1f, 4f, -1f)
+        verticalLineTo(3f)
+        reflectiveCurveToRelative(-1f, 1f, -4f, 1f)
+        reflectiveCurveToRelative(-5f, -2f, -8f, -2f)
+        reflectiveCurveToRelative(-4f, 1f, -4f, 1f)
+        close()
+        // <line x1="4" y1="22" x2="4" y2="15"/>
+        moveTo(4f, 22f)
+        verticalLineToRelative(-7f)
+    }.build()
+
+    val BirdwatchCheck: ImageVector = ImageVector.Builder(
+        name = "BirdwatchCheck",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = SolidColor(Color.White),
+        stroke = null
+    ) {
+        // M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z
+        moveTo(12f, 2f)
+        curveTo(6.48f, 2f, 2f, 6.48f, 2f, 12f)
+        reflectiveCurveToRelative(4.48f, 10f, 10f, 10f)
+        reflectiveCurveToRelative(10f, -4.48f, 10f, -10f)
+        reflectiveCurveTo(17.52f, 2f, 12f, 2f)
+        close()
+        moveTo(10f, 17f)
+        lineToRelative(-5f, -5f)
+        lineToRelative(1.41f, -1.41f)
+        lineTo(10f, 14.17f)
+        lineToRelative(7.59f, -7.59f)
+        lineTo(19f, 8f)
+        lineToRelative(-9f, 9f)
+        close()
+    }.build()
+
+    val Block: ImageVector = ImageVector.Builder(
+        name = "Block",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <circle cx="12" cy="12" r="10"/>
+        moveTo(22f, 12f)
+        arcToRelative(10f, 10f, 0f, true, true, -20f, 0f)
+        arcToRelative(10f, 10f, 0f, true, true, 20f, 0f)
+        close()
+        // <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+        moveTo(4.93f, 4.93f)
+        lineTo(19.07f, 19.07f)
+    }.build()
+
+    val Trash: ImageVector = ImageVector.Builder(
+        name = "Trash",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <polyline points="3 6 5 6 21 6"/>
+        moveTo(3f, 6f)
+        horizontalLineToRelative(18f)
+        // <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        moveTo(19f, 6f)
+        verticalLineToRelative(14f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+        horizontalLineTo(7f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+        verticalLineTo(6f)
+        moveTo(8f, 6f)
+        verticalLineTo(4f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+        horizontalLineToRelative(4f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, 2f)
+        verticalLineToRelative(2f)
+        // <line x1="10" y1="11" x2="10" y2="17"/>
+        moveTo(10f, 11f)
+        verticalLineToRelative(6f)
+        // <line x1="14" y1="11" x2="14" y2="17"/>
+        moveTo(14f, 11f)
+        verticalLineToRelative(6f)
+    }.build()
+
     val Edit: ImageVector = ImageVector.Builder(
         name = "Edit",
         defaultWidth = 24.dp,

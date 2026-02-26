@@ -98,6 +98,22 @@ class TimelineViewModel(
         }
     }
 
+    fun deletePost(eventId: String) {
+        viewModelScope.launch {
+            try {
+                val success = repository.deleteEvent(eventId)
+                if (success) {
+                    _uiState.update { state ->
+                        state.copy(
+                            globalPosts = state.globalPosts.filter { it.event.id != eventId },
+                            followingPosts = state.followingPosts.filter { it.event.id != eventId }
+                        )
+                    }
+                }
+            } catch (e: Exception) { /* ignore */ }
+        }
+    }
+
     fun loadFollowingTimeline(isRefresh: Boolean = false) {
         viewModelScope.launch {
             _uiState.update {
@@ -273,6 +289,47 @@ class TimelineViewModel(
                 repository.publishNote(content, contentWarning = contentWarning)
             } catch (e: Exception) { /* Silently ignore */ }
             refresh()
+        }
+    }
+
+    fun muteUser(pubkey: String) {
+        viewModelScope.launch {
+            try {
+                repository.muteUser(pubkey)
+                _uiState.update { state ->
+                    state.copy(
+                        globalPosts = state.globalPosts.filter { it.event.pubkey != pubkey },
+                        followingPosts = state.followingPosts.filter { it.event.pubkey != pubkey }
+                    )
+                }
+            } catch (e: Exception) { /* Silently ignore */ }
+        }
+    }
+
+    fun reportEvent(eventId: String?, pubkey: String, type: String, content: String) {
+        viewModelScope.launch {
+            try {
+                repository.reportEvent(eventId, pubkey, type, content)
+            } catch (e: Exception) { /* Silently ignore */ }
+        }
+    }
+
+    fun submitBirdwatch(eventId: String, authorPubkey: String, type: String, content: String, url: String) {
+        viewModelScope.launch {
+            try {
+                repository.publishBirdwatchLabel(eventId, authorPubkey, type, content, url)
+                // Refresh birdwatch notes for this post
+                fetchBirdwatchForPosts(listOf(_uiState.value.globalPosts.find { it.event.id == eventId } ?: return@launch))
+            } catch (e: Exception) { /* Silently ignore */ }
+        }
+    }
+
+    fun setNotInterested(eventId: String) {
+        _uiState.update { state ->
+            state.copy(
+                globalPosts = state.globalPosts.filter { it.event.id != eventId },
+                followingPosts = state.followingPosts.filter { it.event.id != eventId }
+            )
         }
     }
 

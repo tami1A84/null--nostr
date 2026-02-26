@@ -27,7 +27,10 @@ data class HomeUiState(
     val isFollowing: Boolean = false,
     val followList: List<String> = emptyList(),
     val followProfiles: Map<String, UserProfile> = emptyMap(),
-    val uploadServer: String = "nostr.build"
+    val uploadServer: String = "nostr.build",
+    val searchQuery: String = "",
+    val searchResults: List<ScoredPost> = emptyList(),
+    val isSearching: Boolean = false
 ) {
     val isOwnProfile: Boolean
         get() = viewingPubkey == null
@@ -89,6 +92,31 @@ class HomeViewModel(
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "プロフィールの読み込みに失敗しました", isLoading = false) }
             }
+        }
+    }
+
+    fun muteUser(pubkey: String) {
+        viewModelScope.launch {
+            try {
+                repository.muteUser(pubkey)
+                refresh()
+            } catch (e: Exception) { /* Ignore */ }
+        }
+    }
+
+    fun reportEvent(eventId: String?, pubkey: String, type: String, content: String) {
+        viewModelScope.launch {
+            try {
+                repository.reportEvent(eventId, pubkey, type, content)
+            } catch (e: Exception) { /* Ignore */ }
+        }
+    }
+
+    fun submitBirdwatch(eventId: String, authorPubkey: String, type: String, content: String, url: String) {
+        viewModelScope.launch {
+            try {
+                repository.publishBirdwatchLabel(eventId, authorPubkey, type, content, url)
+            } catch (e: Exception) { /* Ignore */ }
         }
     }
 
@@ -296,6 +324,29 @@ class HomeViewModel(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    fun searchPosts(query: String) {
+        val targetPubkey = _uiState.value.viewingPubkey ?: myPubkeyHex
+        if (query.isBlank()) {
+            _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false) }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(searchQuery = query, isSearching = true) }
+            try {
+                val results = repository.searchNotes(query, 50)
+                val filtered = results.filter { it.event.pubkey == targetPubkey }
+                _uiState.update { it.copy(searchResults = filtered, isSearching = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isSearching = false) }
+            }
+        }
+    }
+
+    fun clearSearch() {
+        _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), isSearching = false) }
     }
 
     class Factory(

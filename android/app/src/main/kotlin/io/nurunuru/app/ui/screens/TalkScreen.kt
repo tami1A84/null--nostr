@@ -92,8 +92,10 @@ private fun ConversationListScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
                 isLoading -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = LineGreen)
+                    Column {
+                        repeat(8) {
+                            ListItemSkeleton()
+                        }
                     }
                 }
                 conversations.isEmpty() -> TalkEmptyState()
@@ -158,8 +160,10 @@ private fun ConversationScreen(
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             Box(modifier = Modifier.weight(1f)) {
                 if (isLoading) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = LineGreen)
+                    Column(Modifier.padding(top = 16.dp)) {
+                        repeat(5) { i ->
+                            MessageSkeleton(alignRight = i % 2 == 1)
+                        }
                     }
                 } else {
                     LazyColumn(

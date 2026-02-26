@@ -46,6 +46,7 @@ fun TimelineScreen(
     var showPostModal by remember { mutableStateOf(false) }
     var showSearchModal by remember { mutableStateOf(false) }
     var showNotificationsModal by remember { mutableStateOf(false) }
+    var viewingPubkey by remember { mutableStateOf<String?>(null) }
 
     // Pager state for Recommended (0) and Following (1)
     // Default to Following (index 1)
@@ -103,9 +104,26 @@ fun TimelineScreen(
             // But we simplify by using common logic for now
             TimelineContent(
                 viewModel = viewModel,
-                feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING
+                repository = repository,
+                feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING,
+                onProfileClick = { viewingPubkey = it },
+                myPubkey = myPubkey
             )
         }
+    }
+
+    if (viewingPubkey != null) {
+        val homeViewModel: io.nurunuru.app.viewmodel.HomeViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+            key = "profile_$viewingPubkey",
+            factory = io.nurunuru.app.viewmodel.HomeViewModel.Factory(repository, myPubkey)
+        )
+        UserProfileModal(
+            pubkey = viewingPubkey!!,
+            viewModel = homeViewModel,
+            repository = repository,
+            onDismiss = { viewingPubkey = null },
+            onStartDM = { /* TODO */ }
+        )
     }
 
     // Post composition modal
@@ -126,8 +144,9 @@ fun TimelineScreen(
     if (showSearchModal) {
         SearchModal(
             viewModel = viewModel,
+            repository = repository,
             onClose = { showSearchModal = false; viewModel.clearSearch() },
-            onProfileClick = { /* TODO */ }
+            onProfileClick = { viewingPubkey = it }
         )
     }
 
@@ -136,7 +155,7 @@ fun TimelineScreen(
             repository = repository,
             myPubkey = myPubkey,
             onClose = { showNotificationsModal = false },
-            onProfileClick = { /* TODO */ }
+            onProfileClick = { viewingPubkey = it }
         )
     }
 }
@@ -145,7 +164,10 @@ fun TimelineScreen(
 @Composable
 private fun TimelineContent(
     viewModel: TimelineViewModel,
-    feedType: FeedType
+    repository: io.nurunuru.app.data.NostrRepository,
+    feedType: FeedType,
+    onProfileClick: (String) -> Unit,
+    myPubkey: String
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
@@ -175,7 +197,7 @@ private fun TimelineContent(
 
         when {
             isLoading && displayPosts.isEmpty() -> {
-                TimelineLoadingState()
+                TimelineLoadingSkeleton()
             }
             error != null && displayPosts.isEmpty() -> {
                 TimelineErrorState(onRetry = {
@@ -200,14 +222,42 @@ private fun TimelineContent(
                             alpha.animateTo(1f, animationSpec = tween(300))
                         }
 
-                        PostItem(
-                            modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
-                            post = post,
-                            onLike = { viewModel.likePost(post.event.id) },
-                            onRepost = { viewModel.repostPost(post.event.id) },
-                            onProfileClick = { /* TODO: navigate to profile */ },
-                            birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
-                        )
+                        val notInterestedCallback = if (feedType == FeedType.GLOBAL) {
+                            { viewModel.setNotInterested(post.event.id) }
+                        } else null
+
+                        if (post.event.kind == 30023) {
+                            LongFormPostItem(
+                                post = post,
+                                onLike = { viewModel.likePost(post.event.id) },
+                                onRepost = { viewModel.repostPost(post.event.id) },
+                                onProfileClick = onProfileClick,
+                                repository = repository,
+                                onDelete = if (post.event.pubkey == myPubkey) { { viewModel.deletePost(post.event.id) } } else null,
+                                onMute = { viewModel.muteUser(post.event.pubkey) },
+                                onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
+                                onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
+                                onNotInterested = notInterestedCallback,
+                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
+                                isOwnPost = post.event.pubkey == myPubkey
+                            )
+                        } else {
+                            PostItem(
+                                modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
+                                post = post,
+                                onLike = { viewModel.likePost(post.event.id) },
+                                onRepost = { viewModel.repostPost(post.event.id) },
+                                onProfileClick = onProfileClick,
+                                repository = repository,
+                                onDelete = if (post.event.pubkey == myPubkey) { { viewModel.deletePost(post.event.id) } } else null,
+                                onMute = { viewModel.muteUser(post.event.pubkey) },
+                                onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
+                                onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
+                                onNotInterested = notInterestedCallback,
+                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
+                                isOwnPost = post.event.pubkey == myPubkey
+                            )
+                        }
                     }
                 }
             }

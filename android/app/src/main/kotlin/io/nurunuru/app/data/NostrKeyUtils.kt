@@ -1,8 +1,8 @@
 package io.nurunuru.app.data
 
-import rust.nostr.sdk.Keys
-import rust.nostr.sdk.PublicKey
-import rust.nostr.sdk.SecretKey
+import rust.nostr.sdk.*
+
+data class NostrLink(val type: String, val id: String)
 
 /**
  * Utility functions for Nostr key operations.
@@ -71,6 +71,20 @@ object NostrKeyUtils {
     fun shortenPubkey(pubkeyHex: String, chars: Int = 8): String {
         val npub = encodeNpub(pubkeyHex) ?: return pubkeyHex.take(chars)
         return npub.take(chars + 5) // npub1 prefix + chars
+    }
+
+    /** Parse nostr link (note1, npub1, etc.) */
+    fun parseNostrLink(input: String): NostrLink? {
+        return try {
+            when {
+                input.startsWith("npub1") -> NostrLink("npub", PublicKey.parse(input).toHex())
+                input.startsWith("note1") -> NostrLink("note", EventId.parse(input).toHex())
+                // Basic support for now, complex NIP-19 parsing skipped to ensure build stability
+                else -> null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     // ─── Hex Helpers ─────────────────────────────────────────────────────────

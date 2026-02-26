@@ -51,6 +51,7 @@ fun HomeScreen(
     var showFollowList by remember { mutableStateOf(false) }
     var showPostModal by remember { mutableStateOf(false) }
     var postToDelete by remember { mutableStateOf<String?>(null) }
+    var viewingPubkey by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -92,9 +93,12 @@ fun HomeScreen(
                 contentPadding = PaddingValues(bottom = 16.dp) // Optimized
             ) {
                 item {
-                    ProfileHeader(
-                        profile = profile,
-                        isOwnProfile = uiState.isOwnProfile,
+                    if (profile == null) {
+                        ProfileSkeleton()
+                    } else {
+                        ProfileHeader(
+                            profile = profile,
+                            isOwnProfile = uiState.isOwnProfile,
                         isFollowing = uiState.isFollowing,
                         isNip05Verified = uiState.isNip05Verified,
                         followCount = uiState.followCount,
@@ -108,8 +112,9 @@ fun HomeScreen(
                             viewModel.loadFollowProfiles()
                             showFollowList = true
                         },
-                        clipboardManager = clipboardManager
-                    )
+                            clipboardManager = clipboardManager
+                        )
+                    }
                 }
 
                 item {
@@ -124,7 +129,7 @@ fun HomeScreen(
                 if (uiState.isLoading) {
                     items(5) {
                         Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
-                            ProfileSkeletonPostItem()
+                            PostSkeleton()
                         }
                     }
                 } else {
@@ -143,16 +148,36 @@ fun HomeScreen(
                                 alpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(300))
                             }
                             Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
-                                PostItem(
-                                    modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
-                                    post = post,
-                                    onLike = { viewModel.likePost(post.event.id) },
-                                    onRepost = { viewModel.repostPost(post.event.id) },
-                                    onProfileClick = { viewModel.loadProfile(it) },
-                                    onDelete = { postToDelete = post.event.id },
-                                    isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
-                                    isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false
-                                )
+                                if (post.event.kind == 30023) {
+                                    LongFormPostItem(
+                                        post = post,
+                                        onLike = { viewModel.likePost(post.event.id) },
+                                        onRepost = { viewModel.repostPost(post.event.id) },
+                                        onProfileClick = { if (it != viewModel.myPubkeyHex) viewingPubkey = it },
+                                        repository = repository,
+                                        onDelete = { postToDelete = post.event.id },
+                                        onMute = { viewModel.muteUser(post.event.pubkey) },
+                                        onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
+                                        onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
+                                        isOwnPost = post.event.pubkey == viewModel.myPubkeyHex
+                                    )
+                                } else {
+                                    PostItem(
+                                        modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
+                                        post = post,
+                                        onLike = { viewModel.likePost(post.event.id) },
+                                        onRepost = { viewModel.repostPost(post.event.id) },
+                                        onProfileClick = { if (it != viewModel.myPubkeyHex) viewingPubkey = it },
+                                        repository = repository,
+                                        onDelete = { postToDelete = post.event.id },
+                                        onMute = { viewModel.muteUser(post.event.pubkey) },
+                                        onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
+                                        onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
+                                        onNotInterested = null,
+                                        isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
+                                        isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false
+                                    )
+                                }
                             }
                         }
                     }
@@ -183,7 +208,21 @@ fun HomeScreen(
             profiles = uiState.followProfiles,
             onDismiss = { showFollowList = false },
             onUnfollow = { viewModel.unfollowUser(it) },
-            onProfileClick = { viewModel.loadProfile(it); showFollowList = false }
+            onProfileClick = { viewingPubkey = it; showFollowList = false }
+        )
+    }
+
+    if (viewingPubkey != null) {
+        val homeViewModel: HomeViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+            key = "profile_$viewingPubkey",
+            factory = HomeViewModel.Factory(repository, viewModel.myPubkeyHex)
+        )
+        UserProfileModal(
+            pubkey = viewingPubkey!!,
+            viewModel = homeViewModel,
+            repository = repository,
+            onDismiss = { viewingPubkey = null },
+            onStartDM = { /* TODO */ }
         )
     }
 

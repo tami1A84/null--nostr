@@ -22,8 +22,13 @@ fun PostItem(
     onLike: () -> Unit,
     onRepost: () -> Unit,
     onProfileClick: (String) -> Unit,
+    repository: io.nurunuru.app.data.NostrRepository,
     modifier: Modifier = Modifier,
     onDelete: (() -> Unit)? = null,
+    onMute: (() -> Unit)? = null,
+    onReport: ((String, String) -> Unit)? = null, // type, content
+    onBirdwatch: ((String, String, String) -> Unit)? = null, // type, content, url
+    onNotInterested: (() -> Unit)? = null,
     isOwnPost: Boolean = false,
     isVerified: Boolean = false,
     birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList()
@@ -45,12 +50,16 @@ fun PostItem(
     val cwReason = post.event.getTagValue("content-warning")
     var isCWExpanded by remember { mutableStateOf(cwReason == null) }
 
+    var showReportModal by remember { mutableStateOf(false) }
+    var showBirdwatchModal by remember { mutableStateOf(false) }
+    var showZapModal by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(nuruColors.bgPrimary)
     ) {
-        PostIndicators(post = post)
+        PostIndicators(post = post, onProfileClick = onProfileClick)
 
         Row(
             modifier = Modifier
@@ -71,7 +80,12 @@ fun PostItem(
                     post = post,
                     internalVerified = internalVerified,
                     onProfileClick = onProfileClick,
+                    repository = repository,
                     onDelete = onDelete,
+                    onMute = onMute,
+                    onReport = { showReportModal = true },
+                    onBirdwatch = { showBirdwatchModal = true },
+                    onNotInterested = onNotInterested,
                     isOwnPost = isOwnPost
                 )
 
@@ -85,26 +99,60 @@ fun PostItem(
                         PostCWHeader(reason = cwReason, onCollapse = { isCWExpanded = false })
                     }
 
-                    PostContent(post = post)
+                    PostContent(post = post, repository = repository, onProfileClick = onProfileClick)
                     PostMedia(post = post)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 if (birdwatchNotes.isNotEmpty()) {
-                    BirdwatchDisplay(notes = birdwatchNotes)
+                    BirdwatchDisplay(notes = birdwatchNotes, onAuthorClick = onProfileClick)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
                 PostActions(
                     post = post,
                     onLike = onLike,
-                    onRepost = onRepost
+                    onRepost = onRepost,
+                    onZap = { showZapModal = true }
                 )
             }
         }
 
         HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+    }
+
+    if (showZapModal) {
+        ZapModal(
+            post = post,
+            repository = repository,
+            onDismiss = { showZapModal = false },
+            onSuccess = { invoice ->
+                showZapModal = false
+                // handle invoice? (currently copy-only in modal)
+            }
+        )
+    }
+
+    if (showReportModal) {
+        ReportModal(
+            onDismiss = { showReportModal = false },
+            onReport = { type, content ->
+                showReportModal = false
+                onReport?.invoke(type, content)
+            }
+        )
+    }
+
+    if (showBirdwatchModal) {
+        BirdwatchModal(
+            onDismiss = { showBirdwatchModal = false },
+            onSubmit = { type, content, url ->
+                showBirdwatchModal = false
+                onBirdwatch?.invoke(type, content, url)
+            },
+            existingNotes = birdwatchNotes
+        )
     }
 }
 
