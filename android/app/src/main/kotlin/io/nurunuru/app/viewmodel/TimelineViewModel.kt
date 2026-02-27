@@ -309,7 +309,7 @@ class TimelineViewModel(
     fun reportEvent(eventId: String?, pubkey: String, type: String, content: String) {
         viewModelScope.launch {
             try {
-                repository.reportEvent(eventId, pubkey, type, content)
+                repository.reportEvent(pubkey, eventId, type, content)
             } catch (e: Exception) { /* Silently ignore */ }
         }
     }

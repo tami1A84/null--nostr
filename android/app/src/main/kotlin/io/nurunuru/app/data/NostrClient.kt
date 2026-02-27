@@ -104,7 +104,16 @@ class NostrClient(
                 }
 
                 Log.d(TAG, "Received signed JSON: $signedJson")
-                val signedEvent = Event.fromJson(signedJson)
+                val signedEvent = try {
+                    Event.fromJson(signedJson)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse signed event JSON: $signedJson", e)
+                    // Add more context if it's a JSON parse error
+                    if (signedJson.trim().startsWith("{")) {
+                         Log.e(TAG, "Signed JSON seems well-formed but SDK rejected it. Check pubkey and signature.")
+                    }
+                    return null
+                }
                 client.sendEvent(signedEvent)
                 signedEvent
             }

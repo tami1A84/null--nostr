@@ -74,6 +74,7 @@ dependencies {
 
     // Official rust-nostr SDK
     implementation(libs.rust.nostr.sdk)
+    // implementation(libs.rust.nostr.signer.proxy)
     implementation("net.java.dev.jna:jna:5.15.0@aar")
 
     // Media playback (Kind 34236)

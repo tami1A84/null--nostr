@@ -218,16 +218,6 @@ export default function LoginScreen({ onLogin }) {
           // Save the key info
           manager.setCurrentKeyInfo(result)
 
-          // Try to pre-export key to facilitate redirect
-          try {
-            const privateKeyHex = await manager.exportNostrKey(result)
-            if (privateKeyHex) {
-              setStoredPrivateKey(result.pubkey, privateKeyHex)
-            }
-          } catch (e) {
-            console.warn('Could not pre-export key:', e)
-          }
-
           // Also try to export and store the private key immediately to facilitate redirection
           try {
             const privateKeyHex = await manager.exportNostrKey(result)

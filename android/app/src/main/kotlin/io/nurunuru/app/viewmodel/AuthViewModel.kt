@@ -175,10 +175,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun loginWithPasskey(context: Context) {
         try {
+            // Using a unique parameter to bypass cache and force a fresh check
+            val nonce = System.currentTimeMillis()
             val redirectUri = android.net.Uri.encode("io.nurunuru.app://login")
-            val url = "https://www.nullnull.app/?redirect_uri=$redirectUri"
+            val url = "https://www.nullnull.app/?redirect_uri=$redirectUri&nonce=$nonce"
+
             val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder()
                 .setShowTitle(true)
+                .setShareState(androidx.browser.customtabs.CustomTabsIntent.SHARE_STATE_OFF)
                 .build()
 
             // Try to force Chrome if available to ensure session/passkey sharing

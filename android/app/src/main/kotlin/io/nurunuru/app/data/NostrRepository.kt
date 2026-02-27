@@ -469,11 +469,9 @@ class NostrRepository(
         ) != null
     }
 
-    suspend fun reportEvent(eventId: String?, pubkey: String, reportType: String, content: String = ""): Boolean {
-        val tags = mutableListOf(listOf("p", pubkey, reportType))
-        if (eventId != null) {
-            tags.add(listOf("e", eventId, reportType))
-        }
+    suspend fun reportEvent(targetPubkey: String, eventId: String?, reportType: String, content: String): Boolean {
+        val tags = mutableListOf(listOf("p", targetPubkey, reportType))
+        eventId?.let { tags.add(listOf("e", it, reportType)) }
         return client.publish(kind = 1984, content = content, tags = tags) != null
     }
 

@@ -20,6 +20,7 @@ import io.nurunuru.app.ui.screens.MainScreen
 import io.nurunuru.app.ui.theme.NuruNuruTheme
 import io.nurunuru.app.viewmodel.AuthState
 import io.nurunuru.app.viewmodel.AuthViewModel
+// import rust.nostr.android.signer.proxy.NostrAndroidSignerProxyServer
 
 class MainActivity : ComponentActivity() {
 
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
 
     private var authViewModel: AuthViewModel? = null
     private lateinit var signerLauncher: ActivityResultLauncher<Intent>
+    // private var signerProxy: NostrAndroidSignerProxyServer? = null
 
     fun launchExternalSigner(intent: Intent) {
         signerLauncher.launch(intent)
@@ -39,6 +41,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         instance = this
         enableEdgeToEdge()
+
+        // Official NIP-55 Proxy Server from rust-nostr
+        /*
+        signerProxy = NostrAndroidSignerProxyServer(
+            context = applicationContext,
+            activity = this,
+            uniqueName = "nurunuru-nostr"
+        )
+        signerProxy?.start()
+        */
 
         signerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == RESULT_OK) {
@@ -87,6 +99,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         if (instance == this) instance = null
+        // signerProxy?.stop()
+        // signerProxy = null
         super.onDestroy()
     }
 
