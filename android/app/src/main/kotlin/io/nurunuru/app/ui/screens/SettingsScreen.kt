@@ -54,6 +54,7 @@ import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.AuthViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -1015,12 +1016,12 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                             ) {
                                 Text(selectedRegion?.name ?: "地域を選択...")
                                 Spacer(Modifier.weight(1f))
-                                Icon(Icons.Default.ArrowDropDown, null)
+                                Icon(Icons.Outlined.ArrowDropDown, null)
                             }
                             DropdownMenu(
                                 expanded = expanded,
                                 onDismissRequest = { expanded = false },
-                                modifier = Modifier.fillMaxWidth(0.9f).maxHeight(400.dp)
+                                modifier = Modifier.fillMaxWidth(0.9f).heightIn(max = 400.dp)
                             ) {
                                 val groupedRegions = RelayDiscovery.REGION_COORDINATES.groupBy {
                                     when (it.country) {
@@ -1068,7 +1069,7 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                                 Spacer(Modifier.width(8.dp))
                                 Text("位置情報を取得中...", fontSize = 12.sp, color = nuruColors.textSecondary)
                             } else {
-                                Icon(Icons.Default.MyLocation, null, modifier = Modifier.size(16.dp), tint = nuruColors.textSecondary)
+                                Icon(Icons.Outlined.MyLocation, null, modifier = Modifier.size(16.dp), tint = nuruColors.textSecondary)
                                 Spacer(Modifier.width(8.dp))
                                 Text("GPSで自動検出", fontSize = 12.sp, color = nuruColors.textSecondary)
                             }

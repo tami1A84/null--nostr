@@ -53,7 +53,7 @@ fun SignUpModal(
 ) {
     var step by remember { mutableStateOf("welcome") } // welcome, backup, relay, profile, success
     var generatedAccount by remember { mutableStateOf<GeneratedAccount?>(null) }
-    var selectedRelays by remember { mutableStateOf<List<Nip65Relay>>?>(null) }
+    var selectedRelays by remember { mutableStateOf<List<Nip65Relay>?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
 
@@ -145,6 +145,7 @@ fun SignUpModal(
                                         coroutineScope.launch {
                                             // Publish metadata and relay list
                                             val internalSigner = io.nurunuru.app.data.InternalSigner(generatedAccount!!.privateKeyHex)
+                                            val relayTriples: List<Triple<String, Boolean, Boolean>>? = selectedRelays?.map { Triple(it.url, it.read, it.write) }
                                             viewModel.publishInitialMetadata(
                                                 signer = internalSigner,
                                                 name = name,
@@ -155,7 +156,7 @@ fun SignUpModal(
                                                 lud16 = lud16,
                                                 website = website,
                                                 birthday = birthday,
-                                                relays = selectedRelays?.map { Triple(it.url, it.read, it.write) }
+                                                relays = relayTriples
                                             )
                                             // Complete registration locally
                                             viewModel.completeRegistration(
@@ -357,7 +358,7 @@ fun RelayStep(onRelaysSelected: (List<Nip65Relay>) -> Unit) {
                 if (hasFine || hasCoarse) {
                     isLoading = true
                     regionName = "東京 (GPS推定)"
-                    recommendedRelays = RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503)
+                    recommendedRelays = RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503).combined
                     isLoading = false
                 } else {
                     permissionLauncher.launch(arrayOf(
