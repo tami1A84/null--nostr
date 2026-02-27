@@ -130,4 +130,72 @@ object ImageUploadUtils {
         }
         null
     }
+
+    suspend fun uploadToYabuMe(
+        fileBytes: ByteArray,
+        mimeType: String,
+        signer: AppSigner? = null,
+        baseUrl: String = "https://share.yabu.me"
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            val endpoint = if (baseUrl.startsWith("http")) {
+                if (baseUrl.endsWith("/api/v2/media")) baseUrl else "${baseUrl.removeSuffix("/")}/api/v2/media"
+            } else {
+                "https://$baseUrl/api/v2/media"
+            }
+            val requestBuilder = okhttp3.Request.Builder().url(endpoint)
+
+            if (signer != null) {
+                try {
+                    val authEventBuilder = EventBuilder(Kind(27235u), "")
+                        .tags(listOf(
+                            Tag.parse(listOf("u", endpoint)),
+                            Tag.parse(listOf("method", "POST"))
+                        ))
+
+                    val publicKey = PublicKey.parse(signer.getPublicKeyHex())
+                    val unsignedEvent = authEventBuilder.build(publicKey)
+                    val signedJson = signer.signEvent(unsignedEvent.asJson()) ?: throw Exception("Signing failed")
+                    val authHeader = Base64.encodeToString(signedJson.toByteArray(), Base64.NO_WRAP)
+                    requestBuilder.addHeader("Authorization", "Nostr $authHeader")
+                } catch (e: Exception) {
+                    Log.w("ImageUploadUtils", "Failed to create NIP-98 header for Yabu", e)
+                }
+            }
+
+            val requestBody = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart(
+                    "file",
+                    "image.${mimeType.split("/").last()}",
+                    fileBytes.toRequestBody(mimeType.toMediaTypeOrNull())
+                )
+                .build()
+
+            val request = requestBuilder
+                .post(requestBody)
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                val body = response.body?.string() ?: ""
+                if (!response.isSuccessful) {
+                    Log.w("ImageUploadUtils", "Yabu upload failed: ${response.code} body: $body")
+                    return@withContext null
+                }
+
+                val root = json.parseToJsonElement(body).jsonObject
+                if (root["status"]?.jsonPrimitive?.content == "success") {
+                    val nip94 = root["nip94_event"]?.jsonObject
+                    val tags = nip94?.get("tags")?.jsonArray
+                    val urlTag = tags?.find {
+                        it.jsonArray.getOrNull(0)?.jsonPrimitive?.content == "url"
+                    }?.jsonArray
+                    return@withContext urlTag?.getOrNull(1)?.jsonPrimitive?.content
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ImageUploadUtils", "Yabu upload failed", e)
+        }
+        null
+    }
 }

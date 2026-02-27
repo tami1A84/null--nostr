@@ -895,11 +895,18 @@ class NostrRepository(
 
     suspend fun uploadImage(fileBytes: ByteArray, mimeType: String): String? {
         val server = prefs.uploadServer
-        return if (server == "nostr.build") {
-            ImageUploadUtils.uploadToNostrBuild(fileBytes, mimeType, client.getSigner())
-        } else {
-            // Assume Blossom URL
-            ImageUploadUtils.uploadToBlossom(fileBytes, mimeType, client.getSigner(), server)
+        val normalizedServer = server.removePrefix("https://").removePrefix("http://").removeSuffix("/")
+
+        return when {
+            normalizedServer == "nostr.build" -> ImageUploadUtils.uploadToNostrBuild(fileBytes, mimeType, client.getSigner())
+            normalizedServer == "share.yabu.me" -> ImageUploadUtils.uploadToYabuMe(fileBytes, mimeType, client.getSigner(), server)
+            else -> {
+                // For custom servers, we need to decide between NIP-96 and Blossom.
+                // For now, let's assume if it contains 'blossom' it's Blossom, otherwise NIP-96 (common pattern).
+                // Or better, Web client treats it as Blossom if not nostr.build/yabu.
+                // Re-syncing with web: web treats non-explicit servers as Blossom.
+                ImageUploadUtils.uploadToBlossom(fileBytes, mimeType, client.getSigner(), server)
+            }
         }
     }
 
