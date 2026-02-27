@@ -150,4 +150,5 @@ object NostrKind {
     const val EMOJI_SET = 30030
     const val MUTE_LIST = 10000
     const val RELAY_LIST = 10002
+    const val VANISH_REQUEST = 62
 }

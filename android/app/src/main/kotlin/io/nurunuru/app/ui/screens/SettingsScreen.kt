@@ -50,6 +50,7 @@ import io.nurunuru.app.ui.miniapps.ElevenLabsSettings
 import io.nurunuru.app.ui.miniapps.EmojiSettings
 import io.nurunuru.app.ui.miniapps.EventBackupSettings
 import io.nurunuru.app.ui.miniapps.MuteList
+import io.nurunuru.app.ui.miniapps.VanishRequest
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.AuthViewModel
@@ -637,6 +638,7 @@ private fun MiniAppDetailView(
         "mute" -> "ミュートリスト"
         "elevenlabs" -> "音声入力設定"
         "backup" -> "バックアップ"
+        "vanish" -> "削除リクエスト"
         else -> "ミニアプリ"
     }
 
@@ -664,6 +666,7 @@ private fun MiniAppDetailView(
                 "mute" -> MuteList(pubkey = pubkeyHex, repository = repository)
                 "elevenlabs" -> ElevenLabsSettings(prefs = prefs)
                 "backup" -> EventBackupSettings(pubkey = pubkeyHex, repository = repository)
+                "vanish" -> VanishRequest(pubkey = pubkeyHex, repository = repository)
                 else -> {
                     Column(
                         modifier = Modifier.fillMaxSize(),
