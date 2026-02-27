@@ -220,7 +220,7 @@ fun SearchModal(
                             items(uiState.searchResults, key = { it.event.id }) { post ->
                                 PostItem(
                                     post = post,
-                                    onLike = { viewModel.likePost(post.event.id) },
+                                    onLike = { emoji, tags -> viewModel.likePost(post.event.id, emoji, tags) },
                                     onRepost = { viewModel.repostPost(post.event.id) },
                                     onProfileClick = { onProfileClick(post.event.pubkey) },
                                     repository = repository,

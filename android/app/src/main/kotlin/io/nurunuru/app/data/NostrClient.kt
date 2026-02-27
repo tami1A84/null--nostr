@@ -4,9 +4,7 @@ import android.content.Context
 import android.util.Log
 import io.nurunuru.app.data.models.NostrEvent
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import rust.nostr.sdk.*
@@ -134,7 +132,7 @@ class NostrClient(
     private suspend fun ensureClient(): Client? {
         if (sdkClient == null) {
             withTimeoutOrNull(5000) {
-                isReady.first { it }
+                isReady.filter { it }.first()
             }
         }
         return sdkClient
