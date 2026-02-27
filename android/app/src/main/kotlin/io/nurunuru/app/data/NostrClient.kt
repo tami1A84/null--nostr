@@ -86,12 +86,20 @@ class NostrClient(
         return (signer as? InternalSigner)?.privateKeyHex ?: ""
     }
 
-    private suspend fun signAndSend(builder: EventBuilder): Event? {
+    private suspend fun signAndSend(builder: EventBuilder, targetRelays: List<String>? = null): Event? {
         val client = sdkClient ?: return null
         return try {
             if (signer is InternalSigner) {
-                val output = client.sendEventBuilder(builder)
-                client.database().eventById(output.id)
+                if (targetRelays.isNullOrEmpty()) {
+                    val output = client.sendEventBuilder(builder)
+                    client.database().eventById(output.id)
+                } else {
+                    val keys = Keys.parse(privateKeyHexForSdk())
+                    val event = builder.build(keys.publicKey())
+                    val signedEvent = keys.signEvent(event)
+                    client.sendEventTo(targetRelays.map { RelayUrl.parse(it) }, signedEvent)
+                    signedEvent
+                }
             } else {
                 val publicKey = PublicKey.parse(publicKeyHex)
                 val unsignedEvent = builder.build(publicKey)
@@ -114,7 +122,11 @@ class NostrClient(
                     }
                     return null
                 }
-                client.sendEvent(signedEvent)
+                if (targetRelays.isNullOrEmpty()) {
+                    client.sendEvent(signedEvent)
+                } else {
+                    client.sendEventTo(targetRelays.map { RelayUrl.parse(it) }, signedEvent)
+                }
                 signedEvent
             }
         } catch (e: Exception) {
@@ -123,11 +135,11 @@ class NostrClient(
         }
     }
 
-    suspend fun publish(kind: Int, content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
+    suspend fun publish(kind: Int, content: String, tags: List<List<String>> = emptyList(), targetRelays: List<String>? = null): NostrEvent? {
         return withContext(Dispatchers.IO) {
             val sdkTags = tags.map { Tag.parse(it) }
             val builder = EventBuilder(Kind(kind.toUShort()), content).tags(sdkTags)
-            signAndSend(builder)?.let { mapSdkEvent(it) }
+            signAndSend(builder, targetRelays)?.let { mapSdkEvent(it) }
         }
     }
 

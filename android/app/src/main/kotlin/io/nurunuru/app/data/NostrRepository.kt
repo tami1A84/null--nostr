@@ -923,6 +923,22 @@ class NostrRepository(
         return client.publish(kind = 10002, content = "", tags = tags) != null
     }
 
+    suspend fun requestVanish(relays: List<String>?, reason: String): Boolean {
+        val tags = mutableListOf<List<String>>()
+        if (relays.isNullOrEmpty()) {
+            tags.add(listOf("relay", "ALL_RELAYS"))
+        } else {
+            relays.forEach { tags.add(listOf("relay", it)) }
+        }
+
+        return client.publish(
+            kind = NostrKind.VANISH_REQUEST,
+            content = reason,
+            tags = tags,
+            targetRelays = relays
+        ) != null
+    }
+
     suspend fun updateProfile(profile: UserProfile): Boolean {
         // Fetch current profile to merge fields and avoid losing unknown fields
         val filter = NostrClient.Filter(
