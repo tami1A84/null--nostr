@@ -810,18 +810,24 @@ private fun UploadSettingsView(prefs: AppPreferences) {
                             placeholder = { Text("https://...") },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
-                            singleLine = true
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = LineGreen,
+                                unfocusedBorderColor = nuruColors.border
+                            )
                         )
                         Button(
                             onClick = {
-                                if (customBlossomUrl.startsWith("https://")) {
-                                    uploadServer = customBlossomUrl
-                                    prefs.uploadServer = customBlossomUrl
+                                val url = customBlossomUrl.trim()
+                                if (url.startsWith("https://")) {
+                                    uploadServer = url
+                                    prefs.uploadServer = url
                                     customBlossomUrl = ""
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.height(56.dp)
                         ) {
                             Text("設定")
                         }

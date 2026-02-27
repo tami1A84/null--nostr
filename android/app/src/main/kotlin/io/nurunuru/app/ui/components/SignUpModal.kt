@@ -461,7 +461,7 @@ fun ProfileStep(
                 uploadingPicture = true
                 val bytes = context.contentResolver.openInputStream(it)?.readBytes()
                 if (bytes != null) {
-                    val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg")
+                    val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg", null)
                     if (url != null) {
                         picture = url
                     } else {
@@ -479,7 +479,7 @@ fun ProfileStep(
                 uploadingBanner = true
                 val bytes = context.contentResolver.openInputStream(it)?.readBytes()
                 if (bytes != null) {
-                    val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg")
+                    val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg", null)
                     if (url != null) {
                         banner = url
                     } else {
