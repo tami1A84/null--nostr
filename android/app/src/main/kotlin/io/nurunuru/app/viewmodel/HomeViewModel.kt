@@ -46,7 +46,6 @@ class HomeViewModel(
 
     init {
         _uiState.update { it.copy(uploadServer = repository.getUploadServer()) }
-        loadMyProfile()
     }
 
     fun loadMyProfile() {
