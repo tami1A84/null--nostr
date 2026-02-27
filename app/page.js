@@ -71,6 +71,7 @@ export default function Home() {
   const [pubkey, setPubkey] = useState(null)
   const [activeTab, setActiveTab] = useState('timeline')
   const [isLoading, setIsLoading] = useState(true)
+  const [isRedirecting, setIsRedirecting] = useState(false)
   const [pendingDM, setPendingDM] = useState(null)
   const [tabsReady, setTabsReady] = useState({ home: false, talk: false })
   const [isDesktop, setIsDesktop] = useState(false)
@@ -107,6 +108,7 @@ export default function Home() {
       // Check for redirect_uri and handle it if already logged in
       const urlParams = new URLSearchParams(window.location.search)
       const redirectUri = urlParams.get('redirect_uri')
+      console.log('Init: redirect_uri=', redirectUri)
 
       // Check for stored pubkey on mount
       const storedPubkey = loadPubkey()
@@ -114,15 +116,18 @@ export default function Home() {
         // If already logged in and redirect_uri is present, redirect back to app
         if (redirectUri) {
           const privateKeyHex = getPrivateKeyHex()
+          console.log('Init: privateKeyHex present=', !!privateKeyHex)
           if (privateKeyHex) {
             const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
             const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
             console.log('Immediate redirect to app:', targetUrl)
-            window.location.replace(targetUrl)
+            setIsRedirecting(true)
+            window.location.href = targetUrl
             return
           } else {
             // Logged in but no private key (maybe session was cleared)
             // Show a prompt to re-auth via passkey to get the key
+            console.log('Init: Logged in but no private key, showing redirect prompt')
             setActiveTab('app-redirect-prompt')
           }
         }
@@ -183,24 +188,36 @@ export default function Home() {
   }, [pubkey])
 
   const handleLogin = (newPubkey) => {
-    startBackgroundPrefetch(newPubkey)
-    setPubkey(newPubkey)
+    console.log('handleLogin: newPubkey=', newPubkey)
 
     // Check for redirect_uri and handle it immediately after login
     const urlParams = new URLSearchParams(window.location.search)
     const redirectUri = urlParams.get('redirect_uri')
+
     if (redirectUri) {
       const privateKeyHex = getPrivateKeyHex()
+      console.log('handleLogin: redirect_uri=', redirectUri, 'privateKeyHex present=', !!privateKeyHex)
       if (privateKeyHex) {
         const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
         const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
         console.log('Login redirect to app:', targetUrl)
-        window.location.replace(targetUrl)
+        setIsRedirecting(true)
+        // Use timeout to ensure state update is processed
+        setTimeout(() => {
+          window.location.href = targetUrl
+        }, 100)
+        return
       } else {
         // If logged in but no private key (unlikely here but for safety)
+        console.log('handleLogin: No private key for redirect, showing prompt')
         setActiveTab('app-redirect-prompt')
+        setPubkey(newPubkey)
+        return
       }
     }
+
+    startBackgroundPrefetch(newPubkey)
+    setPubkey(newPubkey)
   }
 
   const handleLogout = () => {
@@ -273,6 +290,28 @@ export default function Home() {
     }, 100)
   }
 
+  // Redirecting state
+  if (isRedirecting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
+        <div className="text-center animate-fadeIn">
+          <div className="w-28 h-28 mx-auto mb-4 relative">
+            <Image
+              src="/nurunuru-star.png"
+              alt="Redirecting"
+              width={112}
+              height={112}
+              className="rounded-2xl animate-pulse"
+              priority
+            />
+          </div>
+          <p className="text-[var(--text-primary)] font-bold text-lg">アプリに戻っています...</p>
+          <p className="text-[var(--text-tertiary)] text-sm mt-2">認証が完了しました</p>
+        </div>
+      </div>
+    )
+  }
+
   // Loading state with mascot image
   if (isLoading) {
     return (
@@ -295,7 +334,7 @@ export default function Home() {
   }
 
   // Show login screen if not logged in
-  if (!pubkey) {
+  if (!pubkey && !isRedirecting && activeTab !== 'app-redirect-prompt') {
     return <LoginScreen onLogin={handleLogin} />
   }
 
@@ -424,19 +463,26 @@ export default function Home() {
               </div>
               <button
                 onClick={async () => {
+                  console.log('Redirect Prompt Button Clicked')
                   if (window.nosskeyManager) {
                     try {
                       const keyInfo = window.nosskeyManager.getCurrentKeyInfo()
+                      console.log('Exporting key for prompt...')
                       const privKey = await window.nosskeyManager.exportNostrKey(keyInfo)
                       if (privKey) {
                         const nsec = nip19.nsecEncode(hexToBytes(privKey))
                         const redirectUri = new URLSearchParams(window.location.search).get('redirect_uri')
-                        window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+                        const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+                        console.log('Prompt redirecting to:', targetUrl)
+                        window.location.replace(targetUrl)
+                      } else {
+                        console.error('Export returned no key')
                       }
                     } catch (e) {
-                      console.error('Export failed:', e)
+                      console.error('Export failed during prompt:', e)
                     }
                   } else {
+                    console.warn('nosskeyManager missing, reloading')
                     // Force refresh to login screen if manager is missing
                     window.location.reload()
                   }

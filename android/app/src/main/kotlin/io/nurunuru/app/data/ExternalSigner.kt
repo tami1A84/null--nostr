@@ -35,38 +35,23 @@ object ExternalSigner : AppSigner {
     private const val ACTION_SIGN_EVENT_LEGACY = "com.greenart7c3.nostr.signer.SIGN_EVENT"
 
     private const val CONTENT_URI = "content://com.nostr.signer"
-    private const val CONTENT_URI_LEGACY = "content://com.greenart7c3.nostrsigner"
 
     private var pendingRequest: CompletableDeferred<Intent>? = null
     private val mutex = kotlinx.coroutines.sync.Mutex()
 
     fun createGetPublicKeyIntent(context: Context?): Intent {
-        val intent = Intent(ACTION_GET_PUBLIC_KEY).apply {
+        return Intent(Intent.ACTION_VIEW, Uri.parse("nostrsigner:")).apply {
             `package` = PACKAGE_NAME
             putExtra("type", "get_public_key")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
-
-        // Fallback to legacy action if official not resolved
-        if (context != null && intent.resolveActivity(context.packageManager) == null) {
-            intent.action = ACTION_GET_PUBLIC_KEY_LEGACY
-        }
-
-        // Last fallback: nostrsigner: scheme
-        if (context != null && intent.resolveActivity(context.packageManager) == null) {
-            intent.action = Intent.ACTION_VIEW
-            intent.data = Uri.parse("nostrsigner:")
-        }
-
-        return intent
     }
 
     fun createSignEventIntent(context: Context?, eventJson: String, pubkey: String): Intent {
-        val intent = Intent(ACTION_SIGN_EVENT).apply {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("nostrsigner:$eventJson")).apply {
             `package` = PACKAGE_NAME
             putExtra("type", "sign_event")
-            putExtra("event", eventJson)
-            putExtra("pubKey", pubkey)
+            putExtra("current_user", pubkey)
             try {
                 val id = Json.parseToJsonElement(eventJson).jsonObject["id"]?.jsonPrimitive?.content
                 if (id != null) putExtra("id", id)
@@ -74,20 +59,14 @@ object ExternalSigner : AppSigner {
             putExtra("returnType", "event")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
-
-        if (context != null && intent.resolveActivity(context.packageManager) == null) {
-            intent.action = ACTION_SIGN_EVENT_LEGACY
-        }
-
         return intent
     }
 
     fun createDecryptIntent(content: String, pubkey: String, currentUser: String, nip44: Boolean): Intent {
-        return Intent(if (nip44) ACTION_NIP44_DECRYPT else ACTION_NIP04_DECRYPT).apply {
+        return Intent(Intent.ACTION_VIEW, Uri.parse("nostrsigner:$content")).apply {
             `package` = PACKAGE_NAME
             putExtra("type", if (nip44) "nip44_decrypt" else "nip04_decrypt")
-            putExtra("content", content)
-            putExtra("pubKey", currentUser)
+            putExtra("current_user", currentUser)
             putExtra("pubkey", pubkey)
             putExtra("returnType", "signature")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -95,11 +74,10 @@ object ExternalSigner : AppSigner {
     }
 
     fun createEncryptIntent(content: String, pubkey: String, currentUser: String, nip44: Boolean): Intent {
-        return Intent(if (nip44) ACTION_NIP44_ENCRYPT else ACTION_NIP04_ENCRYPT).apply {
+        return Intent(Intent.ACTION_VIEW, Uri.parse("nostrsigner:$content")).apply {
             `package` = PACKAGE_NAME
             putExtra("type", if (nip44) "nip44_encrypt" else "nip04_encrypt")
-            putExtra("content", content)
-            putExtra("pubKey", currentUser)
+            putExtra("current_user", currentUser)
             putExtra("pubkey", pubkey)
             putExtra("returnType", "signature")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -107,7 +85,7 @@ object ExternalSigner : AppSigner {
     }
 
     suspend fun signEvent(context: Context?, eventJson: String, pubkey: String): String? {
-        Log.d("ExternalSigner", "Requesting signature for event: $eventJson")
+        Log.d("ExternalSigner", "Requesting signature for event: $eventJson (pubkey: $pubkey)")
         val intent = createSignEventIntent(context, eventJson, pubkey)
         val result = request(context, intent) ?: run {
             Log.e("ExternalSigner", "Request failed or cancelled")
@@ -125,7 +103,7 @@ object ExternalSigner : AppSigner {
             return signedEvent
         }
 
-        val signature = result.getStringExtra("signature") ?: result.getStringExtra("sig") ?: result.getStringExtra("result")
+        val signature = result.getStringExtra("signature") ?: result.getStringExtra("sig") ?: result.getStringExtra("result") ?: result.data?.toString()?.removePrefix("nostrsigner:")
         if (signature != null && signature.isNotBlank()) {
             Log.d("ExternalSigner", "Received signature/result: $signature. Reconstructing event...")
 
@@ -150,6 +128,14 @@ object ExternalSigner : AppSigner {
                     map["pubkey"] = kotlinx.serialization.json.JsonPrimitive(pubkey)
                 }
 
+                // Ensure id is present (some signers might strip it or expect it)
+                if (!map.containsKey("id")) {
+                    try {
+                        val id = Json.parseToJsonElement(eventJson).jsonObject["id"]?.jsonPrimitive?.content
+                        if (id != null) map["id"] = kotlinx.serialization.json.JsonPrimitive(id)
+                    } catch (e: Exception) {}
+                }
+
                 val reconstructed = Json.encodeToString(JsonObject(map))
                 Log.d("ExternalSigner", "Reconstructed event: $reconstructed")
                 reconstructed
@@ -165,13 +151,13 @@ object ExternalSigner : AppSigner {
     suspend fun decrypt(context: Context?, content: String, pubkey: String, currentUser: String, nip44: Boolean): String? {
         val intent = createDecryptIntent(content, pubkey, currentUser, nip44)
         val result = request(context, intent) ?: return null
-        return result.getStringExtra("signature") ?: result.getStringExtra("sig") ?: result.getStringExtra("content") ?: result.getStringExtra("result")
+        return result.getStringExtra("signature") ?: result.getStringExtra("sig") ?: result.getStringExtra("content") ?: result.getStringExtra("result") ?: result.data?.toString()?.removePrefix("nostrsigner:")
     }
 
     suspend fun encrypt(context: Context?, content: String, pubkey: String, currentUser: String, nip44: Boolean): String? {
         val intent = createEncryptIntent(content, pubkey, currentUser, nip44)
         val result = request(context, intent) ?: return null
-        return result.getStringExtra("signature") ?: result.getStringExtra("sig") ?: result.getStringExtra("content") ?: result.getStringExtra("result")
+        return result.getStringExtra("signature") ?: result.getStringExtra("sig") ?: result.getStringExtra("content") ?: result.getStringExtra("result") ?: result.data?.toString()?.removePrefix("nostrsigner:")
     }
 
     private suspend fun request(context: Context?, intent: Intent): Intent? = mutex.withLock {
@@ -202,13 +188,15 @@ object ExternalSigner : AppSigner {
 
     private fun tryContentResolver(context: Context, intent: Intent): Intent? {
         val type = intent.getStringExtra("type") ?: return null
-        val data = intent.getStringExtra("event") ?: intent.getStringExtra("content") ?: ""
-        val pubKey = intent.getStringExtra("pubKey") ?: ""
+        val data = if (type == "sign_event") {
+            intent.data?.toString()?.removePrefix("nostrsigner:") ?: ""
+        } else {
+            intent.data?.toString()?.removePrefix("nostrsigner:") ?: ""
+        }
+        val currentUser = intent.getStringExtra("current_user") ?: ""
+        val pubKey = intent.getStringExtra("pubkey") ?: ""
 
-        val result = queryProvider(context, CONTENT_URI, type, data, pubKey)
-        if (result != null) return result
-
-        return queryProvider(context, CONTENT_URI_LEGACY, type, data, pubKey)
+        return queryProvider(context, CONTENT_URI, type, data, currentUser, pubKey)
     }
 
     private fun queryProvider(
@@ -216,12 +204,21 @@ object ExternalSigner : AppSigner {
         baseUri: String,
         type: String,
         data: String,
+        currentUser: String,
         pubKey: String
     ): Intent? {
         try {
-            Log.d("ExternalSigner", "Querying provider: $baseUri/$type with pubKey: $pubKey")
+            Log.d("ExternalSigner", "Querying provider: $baseUri/$type with currentUser: $currentUser")
             val uri = Uri.parse("$baseUri/$type")
-            val selectionArgs = arrayOf(pubKey)
+
+            // NIP-55 Content Provider query:
+            // projection: data (event json or content)
+            // selection: [pubKey, currentUser]
+            val selectionArgs = if (pubKey.isNotBlank()) {
+                arrayOf(pubKey, currentUser)
+            } else {
+                arrayOf(currentUser)
+            }
 
             context.contentResolver.query(uri, null, data, selectionArgs, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
@@ -229,11 +226,16 @@ object ExternalSigner : AppSigner {
                     val eventIndex = cursor.getColumnIndex("event")
                     val resultIndex = cursor.getColumnIndex("result")
 
-                    val signature = if (signatureIndex != -1) cursor.getString(signatureIndex) else cursor.getString(0)
+                    val signature = if (signatureIndex != -1) cursor.getString(signatureIndex) else null
                     val event = if (eventIndex != -1) cursor.getString(eventIndex) else null
                     val result = if (resultIndex != -1) cursor.getString(resultIndex) else null
 
-                    Log.d("ExternalSigner", "Provider result: sig=$signature, event=$event, res=$result")
+                    Log.d("ExternalSigner", "Provider result: sig=${signature?.take(10)}..., event=${event?.take(10)}..., res=${result?.take(10)}...")
+
+                    if (signature == null && event == null && result == null) {
+                        Log.w("ExternalSigner", "Provider returned empty columns")
+                        return null
+                    }
 
                     return Intent().apply {
                         putExtra("signature", signature)

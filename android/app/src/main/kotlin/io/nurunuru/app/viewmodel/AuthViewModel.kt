@@ -51,6 +51,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             val pubKey = prefs.publicKeyHex
             val isExternal = prefs.isExternalSigner
             if (pubKey != null && (privKey != null || isExternal)) {
+                if (isExternal) {
+                    io.nurunuru.app.data.ExternalSigner.setCurrentUser(pubKey)
+                }
                 _authState.value = AuthState.LoggedIn(pubKey, privKey, isExternal)
             } else {
                 _authState.value = AuthState.LoggedOut
@@ -143,6 +146,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             prefs.privateKeyHex = null
             prefs.publicKeyHex = pubkey
             prefs.isExternalSigner = true
+            io.nurunuru.app.data.ExternalSigner.setCurrentUser(pubkey)
             _authState.value = AuthState.LoggedIn(pubkey, null, true)
         }
     }

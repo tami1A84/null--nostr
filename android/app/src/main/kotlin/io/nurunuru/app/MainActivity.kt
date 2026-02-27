@@ -54,8 +54,10 @@ class MainActivity : ComponentActivity() {
 
         signerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == RESULT_OK) {
+                android.util.Log.d("MainActivity", "Signer result OK: ${result.data?.extras?.keySet()?.joinToString()}")
                 ExternalSigner.onResult(result.data)
             } else {
+                android.util.Log.w("MainActivity", "Signer result NOT OK: ${result.resultCode}")
                 ExternalSigner.onResult(null)
             }
         }

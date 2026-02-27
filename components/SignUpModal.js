@@ -280,6 +280,7 @@ export default function SignUpModal({ onClose, onSuccess, nosskeyManager }) {
     const redirectUri = urlParams.get('redirect_uri')
 
     if (redirectUri && backupNsec) {
+      console.log('SignUpModal: Redirecting to app:', redirectUri)
       window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${backupNsec}`
       return
     }

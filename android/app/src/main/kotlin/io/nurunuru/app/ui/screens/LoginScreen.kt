@@ -50,7 +50,8 @@ fun LoginScreen(
 
     val amberLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val pubkey = result.data?.getStringExtra("pubKey") ?: result.data?.getStringExtra("signature")
+            val data = result.data
+            val pubkey = data?.getStringExtra("signature") ?: data?.getStringExtra("pubKey") ?: data?.getStringExtra("result")
             if (pubkey != null) {
                 viewModel.loginWithAmber(pubkey)
             }

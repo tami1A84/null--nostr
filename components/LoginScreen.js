@@ -184,17 +184,20 @@ export default function LoginScreen({ onLogin }) {
       
       // If we have stored key info, use it
       if (keyInfo && storedPubkey) {
+        console.log('handleNosskeyLogin: Found stored keyInfo, pubkey=', storedPubkey)
         // Handle app redirect if requested
         if (redirectUri) {
           try {
             const privateKeyHex = await manager.exportNostrKey(keyInfo)
             if (privateKeyHex) {
               const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
-              window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+              const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+              console.log('handleNosskeyLogin: Redirecting to app via stored key:', targetUrl)
+              window.location.href = targetUrl
               return
             }
           } catch (e) {
-            console.error('Failed to export key for redirect:', e)
+            console.error('handleNosskeyLogin: Failed to export key for redirect:', e)
           }
         }
 
@@ -215,6 +218,7 @@ export default function LoginScreen({ onLogin }) {
         console.log('Passkey auth result:', result)
         
         if (result && result.pubkey) {
+          console.log('handleNosskeyLogin: Passkey auth successful, pubkey=', result.pubkey)
           // Save the key info
           manager.setCurrentKeyInfo(result)
 
@@ -222,10 +226,11 @@ export default function LoginScreen({ onLogin }) {
           try {
             const privateKeyHex = await manager.exportNostrKey(result)
             if (privateKeyHex) {
+              console.log('handleNosskeyLogin: Pre-exported private key')
               setStoredPrivateKey(result.pubkey, privateKeyHex)
             }
           } catch (e) {
-            console.warn('Failed to pre-export key:', e)
+            console.warn('handleNosskeyLogin: Failed to pre-export key:', e)
           }
 
           // Handle app redirect if requested
@@ -234,11 +239,13 @@ export default function LoginScreen({ onLogin }) {
               const privateKeyHex = await manager.exportNostrKey(result)
               if (privateKeyHex) {
                 const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
-                window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+                const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+                console.log('handleNosskeyLogin: Redirecting to app via fresh passkey:', targetUrl)
+                window.location.href = targetUrl
                 return
               }
             } catch (e) {
-              console.error('Failed to export key for redirect:', e)
+              console.error('handleNosskeyLogin: Failed to export key for redirect:', e)
             }
           }
 
