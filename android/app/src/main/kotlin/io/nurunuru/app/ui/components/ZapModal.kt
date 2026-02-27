@@ -61,12 +61,13 @@ fun ZapModal(
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
 
-    var amount by remember { mutableStateOf("21") }
+    val defaultAmount = remember { repository.getDefaultZapAmount().toString() }
+    var amount by remember { mutableStateOf(defaultAmount) }
     var comment by remember { mutableStateOf("") }
     var isZapping by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    val presetAmounts = listOf(21, 100, 500, 1000, 5000)
+    val presetAmounts = listOf(21, 100, 500, 1000, 5000, 10000)
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -77,153 +78,160 @@ fun ZapModal(
             color = nuruColors.bgPrimary
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(24.dp, 24.dp, 24.dp, 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = "⚡ Zap送信",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "閉じる", tint = nuruColors.textTertiary)
-                    }
-                }
-
-                Text(
-                    text = profile?.displayedName ?: "Anonymous",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = nuruColors.textSecondary
-                )
-
-                // Amount
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "金額 (sats)",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = nuruColors.textSecondary
-                    )
-                    OutlinedTextField(
-                        value = amount,
-                        onValueChange = { if (it.all { c -> c.isDigit() }) amount = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = TextFieldDefaults.outlinedTextFieldColors(
-                            focusedBorderColor = Color(0xFFFFC107),
-                            unfocusedBorderColor = nuruColors.border
-                        ),
-                        singleLine = true
-                    )
-                }
-
-                // Presets
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        presetAmounts.take(3).forEach { preset ->
-                            PresetButton(
-                                preset = preset,
-                                isSelected = amount == preset.toString(),
-                                onClick = { amount = preset.toString() },
-                                modifier = Modifier.weight(1f)
-                            )
+                        Text(
+                            text = "⚡ Zap送信",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "閉じる", tint = nuruColors.textTertiary)
                         }
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        presetAmounts.drop(3).forEach { preset ->
-                            PresetButton(
-                                preset = preset,
-                                isSelected = amount == preset.toString(),
-                                onClick = { amount = preset.toString() },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        // Spacer to keep buttons same width if only 2 in row
-                        if (presetAmounts.drop(3).size == 2) {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
-
-                // Comment
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "コメント (任意)",
-                        style = MaterialTheme.typography.labelMedium,
+                        text = profile?.displayedName ?: "Anonymous",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = nuruColors.textSecondary
                     )
-                    OutlinedTextField(
-                        value = comment,
-                        onValueChange = { if (it.length <= 100) comment = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Zap!", fontSize = 14.sp) },
-                        colors = TextFieldDefaults.outlinedTextFieldColors(
-                            focusedBorderColor = Color(0xFFFFC107),
-                            unfocusedBorderColor = nuruColors.border
-                        ),
-                        maxLines = 2
-                    )
                 }
 
-                if (errorMessage != null) {
-                    Text(
-                        text = errorMessage!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
+                HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
 
-                // Action
-                Button(
-                    onClick = {
-                        val amountSats = amount.toLongOrNull() ?: 0L
-                        if (amountSats <= 0) {
-                            errorMessage = "有効な金額を入力してください"
-                            return@Button
-                        }
-                        if (profile?.lud16 == null) {
-                            errorMessage = "Lightningアドレスが設定されていません"
-                            return@Button
-                        }
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Amount
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "金額 (sats)",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = nuruColors.textSecondary
+                        )
+                        OutlinedTextField(
+                            value = amount,
+                            onValueChange = { if (it.all { c -> c.isDigit() }) amount = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFFFFC107),
+                                unfocusedBorderColor = nuruColors.border,
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent
+                            ),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
 
-                        isZapping = true
-                        errorMessage = null
-                        scope.launch {
-                            try {
-                                val invoice = repository.fetchLightningInvoice(profile.lud16, amountSats, comment)
-                                if (invoice != null) {
-                                    clipboardManager.setText(AnnotatedString(invoice))
-                                    onSuccess(invoice)
-                                } else {
-                                    errorMessage = "インボイスの作成に失敗しました"
+                    // Presets
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val rows = presetAmounts.chunked(3)
+                        rows.forEach { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                row.forEach { preset ->
+                                    PresetButton(
+                                        preset = preset,
+                                        isSelected = amount == preset.toString(),
+                                        onClick = { amount = preset.toString() },
+                                        modifier = Modifier.weight(1f)
+                                    )
                                 }
-                            } catch (e: Exception) {
-                                errorMessage = "エラーが発生しました: ${e.message}"
-                            } finally {
-                                isZapping = false
+                                if (row.size < 3) {
+                                    repeat(3 - row.size) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
                             }
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC107), contentColor = Color.Black),
-                    shape = RoundedCornerShape(26.dp),
-                    enabled = !isZapping && amount.isNotBlank()
-                ) {
-                    if (isZapping) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
-                    } else {
-                        Text("⚡ ${amount.ifBlank { "0" }} sats のインボイスを作成", fontWeight = FontWeight.Bold)
+                    }
+
+                    // Comment
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "コメント (任意)",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = nuruColors.textSecondary
+                        )
+                        OutlinedTextField(
+                            value = comment,
+                            onValueChange = { if (it.length <= 100) comment = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Zap!", fontSize = 14.sp) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFFFFC107),
+                                unfocusedBorderColor = nuruColors.border,
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent
+                            ),
+                            maxLines = 2,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    // Action
+                    Button(
+                        onClick = {
+                            val amountSats = amount.toLongOrNull() ?: 0L
+                            if (amountSats <= 0) {
+                                errorMessage = "有効な金額を入力してください"
+                                return@Button
+                            }
+                            if (profile?.lud16 == null) {
+                                errorMessage = "Lightningアドレスが設定されていません"
+                                return@Button
+                            }
+
+                            isZapping = true
+                            errorMessage = null
+                            scope.launch {
+                                try {
+                                    val invoice = repository.fetchLightningInvoice(profile.lud16, amountSats, comment)
+                                    if (invoice != null) {
+                                        clipboardManager.setText(AnnotatedString(invoice))
+                                        onSuccess(invoice)
+                                    } else {
+                                        errorMessage = "インボイスの作成に失敗しました"
+                                    }
+                                } catch (e: Exception) {
+                                    errorMessage = "エラーが発生しました: ${e.message}"
+                                } finally {
+                                    isZapping = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC107), contentColor = Color.Black),
+                        shape = RoundedCornerShape(26.dp),
+                        enabled = !isZapping && amount.isNotBlank()
+                    ) {
+                        if (isZapping) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
+                        } else {
+                            Text("⚡ ${amount.ifBlank { "0" }} sats のインボイスを作成", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

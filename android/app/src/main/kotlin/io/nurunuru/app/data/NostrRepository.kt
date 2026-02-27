@@ -791,6 +791,8 @@ class NostrRepository(
     fun getUploadServer(): String = prefs.uploadServer
     fun setUploadServer(server: String) { prefs.uploadServer = server }
 
+    fun getDefaultZapAmount(): Int = prefs.defaultZapAmount
+
     fun getRecentSearches(): List<String> = prefs.recentSearches
     fun saveRecentSearch(query: String) {
         val current = prefs.recentSearches
