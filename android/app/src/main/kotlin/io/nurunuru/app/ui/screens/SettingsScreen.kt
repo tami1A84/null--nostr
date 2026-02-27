@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,9 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.*
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,7 +35,6 @@ import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.models.DEFAULT_RELAYS
 import io.nurunuru.app.data.prefs.AppPreferences
 import io.nurunuru.app.ui.icons.NuruIcons
-import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.AuthViewModel
@@ -99,7 +100,6 @@ fun SettingsScreen(
         MiniAppData("vanish", "削除リクエスト", "リレーに対して全データの削除を要求", "tools")
     )
 
-    // TODO: Add external apps from prefs
     val externalAppsJson = prefs.externalApps
     val externalApps = remember(externalAppsJson) {
         try {
@@ -260,7 +260,7 @@ fun SettingsScreen(
                                         fontSize = 10.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        textAlign = TextAlign.Center,
                                         fontWeight = FontWeight.Medium
                                     )
                                 }
@@ -382,12 +382,12 @@ fun SettingsScreen(
                             }
                         }
                     } else {
-                        androidx.compose.foundation.layout.Box(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.dp)
                                 .background(Color.Transparent)
-                                .border(2.dp, nuruColors.border, RoundedCornerShape(16.dp), )
+                                .border(2.dp, nuruColors.border, RoundedCornerShape(16.dp))
                                 .clickable { showExternalAdd = true },
                             contentAlignment = Alignment.Center
                         ) {
@@ -628,7 +628,7 @@ private fun MiniAppDetailView(appId: String, prefs: AppPreferences, onBack: () -
                 else -> {
                     Column(
                         modifier = Modifier.fillMaxSize(),
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text("Coming Soon", color = nuruColors.textTertiary)
