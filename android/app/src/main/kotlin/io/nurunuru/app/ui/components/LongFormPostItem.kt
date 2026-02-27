@@ -42,17 +42,18 @@ fun LongFormPostItem(
     onBirdwatch: ((String, String, String) -> Unit)? = null,
     onNotInterested: (() -> Unit)? = null,
     isOwnPost: Boolean = false,
+    isVerified: Boolean = false,
     birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList()
 ) {
     val nuruColors = LocalNuruColors.current
     val profile = post.profile
-    var showReader by remember { mutableStateOf(false) }
+    var showReader by remember(post.event.id) { mutableStateOf(false) }
 
-    var showReportModal by remember { mutableStateOf(false) }
-    var showBirdwatchModal by remember { mutableStateOf(false) }
-    var showZapModal by remember { mutableStateOf(false) }
-    var showZapCustomModal by remember { mutableStateOf(false) }
-    var showReactionPicker by remember { mutableStateOf(false) }
+    var showReportModal by remember(post.event.id) { mutableStateOf(false) }
+    var showBirdwatchModal by remember(post.event.id) { mutableStateOf(false) }
+    var showZapModal by remember(post.event.id) { mutableStateOf(false) }
+    var showZapCustomModal by remember(post.event.id) { mutableStateOf(false) }
+    var showReactionPicker by remember(post.event.id) { mutableStateOf(false) }
 
     val title = post.event.getTagValue("title")
     val image = post.event.getTagValue("image")
@@ -81,7 +82,7 @@ fun LongFormPostItem(
             Column(modifier = Modifier.weight(1f)) {
                 PostHeader(
                     post = post,
-                    internalVerified = false,
+                    internalVerified = isVerified,
                     onProfileClick = onProfileClick,
                     repository = repository,
                     onDelete = onDelete,

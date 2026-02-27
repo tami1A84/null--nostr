@@ -79,13 +79,6 @@ class TimelineViewModel(
         _uiState.update { it.copy(recentSearches = repository.getRecentSearches()) }
     }
 
-    private suspend fun loadFollowList() {
-        try {
-            val follows = repository.fetchFollowList(pubkeyHex)
-            _uiState.update { it.copy(followList = follows) }
-        } catch (e: Exception) { /* Ignore */ }
-    }
-
     fun loadGlobalTimeline(isRefresh: Boolean = false) {
         viewModelScope.launch {
             _uiState.update {
