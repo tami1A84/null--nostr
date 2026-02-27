@@ -338,6 +338,84 @@ class NostrRepository(
         ) != null
     }
 
+    suspend fun fetchEmojiList(pubkeyHex: String): NostrEvent? {
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.EMOJI_LIST),
+            authors = listOf(pubkeyHex),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        return events.maxByOrNull { it.createdAt }
+    }
+
+    suspend fun fetchEmojiSet(author: String, dTag: String): EmojiSet? {
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.EMOJI_SET),
+            authors = listOf(author),
+            tags = mapOf("d" to listOf(dTag)),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        val event = events.maxByOrNull { it.createdAt } ?: return null
+
+        val title = event.getTagValue("title") ?: dTag
+        val emojiTags = event.tags.filter { it.getOrNull(0) == "emoji" }
+
+        return EmojiSet(
+            pointer = "30030:$author:$dTag",
+            name = title,
+            author = author,
+            dTag = dTag,
+            emojiCount = emojiTags.size,
+            emojis = emojiTags.mapNotNull {
+                val shortcode = it.getOrNull(1)
+                val url = it.getOrNull(2)
+                if (shortcode != null && url != null) EmojiInfo(shortcode, url) else null
+            }
+        )
+    }
+
+    suspend fun searchEmojiSets(query: String): List<EmojiSet> {
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.EMOJI_SET),
+            limit = 50
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 5_000)
+        val search = query.lowercase()
+
+        return events.mapNotNull { e ->
+            val dTag = e.getTagValue("d") ?: return@mapNotNull null
+            val title = e.getTagValue("title") ?: dTag
+            if (query.isNotEmpty() && !title.lowercase().contains(search) && !dTag.lowercase().contains(search)) {
+                return@mapNotNull null
+            }
+
+            val emojiTags = e.tags.filter { it.getOrNull(0) == "emoji" }
+            if (emojiTags.isEmpty()) return@mapNotNull null
+
+            EmojiSet(
+                pointer = "30030:${e.pubkey}:$dTag",
+                name = title,
+                author = e.pubkey,
+                dTag = dTag,
+                emojiCount = emojiTags.size,
+                emojis = emojiTags.take(5).mapNotNull {
+                    val shortcode = it.getOrNull(1)
+                    val url = it.getOrNull(2)
+                    if (shortcode != null && url != null) EmojiInfo(shortcode, url) else null
+                }
+            )
+        }.distinctBy { it.pointer }
+    }
+
+    suspend fun updateEmojiList(tags: List<List<String>>): Boolean {
+        return client.publish(
+            kind = NostrKind.EMOJI_LIST,
+            content = "",
+            tags = tags
+        ) != null
+    }
+
     // ─── Reactions ────────────────────────────────────────────────────────────
 
     suspend fun fetchReactions(eventIds: List<String>): Map<String, Int> {
