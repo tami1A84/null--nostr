@@ -27,13 +27,36 @@ class NostrRepository(
     }
 
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
-        val filter = NostrClient.Filter(
+        val now = System.currentTimeMillis() / 1000
+
+        // 1. Fetch recent viral content (high engagement candidate)
+        val viralFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
-            limit = limit,
-            since = System.currentTimeMillis() / 1000 - 3600 // last hour
+            limit = 100,
+            since = now - 10800 // last 3 hours
         )
-        val events = client.fetchEvents(filter, timeoutMs = 6_000)
-        return enrichPosts(events)
+
+        // 2. Fetch some from global recent
+        val recentFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
+            limit = 50,
+            since = now - 1800 // last 30 mins
+        )
+
+        val allEvents = coroutineScope {
+            val viral = async { client.fetchEvents(viralFilter, timeoutMs = 4000) }
+            val recent = async { client.fetchEvents(recentFilter, timeoutMs = 4000) }
+            (viral.await() + recent.await()).distinctBy { it.id }
+        }
+
+        val enriched = enrichPosts(allEvents)
+
+        // Sort by the calculated engagement score (already done in enrichPosts but we can re-sort)
+        // Similar to web mixing:
+        // 1. Give some boost to very recent posts
+        // 2. Use the engagement score (Zaps/Reposts/Likes)
+
+        return enriched.sortedByDescending { it.score }.take(limit)
     }
 
     /** Fetch timeline for followed users. */
@@ -499,14 +522,23 @@ class NostrRepository(
         if (eventIds.isEmpty()) return emptyMap()
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.LABEL),
-            tags = mapOf("e" to eventIds),
+            tags = mapOf(
+                "e" to eventIds,
+                "L" to listOf("birdwatch")
+            ),
             limit = 200
         )
         val events = client.fetchEvents(filter, 3_000)
         val map = mutableMapOf<String, MutableList<NostrEvent>>()
         for (event in events) {
+            // Robust check: must have L=birdwatch
+            if (event.tags.none { it.getOrNull(0) == "L" && it.getOrNull(1) == "birdwatch" }) continue
+
+            // Note must point to one of requested eventIds
             val targetId = event.getTagValue("e") ?: continue
-            map.getOrPut(targetId) { mutableListOf() }.add(event)
+            if (targetId in eventIds) {
+                map.getOrPut(targetId) { mutableListOf() }.add(event)
+            }
         }
         return map
     }
@@ -627,8 +659,14 @@ class NostrRepository(
 
     // ─── Actions ──────────────────────────────────────────────────────────────
 
-    suspend fun likePost(eventId: String): Boolean =
-        client.publishReaction(eventId, "+")
+    suspend fun likePost(eventId: String, emoji: String = "+", customTags: List<List<String>> = emptyList()): Boolean {
+        if (customTags.isEmpty()) {
+            return client.publishReaction(eventId, emoji)
+        }
+        val tags = mutableListOf(listOf("e", eventId))
+        tags.addAll(customTags)
+        return client.publish(kind = 7, content = emoji, tags = tags) != null
+    }
 
     suspend fun repostPost(eventId: String): Boolean =
         client.publishRepost(eventId)

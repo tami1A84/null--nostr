@@ -19,7 +19,7 @@ import io.nurunuru.app.ui.theme.LocalNuruColors
 @Composable
 fun PostItem(
     post: ScoredPost,
-    onLike: () -> Unit,
+    onLike: (emoji: String, tags: List<List<String>>) -> Unit,
     onRepost: () -> Unit,
     onProfileClick: (String) -> Unit,
     repository: io.nurunuru.app.data.NostrRepository,
@@ -53,6 +53,8 @@ fun PostItem(
     var showReportModal by remember { mutableStateOf(false) }
     var showBirdwatchModal by remember { mutableStateOf(false) }
     var showZapModal by remember { mutableStateOf(false) }
+    var showZapCustomModal by remember { mutableStateOf(false) }
+    var showReactionPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -110,11 +112,37 @@ fun PostItem(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
+                val scope = rememberCoroutineScope()
+                val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                val toastState = LocalToastState.current
+
                 PostActions(
                     post = post,
-                    onLike = onLike,
+                    onLike = { onLike("+", emptyList()) },
+                    onLikeLongPress = { showReactionPicker = true },
                     onRepost = onRepost,
-                    onZap = { showZapModal = true }
+                    onZap = {
+                        val lud16 = profile?.lud16
+                        if (lud16 != null) {
+                            scope.launch {
+                                val amount = repository.getDefaultZapAmount().toLong()
+                                try {
+                                    val invoice = repository.fetchLightningInvoice(lud16, amount)
+                                    if (invoice != null) {
+                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(invoice))
+                                        toastState.show("⚡ ${amount} sats のインボイスをコピーしました", ToastType.SUCCESS)
+                                    } else {
+                                        toastState.show("インボイスの作成に失敗しました", ToastType.ERROR)
+                                    }
+                                } catch (e: Exception) {
+                                    toastState.show("エラー: ${e.message}", ToastType.ERROR)
+                                }
+                            }
+                        } else {
+                            toastState.show("Lightningアドレスが設定されていません", ToastType.ERROR)
+                        }
+                    },
+                    onZapLongPress = { showZapCustomModal = true }
                 )
             }
         }
@@ -122,16 +150,38 @@ fun PostItem(
         HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
     }
 
-    if (showZapModal) {
+    if (showZapModal || showZapCustomModal) {
         ZapModal(
             post = post,
             repository = repository,
-            onDismiss = { showZapModal = false },
+            onDismiss = {
+                showZapModal = false
+                showZapCustomModal = false
+            },
             onSuccess = { invoice ->
                 showZapModal = false
+                showZapCustomModal = false
                 // handle invoice? (currently copy-only in modal)
             }
         )
+    }
+
+    if (showReactionPicker) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            EmojiPicker(
+                pubkey = post.event.pubkey, // Use some pubkey
+                onSelect = { emoji ->
+                    onLike(":${emoji.shortcode}:", listOf(listOf("emoji", emoji.shortcode, emoji.url)))
+                    showReactionPicker = false
+                },
+                onClose = { showReactionPicker = false },
+                repository = repository
+            )
+        }
     }
 
     if (showReportModal) {

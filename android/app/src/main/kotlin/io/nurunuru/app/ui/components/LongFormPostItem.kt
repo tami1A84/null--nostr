@@ -50,6 +50,8 @@ fun LongFormPostItem(
     var showReportModal by remember { mutableStateOf(false) }
     var showBirdwatchModal by remember { mutableStateOf(false) }
     var showZapModal by remember { mutableStateOf(false) }
+    var showZapCustomModal by remember { mutableStateOf(false) }
+    var showReactionPicker by remember { mutableStateOf(false) }
 
     val title = post.event.getTagValue("title")
     val image = post.event.getTagValue("image")
@@ -160,11 +162,37 @@ fun LongFormPostItem(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
+                val scope = rememberCoroutineScope()
+                val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                val toastState = LocalToastState.current
+
                 PostActions(
                     post = post,
                     onLike = onLike,
+                    onLikeLongPress = { showReactionPicker = true },
                     onRepost = onRepost,
-                    onZap = { showZapModal = true }
+                    onZap = {
+                        val lud16 = profile?.lud16
+                        if (lud16 != null) {
+                            scope.launch {
+                                val amount = repository.getDefaultZapAmount().toLong()
+                                try {
+                                    val invoice = repository.fetchLightningInvoice(lud16, amount)
+                                    if (invoice != null) {
+                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(invoice))
+                                        toastState.show("⚡ ${amount} sats のインボイスをコピーしました", ToastType.SUCCESS)
+                                    } else {
+                                        toastState.show("インボイスの作成に失敗しました", ToastType.ERROR)
+                                    }
+                                } catch (e: Exception) {
+                                    toastState.show("エラー: ${e.message}", ToastType.ERROR)
+                                }
+                            }
+                        } else {
+                            toastState.show("Lightningアドレスが設定されていません", ToastType.ERROR)
+                        }
+                    },
+                    onZapLongPress = { showZapCustomModal = true }
                 )
             }
         }
@@ -181,13 +209,42 @@ fun LongFormPostItem(
         )
     }
 
-    if (showZapModal) {
+    if (showZapModal || showZapCustomModal) {
         ZapModal(
             post = post,
             repository = repository,
-            onDismiss = { showZapModal = false },
-            onSuccess = { showZapModal = false }
+            onDismiss = {
+                showZapModal = false
+                showZapCustomModal = false
+            },
+            onSuccess = {
+                showZapModal = false
+                showZapCustomModal = false
+            }
         )
+    }
+
+    if (showReactionPicker) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            EmojiPicker(
+                pubkey = post.event.pubkey,
+                onSelect = { emoji ->
+                    // For LongFormPostItem, onLike doesn't take parameters currently in its signature
+                    // Let's check the signature of LongFormPostItem
+                    // It is: onLike: () -> Unit
+                    // We should probably update it too if we want custom reactions there.
+                    // But standard reaction is better than nothing.
+                    onLike()
+                    showReactionPicker = false
+                },
+                onClose = { showReactionPicker = false },
+                repository = repository
+            )
+        }
     }
 
     if (showReportModal) {

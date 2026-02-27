@@ -45,8 +45,8 @@ class HomeViewModel(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
-        loadMyProfile()
         _uiState.update { it.copy(uploadServer = repository.getUploadServer()) }
+        loadMyProfile()
     }
 
     fun loadMyProfile() {
@@ -87,6 +87,8 @@ class HomeViewModel(
                 profile?.nip05?.let { nip05 ->
                     val verified = Nip05Utils.verifyNip05(nip05, pubkeyHex)
                     _uiState.update { it.copy(isNip05Verified = verified) }
+                } else {
+                    _uiState.update { it.copy(isNip05Verified = false) }
                 }
 
             } catch (e: Exception) {
@@ -120,10 +122,10 @@ class HomeViewModel(
         }
     }
 
-    fun likePost(eventId: String) {
+    fun likePost(eventId: String, emoji: String = "+", customTags: List<List<String>> = emptyList()) {
         viewModelScope.launch {
             try {
-                val success = repository.likePost(eventId)
+                val success = repository.likePost(eventId, emoji, customTags)
                 if (success) {
                     _uiState.update { state ->
                         val updatePost = { post: ScoredPost ->
@@ -202,6 +204,8 @@ class HomeViewModel(
                 profile?.nip05?.let { nip05 ->
                     val verified = Nip05Utils.verifyNip05(nip05, targetPubkey)
                     _uiState.update { it.copy(isNip05Verified = verified) }
+                } else {
+                    _uiState.update { it.copy(isNip05Verified = false) }
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isRefreshing = false) }

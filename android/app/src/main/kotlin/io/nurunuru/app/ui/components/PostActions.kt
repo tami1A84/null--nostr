@@ -3,7 +3,9 @@ package io.nurunuru.app.ui.components
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -26,8 +28,10 @@ import io.nurunuru.app.ui.theme.LocalNuruColors
 fun PostActions(
     post: ScoredPost,
     onLike: () -> Unit,
+    onLikeLongPress: () -> Unit = {},
     onRepost: () -> Unit,
-    onZap: () -> Unit
+    onZap: () -> Unit,
+    onZapLongPress: () -> Unit = {}
 ) {
     val nuruColors = LocalNuruColors.current
 
@@ -41,6 +45,7 @@ fun PostActions(
             icon = NuruIcons.Like(post.isLiked),
             count = post.likeCount,
             onClick = onLike,
+            onLongClick = onLikeLongPress,
             tint = if (post.isLiked) nuruColors.lineGreen else nuruColors.textTertiary,
             animate = post.isLiked
         )
@@ -57,6 +62,7 @@ fun PostActions(
             icon = NuruIcons.Zap(false),
             count = (post.zapAmount / 1000).toInt(),
             onClick = onZap,
+            onLongClick = onZapLongPress,
             tint = nuruColors.textTertiary,
             animate = false
         )
@@ -77,11 +83,13 @@ fun PostActions(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     count: Int,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     tint: Color,
     animate: Boolean = false
 ) {
@@ -103,7 +111,10 @@ private fun ActionButton(
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = Modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick
+        )
     ) {
         Icon(
             imageVector = icon,

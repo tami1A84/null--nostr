@@ -65,6 +65,10 @@ class TimelineViewModel(
             try {
                 val follows = repository.fetchFollowList(pubkeyHex)
                 _uiState.update { it.copy(followList = follows) }
+                // Once follow list is loaded, trigger following timeline if needed
+                if (_uiState.value.feedType == FeedType.FOLLOWING) {
+                    loadFollowingTimeline()
+                }
             } catch (e: Exception) { /* Ignore */ }
         }
     }
@@ -249,9 +253,9 @@ class TimelineViewModel(
         loadRecentSearches()
     }
 
-    fun likePost(eventId: String) {
+    fun likePost(eventId: String, emoji: String = "+", customTags: List<List<String>> = emptyList()) {
         viewModelScope.launch {
-            val success = repository.likePost(eventId)
+            val success = repository.likePost(eventId, emoji, customTags)
             if (success) {
                 updatePostInteraction(eventId, isLike = true)
             }

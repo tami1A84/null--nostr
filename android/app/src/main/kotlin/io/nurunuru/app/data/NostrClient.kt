@@ -23,6 +23,9 @@ class NostrClient(
     private val signer: AppSigner
 ) {
     private var sdkClient: Client? = null
+    private val _isReady = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val isReady = _isReady.asStateFlow()
+
     private val publicKeyHex = signer.getPublicKeyHex()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -69,6 +72,7 @@ class NostrClient(
                 }
 
                 sdkClient = client
+                _isReady.value = true
                 client.connect()
 
                 Log.d(TAG, "rust-nostr SDK Client connected")
@@ -127,8 +131,18 @@ class NostrClient(
         }
     }
 
+    private suspend fun ensureClient(): Client? {
+        if (sdkClient == null) {
+            withTimeoutOrNull(5000) {
+                isReady.first { it }
+            }
+        }
+        return sdkClient
+    }
+
     suspend fun publish(kind: Int, content: String, tags: List<List<String>> = emptyList(), targetRelays: List<String>? = null): NostrEvent? {
         return withContext(Dispatchers.IO) {
+            val client = ensureClient() ?: return@withContext null
             val sdkTags = tags.map { Tag.parse(it) }
             val builder = EventBuilder(Kind(kind.toUShort()), content).tags(sdkTags)
             signAndSend(builder, targetRelays)?.let { mapSdkEvent(it) }
@@ -224,8 +238,8 @@ class NostrClient(
     // ─── One-shot Fetch ──────────────────────────────────────────────────────
 
     suspend fun fetchEvents(filter: Filter, timeoutMs: Long = 5_000): List<NostrEvent> {
-        val client = sdkClient ?: return emptyList()
         return withContext(Dispatchers.IO) {
+            val client = ensureClient() ?: return@withContext emptyList()
             try {
                 val sdkFilter = mapFilter(filter)
                 val eventsWrapper = client.fetchEvents(sdkFilter, java.time.Duration.ofMillis(timeoutMs))
@@ -241,8 +255,8 @@ class NostrClient(
     // ─── Publish ──────────────────────────────────────────────────────────────
 
     suspend fun publishEvent(event: NostrEvent): Boolean {
-        val client = sdkClient ?: return false
         return withContext(Dispatchers.IO) {
+            val client = ensureClient() ?: return@withContext false
             try {
                 val sdkEvent = Event.fromJson(serializeNostrEvent(event))
                 client.sendEvent(sdkEvent)
@@ -261,6 +275,7 @@ class NostrClient(
 
     suspend fun publishNote(content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
         return withContext(Dispatchers.IO) {
+            val client = ensureClient() ?: return@withContext null
             val sdkTags = tags.map { Tag.parse(it) }
             val builder = EventBuilder.textNote(content).tags(sdkTags)
             signAndSend(builder)?.let { mapSdkEvent(it) }
