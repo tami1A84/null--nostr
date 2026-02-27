@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 sealed class AuthState {
     object Checking : AuthState()
     object LoggedOut : AuthState()
-    data class LoggedIn(val pubkeyHex: String, val privateKeyHex: String) : AuthState()
+    data class LoggedIn(val pubkeyHex: String, val privateKeyHex: String?, val isExternal: Boolean = false) : AuthState()
     data class Error(val message: String) : AuthState()
     object ExternalSignerWaiting : AuthState()
 }
@@ -49,8 +49,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             val privKey = prefs.privateKeyHex
             val pubKey = prefs.publicKeyHex
-            if (privKey != null && pubKey != null) {
-                _authState.value = AuthState.LoggedIn(pubKey, privKey)
+            val isExternal = prefs.isExternalSigner
+            if (pubKey != null && (privKey != null || isExternal)) {
+                if (isExternal) {
+                    io.nurunuru.app.data.ExternalSigner.setCurrentUser(pubKey)
+                }
+                _authState.value = AuthState.LoggedIn(pubKey, privKey, isExternal)
             } else {
                 _authState.value = AuthState.LoggedOut
             }
@@ -74,8 +78,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun publishInitialMetadata(
-        privKeyHex: String,
-        pubKeyHex: String,
+        signer: io.nurunuru.app.data.AppSigner,
         name: String,
         about: String,
         picture: String = "",
@@ -92,8 +95,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             val client = NostrClient(
                 context = getApplication(),
                 relays = targetRelays,
-                privateKeyHex = privKeyHex,
-                publicKeyHex = pubKeyHex
+                signer = signer
             )
             client.connect()
 
@@ -104,7 +106,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
             // 2. Publish Kind 0 (Metadata)
             val profile = UserProfile(
-                pubkey = pubKeyHex,
+                pubkey = signer.getPublicKeyHex(),
                 name = name,
                 displayName = name,
                 about = about,
@@ -134,7 +136,18 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             prefs.privateKeyHex = privKeyHex
             prefs.publicKeyHex = pubKeyHex
-            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex)
+            prefs.isExternalSigner = false
+            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex, false)
+        }
+    }
+
+    fun loginWithAmber(pubkey: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            prefs.privateKeyHex = null
+            prefs.publicKeyHex = pubkey
+            prefs.isExternalSigner = true
+            io.nurunuru.app.data.ExternalSigner.setCurrentUser(pubkey)
+            _authState.value = AuthState.LoggedIn(pubkey, null, true)
         }
     }
 
@@ -156,37 +169,40 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
             prefs.privateKeyHex = privKeyHex
             prefs.publicKeyHex = pubKeyHex
-            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex)
+            prefs.isExternalSigner = false
+            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex, false)
         }
     }
 
     /**
-     * Passkey login simulation (Android Credential Manager)
+     * Passkey login by redirecting to web
      */
     fun loginWithPasskey(context: Context) {
-        viewModelScope.launch {
-            _authState.value = AuthState.Checking
+        try {
+            // Using a unique parameter to bypass cache and force a fresh check
+            val nonce = System.currentTimeMillis()
+            val redirectUri = android.net.Uri.encode("io.nurunuru.app://login")
+            val url = "https://www.nullnull.app/?redirect_uri=$redirectUri&nonce=$nonce"
+
+            val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder()
+                .setShowTitle(true)
+                .setShareState(androidx.browser.customtabs.CustomTabsIntent.SHARE_STATE_OFF)
+                .build()
+
+            // Try to force Chrome if available to ensure session/passkey sharing
+            customTabsIntent.intent.setPackage("com.android.chrome")
+            customTabsIntent.launchUrl(context, android.net.Uri.parse(url))
+        } catch (e: Exception) {
+            // Fallback to standard browser intent
             try {
-                val credentialManager = CredentialManager.create(context)
-                val getPublicKeyCredentialOption = GetPublicKeyCredentialOption(
-                    requestJson = "{\"challenge\":\"Y2hhbGxlbmdl\",\"allowCredentials\":[],\"timeout\":60000,\"userVerification\":\"required\"}"
+                val intent = android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://www.nullnull.app/?redirect_uri=io.nurunuru.app://login")
                 )
-                val getCredRequest = GetCredentialRequest(listOf(getPublicKeyCredentialOption))
-
-                // Note: In a real implementation with a backend/PRF, we would get the seed here.
-                // For now, if we have a stored key, we simulate the 'unlock' UX.
-                val result = credentialManager.getCredential(context, getCredRequest)
-
-                val storedPrivKey = prefs.privateKeyHex
-                val storedPubKey = prefs.publicKeyHex
-
-                if (storedPrivKey != null && storedPubKey != null) {
-                    _authState.value = AuthState.LoggedIn(storedPubKey, storedPrivKey)
-                } else {
-                    _authState.value = AuthState.Error("パスキーに対応するアカウントが見つかりません。新規登録してください。")
-                }
-            } catch (e: Exception) {
-                _authState.value = AuthState.Error("パスキー認証に失敗しました: ${e.message}")
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            } catch (e2: Exception) {
+                _authState.value = AuthState.Error("ブラウザを開けませんでした: ${e2.message}")
             }
         }
     }
@@ -200,7 +216,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             val requestJson = """
                 {
                     "challenge": "Y2hhbGxlbmdl",
-                    "rp": { "name": "ぬるぬる", "id": "nurunuru.app" },
+                    "rp": { "name": "ぬるぬる", "id": "www.nullnull.app" },
                     "user": { "id": "dXNlcmlk", "name": "user", "displayName": "Nostr User" },
                     "pubKeyCredParams": [{ "type": "public-key", "alg": -7 }],
                     "timeout": 60000,

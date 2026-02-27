@@ -14,11 +14,13 @@ securityCrypto = "1.1.0-alpha06"
 coil = "2.7.0"
 appcompat = "1.7.0"
 rustNostr = "0.44.2"
+rustNostrSignerProxy = "0.44.2"
 jna = "5.15.0"
 media3 = "1.3.1"
 camerax = "1.3.3"
 credentials = "1.2.2"
 credentials-play-services-auth = "1.2.2"
+browser = "1.8.0"
 
 [libraries]
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
@@ -46,9 +48,11 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials-play-services-auth" }
 rust-nostr-sdk = { group = "org.rust-nostr", name = "nostr-sdk", version.ref = "rustNostr" }
+rust-nostr-signer-proxy = { group = "org.rust-nostr", name = "android-signer-proxy", version.ref = "rustNostrSignerProxy" }
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }

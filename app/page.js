@@ -8,7 +8,7 @@ import HomeTab from '@/components/HomeTab'
 import TalkTab from '@/components/TalkTab'
 import TimelineTab from '@/components/TimelineTab'
 import MiniAppTab from '@/components/MiniAppTab'
-import { loadPubkey, clearPubkey, getLoginMethod, startBackgroundPrefetch, clearPrefetchPromises, setStoredPrivateKey, clearStoredPrivateKey } from '@/lib/nostr'
+import { loadPubkey, clearPubkey, getLoginMethod, startBackgroundPrefetch, clearPrefetchPromises, setStoredPrivateKey, clearStoredPrivateKey, getPrivateKeyHex, nip19, hexToBytes } from '@/lib/nostr'
 import { initCache } from '@/lib/cache'
 
 // Desktop sidebar navigation items
@@ -71,6 +71,7 @@ export default function Home() {
   const [pubkey, setPubkey] = useState(null)
   const [activeTab, setActiveTab] = useState('timeline')
   const [isLoading, setIsLoading] = useState(true)
+  const [isRedirecting, setIsRedirecting] = useState(false)
   const [pendingDM, setPendingDM] = useState(null)
   const [tabsReady, setTabsReady] = useState({ home: false, talk: false })
   const [isDesktop, setIsDesktop] = useState(false)
@@ -104,9 +105,33 @@ export default function Home() {
     }
     
     const init = async () => {
+      // Check for redirect_uri and handle it if already logged in
+      const urlParams = new URLSearchParams(window.location.search)
+      const redirectUri = urlParams.get('redirect_uri')
+      console.log('Init: redirect_uri=', redirectUri)
+
       // Check for stored pubkey on mount
       const storedPubkey = loadPubkey()
       if (storedPubkey) {
+        // If already logged in and redirect_uri is present, redirect back to app
+        if (redirectUri) {
+          const privateKeyHex = getPrivateKeyHex()
+          console.log('Init: privateKeyHex present=', !!privateKeyHex)
+          if (privateKeyHex) {
+            const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
+            const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+            console.log('Immediate redirect to app:', targetUrl)
+            setIsRedirecting(true)
+            window.location.href = targetUrl
+            return
+          } else {
+            // Logged in but no private key (maybe session was cleared)
+            // Show a prompt to re-auth via passkey to get the key
+            console.log('Init: Logged in but no private key, showing redirect prompt')
+            setActiveTab('app-redirect-prompt')
+          }
+        }
+
         // Restore Nosskey manager if logged in via Nosskey
         const loginMethod = getLoginMethod()
         if (loginMethod === 'nosskey') {
@@ -163,6 +188,34 @@ export default function Home() {
   }, [pubkey])
 
   const handleLogin = (newPubkey) => {
+    console.log('handleLogin: newPubkey=', newPubkey)
+
+    // Check for redirect_uri and handle it immediately after login
+    const urlParams = new URLSearchParams(window.location.search)
+    const redirectUri = urlParams.get('redirect_uri')
+
+    if (redirectUri) {
+      const privateKeyHex = getPrivateKeyHex()
+      console.log('handleLogin: redirect_uri=', redirectUri, 'privateKeyHex present=', !!privateKeyHex)
+      if (privateKeyHex) {
+        const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
+        const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+        console.log('Login redirect to app:', targetUrl)
+        setIsRedirecting(true)
+        // Use timeout to ensure state update is processed
+        setTimeout(() => {
+          window.location.href = targetUrl
+        }, 100)
+        return
+      } else {
+        // If logged in but no private key (unlikely here but for safety)
+        console.log('handleLogin: No private key for redirect, showing prompt')
+        setActiveTab('app-redirect-prompt')
+        setPubkey(newPubkey)
+        return
+      }
+    }
+
     startBackgroundPrefetch(newPubkey)
     setPubkey(newPubkey)
   }
@@ -237,6 +290,28 @@ export default function Home() {
     }, 100)
   }
 
+  // Redirecting state
+  if (isRedirecting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
+        <div className="text-center animate-fadeIn">
+          <div className="w-28 h-28 mx-auto mb-4 relative">
+            <Image
+              src="/nurunuru-star.png"
+              alt="Redirecting"
+              width={112}
+              height={112}
+              className="rounded-2xl animate-pulse"
+              priority
+            />
+          </div>
+          <p className="text-[var(--text-primary)] font-bold text-lg">アプリに戻っています...</p>
+          <p className="text-[var(--text-tertiary)] text-sm mt-2">認証が完了しました</p>
+        </div>
+      </div>
+    )
+  }
+
   // Loading state with mascot image
   if (isLoading) {
     return (
@@ -259,7 +334,7 @@ export default function Home() {
   }
 
   // Show login screen if not logged in
-  if (!pubkey) {
+  if (!pubkey && !isRedirecting && activeTab !== 'app-redirect-prompt') {
     return <LoginScreen onLogin={handleLogin} />
   }
 
@@ -370,6 +445,53 @@ export default function Home() {
             style={{ zIndex: 1 }}
           >
             <MiniAppTab pubkey={pubkey} onLogout={handleLogout} />
+          </div>
+        )}
+
+        {/* App Redirect Prompt */}
+        {activeTab === 'app-redirect-prompt' && (
+          <div className="fixed inset-0 flex items-center justify-center bg-[var(--bg-primary)] z-50 p-6">
+            <div className="max-w-sm w-full text-center space-y-6 animate-scaleIn">
+              <div className="w-20 h-20 mx-auto bg-green-500/10 rounded-3xl flex items-center justify-center">
+                 <img src="/nurunuru-star.png" alt="ぬるぬる" className="w-14 h-14" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-[var(--text-primary)]">アプリに戻る</h2>
+                <p className="text-[var(--text-secondary)] mt-2">
+                  Androidアプリへのログインを完了するには、もう一度認証が必要です。
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  console.log('Redirect Prompt Button Clicked')
+                  if (window.nosskeyManager) {
+                    try {
+                      const keyInfo = window.nosskeyManager.getCurrentKeyInfo()
+                      console.log('Exporting key for prompt...')
+                      const privKey = await window.nosskeyManager.exportNostrKey(keyInfo)
+                      if (privKey) {
+                        const nsec = nip19.nsecEncode(hexToBytes(privKey))
+                        const redirectUri = new URLSearchParams(window.location.search).get('redirect_uri')
+                        const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+                        console.log('Prompt redirecting to:', targetUrl)
+                        window.location.replace(targetUrl)
+                      } else {
+                        console.error('Export returned no key')
+                      }
+                    } catch (e) {
+                      console.error('Export failed during prompt:', e)
+                    }
+                  } else {
+                    console.warn('nosskeyManager missing, reloading')
+                    // Force refresh to login screen if manager is missing
+                    window.location.reload()
+                  }
+                }}
+                className="w-full btn-line py-4 text-lg font-bold"
+              >
+                認証してアプリに戻る
+              </button>
+            </div>
           </div>
         )}
       </div>

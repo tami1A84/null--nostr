@@ -10,6 +10,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -44,20 +45,28 @@ fun BottomTab.getIcon(isSelected: Boolean): ImageVector {
 @Composable
 fun MainScreen(
     pubkeyHex: String,
-    privateKeyHex: String,
+    privateKeyHex: String?,
     authViewModel: AuthViewModel,
     app: NuruNuruApp
 ) {
+    val context = LocalContext.current
     val nuruColors = LocalNuruColors.current
     var activeTab by remember { mutableStateOf(BottomTab.TIMELINE) }
 
     // Create shared NostrClient and Repository
     val nostrClient = remember {
+        val signer = if (privateKeyHex != null) {
+            io.nurunuru.app.data.InternalSigner(privateKeyHex)
+        } else {
+            io.nurunuru.app.data.ExternalSigner.apply {
+                setCurrentUser(pubkeyHex)
+            }
+        }
+
         NostrClient(
-            context = app,
+            context = context,
             relays = app.prefs.relays.toList(),
-            privateKeyHex = privateKeyHex,
-            publicKeyHex = pubkeyHex
+            signer = signer
         ).also { it.connect() }
     }
     val repository = remember { NostrRepository(nostrClient, app.prefs) }

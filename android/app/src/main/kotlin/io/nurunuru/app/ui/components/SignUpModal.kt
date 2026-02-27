@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
@@ -22,6 +23,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -134,14 +137,15 @@ fun SignUpModal(
                             )
                             "profile" -> {
                                 val coroutineScope = rememberCoroutineScope()
+                                val context = LocalContext.current
                                 ProfileStep(
                                     onFinish = { name, about, picture, banner, nip05, lud16, website, birthday ->
                                         isLoading = true
                                         coroutineScope.launch {
                                             // Publish metadata and relay list
+                                            val internalSigner = io.nurunuru.app.data.InternalSigner(generatedAccount!!.privateKeyHex)
                                             viewModel.publishInitialMetadata(
-                                                privKeyHex = generatedAccount!!.privateKeyHex,
-                                                pubKeyHex = generatedAccount!!.pubkeyHex,
+                                                signer = internalSigner,
                                                 name = name,
                                                 about = about,
                                                 picture = picture,
@@ -429,7 +433,12 @@ fun RelayStep(onRelaysSelected: (List<Triple<String, Boolean, Boolean>>) -> Unit
 }
 
 @Composable
-fun ProfileStep(onFinish: (String, String, String, String, String, String, String, String) -> Unit, isLoading: Boolean) {
+fun ProfileStep(
+    onFinish: (String, String, String, String, String, String, String, String) -> Unit,
+    isLoading: Boolean
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val nuruColors = LocalNuruColors.current
     var name by remember { mutableStateOf("") }
     var about by remember { mutableStateOf("") }
@@ -441,9 +450,92 @@ fun ProfileStep(onFinish: (String, String, String, String, String, String, Strin
     var birthday by remember { mutableStateOf("") }
     var showAdvanced by remember { mutableStateOf(false) }
 
-    IconBox(icon = Icons.Default.AccountCircle, containerColor = LineGreen.copy(alpha = 0.1f), iconColor = LineGreen)
+    var uploadingPicture by remember { mutableStateOf(false) }
+    var uploadingBanner by remember { mutableStateOf(false) }
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val pictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            coroutineScope.launch {
+                uploadingPicture = true
+                val bytes = context.contentResolver.openInputStream(it)?.readBytes()
+                if (bytes != null) {
+                    val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg")
+                    if (url != null) {
+                        picture = url
+                    } else {
+                        Toast.makeText(context, "画像のアップロードに失敗しました", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                uploadingPicture = false
+            }
+        }
+    }
+
+    val bannerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            coroutineScope.launch {
+                uploadingBanner = true
+                val bytes = context.contentResolver.openInputStream(it)?.readBytes()
+                if (bytes != null) {
+                    val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg")
+                    if (url != null) {
+                        banner = url
+                    } else {
+                        Toast.makeText(context, "画像のアップロードに失敗しました", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                uploadingBanner = false
+            }
+        }
+    }
+
+    // Avatar Upload
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .clip(CircleShape)
+                .background(nuruColors.bgSecondary)
+                .clickable(enabled = !uploadingPicture) { pictureLauncher.launch("image/*") },
+            contentAlignment = Alignment.Center
+        ) {
+            if (picture.isNotEmpty()) {
+                AsyncImage(
+                    model = picture,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.AddAPhoto,
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    tint = nuruColors.textTertiary
+                )
+            }
+
+            if (uploadingPicture) {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = LineGreen, modifier = Modifier.size(24.dp))
+                }
+            }
+        }
+        Text(
+            if (uploadingPicture) "アップロード中..." else "アイコン画像をアップロード",
+            fontSize = 12.sp,
+            color = if (uploadingPicture) LineGreen else nuruColors.textTertiary
+        )
+    }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("プロフィールの設定", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = nuruColors.textPrimary)
         Text("あなたの情報を入力しましょう。", fontSize = 13.sp, color = nuruColors.textSecondary)
     }
@@ -489,7 +581,13 @@ fun ProfileStep(onFinish: (String, String, String, String, String, String, Strin
                 label = { Text("バナー画像URL") },
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = LineGreen, focusedLabelColor = LineGreen),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                trailingIcon = {
+                    IconButton(onClick = { bannerLauncher.launch("image/*") }, enabled = !uploadingBanner) {
+                        if (uploadingBanner) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = LineGreen)
+                        else Icon(Icons.Default.CloudUpload, contentDescription = "Upload")
+                    }
+                }
             )
             OutlinedTextField(
                 value = nip05,

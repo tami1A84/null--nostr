@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { nip19 } from 'nostr-tools'
-import { savePubkey, setStoredPrivateKey } from '@/lib/nostr'
+import { savePubkey, setStoredPrivateKey, hexToBytes } from '@/lib/nostr'
 import SignUpModal from './SignUpModal'
 
 export default function LoginScreen({ onLogin }) {
@@ -67,15 +67,10 @@ export default function LoginScreen({ onLogin }) {
           }
         }
 
-        // 3. Silently check for PRF support
-        // We do this after checking storage to avoid unnecessary prompts if possible
-        // Note: isPrfSupported() is generally safe but we call it only once
-        try {
-          const supported = await manager.isPrfSupported()
-          setNosskeySupported(supported)
-        } catch (e) {
-          console.warn('PRF support check failed:', e)
-          setNosskeySupported(false)
+        // 3. Check for Passkey support
+        const hasWebAuthn = !!window.PublicKeyCredential
+        if (hasWebAuthn) {
+          setNosskeySupported(true)
         }
       } catch (e) {
         console.error('Nosskey initialization failed:', e)
@@ -173,8 +168,12 @@ export default function LoginScreen({ onLogin }) {
     setNosskeyLoading(true)
     setError('')
     try {
-      const manager = nosskeyManagerRef.current
+      const manager = nosskeyManagerRef.current || window.nosskeyManager
       if (!manager) throw new Error('Manager not initialized')
+
+      // Check for redirect_uri for app login
+      const urlParams = new URLSearchParams(window.location.search)
+      const redirectUri = urlParams.get('redirect_uri')
       
       // First check for stored key info
       let keyInfo = manager.getCurrentKeyInfo()
@@ -185,6 +184,23 @@ export default function LoginScreen({ onLogin }) {
       
       // If we have stored key info, use it
       if (keyInfo && storedPubkey) {
+        console.log('handleNosskeyLogin: Found stored keyInfo, pubkey=', storedPubkey)
+        // Handle app redirect if requested
+        if (redirectUri) {
+          try {
+            const privateKeyHex = await manager.exportNostrKey(keyInfo)
+            if (privateKeyHex) {
+              const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
+              const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+              console.log('handleNosskeyLogin: Redirecting to app via stored key:', targetUrl)
+              window.location.href = targetUrl
+              return
+            }
+          } catch (e) {
+            console.error('handleNosskeyLogin: Failed to export key for redirect:', e)
+          }
+        }
+
         savePubkey(storedPubkey)
         localStorage.setItem('nurunuru_login_method', 'nosskey')
         window.nosskeyManager = manager
@@ -202,8 +218,37 @@ export default function LoginScreen({ onLogin }) {
         console.log('Passkey auth result:', result)
         
         if (result && result.pubkey) {
+          console.log('handleNosskeyLogin: Passkey auth successful, pubkey=', result.pubkey)
           // Save the key info
           manager.setCurrentKeyInfo(result)
+
+          // Also try to export and store the private key immediately to facilitate redirection
+          try {
+            const privateKeyHex = await manager.exportNostrKey(result)
+            if (privateKeyHex) {
+              console.log('handleNosskeyLogin: Pre-exported private key')
+              setStoredPrivateKey(result.pubkey, privateKeyHex)
+            }
+          } catch (e) {
+            console.warn('handleNosskeyLogin: Failed to pre-export key:', e)
+          }
+
+          // Handle app redirect if requested
+          if (redirectUri) {
+            try {
+              const privateKeyHex = await manager.exportNostrKey(result)
+              if (privateKeyHex) {
+                const nsec = nip19.nsecEncode(hexToBytes(privateKeyHex))
+                const targetUrl = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${nsec}`
+                console.log('handleNosskeyLogin: Redirecting to app via fresh passkey:', targetUrl)
+                window.location.href = targetUrl
+                return
+              }
+            } catch (e) {
+              console.error('handleNosskeyLogin: Failed to export key for redirect:', e)
+            }
+          }
+
           savePubkey(result.pubkey)
           localStorage.setItem('nurunuru_login_method', 'nosskey')
           window.nosskeyManager = manager
@@ -264,7 +309,7 @@ export default function LoginScreen({ onLogin }) {
 
         {/* Login options */}
         <div className="space-y-4">
-          {nosskeyHasKey ? (
+          {(nosskeyHasKey || nosskeySupported) ? (
             /* Passkey User: Prominent Passkey Login */
             <div className="animate-slideUp space-y-4">
               <button

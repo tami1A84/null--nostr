@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.androidx.browser)
 
     // CameraX
     implementation(libs.androidx.camera.core)
@@ -73,6 +74,7 @@ dependencies {
 
     // Official rust-nostr SDK
     implementation(libs.rust.nostr.sdk)
+    // implementation(libs.rust.nostr.signer.proxy)
     implementation("net.java.dev.jna:jna:5.15.0@aar")
 
     // Media playback (Kind 34236)

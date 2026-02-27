@@ -20,33 +20,36 @@ object ImageUploadUtils {
     suspend fun uploadToBlossom(
         fileBytes: ByteArray,
         mimeType: String,
-        signer: NostrSigner,
+        signer: AppSigner?,
         blossomUrl: String = "https://blossom.nostr.build"
     ): String? = withContext(Dispatchers.IO) {
         try {
-            // Blossom NIP-98 Auth (Kind 24242)
-            val hash = java.security.MessageDigest.getInstance("SHA-256")
-                .digest(fileBytes)
-                .joinToString("") { "%02x".format(it) }
-
-            val now = System.currentTimeMillis() / 1000
-            val authEventBuilder = EventBuilder(Kind(24242u), "Upload to Blossom")
-                .tags(listOf(
-                    Tag.parse(listOf("t", "upload")),
-                    Tag.parse(listOf("x", hash)),
-                    Tag.parse(listOf("expiration", (now + 300).toString()))
-                ))
-
-            val publicKey = signer.getPublicKey()
-            val unsignedEvent = authEventBuilder.build(publicKey)
-            val authEvent = signer.signEvent(unsignedEvent)
-            val authHeader = Base64.encodeToString(authEvent.asJson().toByteArray(), Base64.NO_WRAP)
-
-            val request = okhttp3.Request.Builder()
+            val requestBuilder = okhttp3.Request.Builder()
                 .url("$blossomUrl/upload")
                 .put(fileBytes.toRequestBody(mimeType.toMediaTypeOrNull()))
-                .addHeader("Authorization", "Nostr $authHeader")
-                .build()
+
+            // Blossom NIP-98 Auth (Kind 24242)
+            if (signer != null) {
+                val hash = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(fileBytes)
+                    .joinToString("") { "%02x".format(it) }
+
+                val now = System.currentTimeMillis() / 1000
+                val authEventBuilder = EventBuilder(Kind(24242u), "Upload to Blossom")
+                    .tags(listOf(
+                        Tag.parse(listOf("t", "upload")),
+                        Tag.parse(listOf("x", hash)),
+                        Tag.parse(listOf("expiration", (now + 300).toString()))
+                    ))
+
+                val publicKey = PublicKey.parse(signer.getPublicKeyHex())
+                val unsignedEvent = authEventBuilder.build(publicKey)
+                val signedJson = signer.signEvent(unsignedEvent.asJson()) ?: return@withContext null
+                val authHeader = Base64.encodeToString(signedJson.toByteArray(), Base64.NO_WRAP)
+                requestBuilder.addHeader("Authorization", "Nostr $authHeader")
+            }
+
+            val request = requestBuilder.build()
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext null
@@ -63,7 +66,7 @@ object ImageUploadUtils {
     suspend fun uploadToNostrBuild(
         fileBytes: ByteArray,
         mimeType: String,
-        signer: NostrSigner? = null
+        signer: AppSigner? = null
     ): String? = withContext(Dispatchers.IO) {
         try {
             val url = "https://nostr.build/api/v2/upload/files"
@@ -78,10 +81,10 @@ object ImageUploadUtils {
                             Tag.parse(listOf("method", "POST"))
                         ))
 
-                    val publicKey = signer.getPublicKey()
+                    val publicKey = PublicKey.parse(signer.getPublicKeyHex())
                     val unsignedEvent = authEventBuilder.build(publicKey)
-                    val authEvent = signer.signEvent(unsignedEvent)
-                    val authHeader = Base64.encodeToString(authEvent.asJson().toByteArray(), Base64.NO_WRAP)
+                    val signedJson = signer.signEvent(unsignedEvent.asJson()) ?: throw Exception("Signing failed")
+                    val authHeader = Base64.encodeToString(signedJson.toByteArray(), Base64.NO_WRAP)
                     requestBuilder.addHeader("Authorization", "Nostr $authHeader")
                 } catch (e: Exception) {
                     Log.w("ImageUploadUtils", "Failed to create NIP-98 header", e)
@@ -102,16 +105,24 @@ object ImageUploadUtils {
                 .build()
 
             client.newCall(request).execute().use { response ->
+                val body = response.body?.string() ?: ""
                 if (!response.isSuccessful) {
-                    Log.w("ImageUploadUtils", "Upload failed: ${response.code} ${response.message}")
+                    Log.w("ImageUploadUtils", "Upload failed: ${response.code} ${response.message} body: $body")
                     return@withContext null
                 }
 
-                val body = response.body?.string() ?: return@withContext null
+                Log.d("ImageUploadUtils", "Upload response: $body")
                 val root = json.parseToJsonElement(body).jsonObject
+
+                // nostr.build V2 response handling
                 if (root["status"]?.jsonPrimitive?.content == "success") {
                     val data = root["data"]?.jsonArray?.getOrNull(0)?.jsonObject
                     return@withContext data?.get("url")?.jsonPrimitive?.content
+                } else {
+                    // Fallback for different response formats or errors
+                    Log.w("ImageUploadUtils", "Upload status not success: $body")
+                    val url = root["url"]?.jsonPrimitive?.content
+                    if (url != null) return@withContext url
                 }
             }
         } catch (e: Exception) {

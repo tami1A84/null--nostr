@@ -275,6 +275,16 @@ export default function SignUpModal({ onClose, onSuccess, nosskeyManager }) {
   }
 
   const handleComplete = () => {
+    // Check for redirect_uri for app login
+    const urlParams = new URLSearchParams(window.location.search)
+    const redirectUri = urlParams.get('redirect_uri')
+
+    if (redirectUri && backupNsec) {
+      console.log('SignUpModal: Redirecting to app:', redirectUri)
+      window.location.href = `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}nsec=${backupNsec}`
+      return
+    }
+
     onSuccess(createdPubkey)
   }
 

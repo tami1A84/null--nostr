@@ -22,10 +22,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.text.style.TextAlign
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.nurunuru.app.R
+import io.nurunuru.app.data.ExternalSigner
 import io.nurunuru.app.ui.components.SignUpModal
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -44,6 +47,16 @@ fun LoginScreen(
     var showSignUp by remember { mutableStateOf(false) }
     var showNsecLogin by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    val amberLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val data = result.data
+            val pubkey = data?.getStringExtra("signature") ?: data?.getStringExtra("pubKey") ?: data?.getStringExtra("result")
+            if (pubkey != null) {
+                viewModel.loginWithAmber(pubkey)
+            }
+        }
+    }
 
     val isLoading = authState is AuthState.Checking
     val errorMsg = (authState as? AuthState.Error)?.message
@@ -208,7 +221,13 @@ fun LoginScreen(
 
                     // External Signer Button (NIP-55)
                     Button(
-                        onClick = { /* TODO: Implement NIP-55 Intent */ },
+                        onClick = {
+                            try {
+                                amberLauncher.launch(ExternalSigner.createGetPublicKeyIntent(context))
+                            } catch (e: Exception) {
+                                android.widget.Toast.makeText(context, "外部署名アプリが見つかりません", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),

@@ -5,6 +5,28 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="com.nostr.signer.READ_DATABASE" />
+
+    <queries>
+        <package android:name="com.greenart7c3.nostrsigner" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="nostrsigner" />
+        </intent>
+        <intent>
+            <action android:name="com.nostr.signer.GET_PUBLIC_KEY" />
+        </intent>
+        <intent>
+            <action android:name="com.nostr.signer.SIGN_EVENT" />
+        </intent>
+        <intent>
+            <action android:name="com.greenart7c3.nostr.signer.GET_PUBLIC_KEY" />
+        </intent>
+        <intent>
+            <action android:name="com.greenart7c3.nostr.signer.SIGN_EVENT" />
+        </intent>
+    </queries>
 
     <application
         android:name=".NuruNuruApp"
@@ -24,6 +46,14 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Deep link support for login redirect -->
+            <intent-filter android:label="NuruNuru Login">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="io.nurunuru.app" android:host="login" />
             </intent-filter>
         </activity>
 

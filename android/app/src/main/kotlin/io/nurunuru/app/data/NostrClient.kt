@@ -20,10 +20,10 @@ private const val TAG = "NostrClient"
 class NostrClient(
     private val context: Context,
     private val relays: List<String>,
-    private val privateKeyHex: String,
-    private val publicKeyHex: String
+    private val signer: AppSigner
 ) {
     private var sdkClient: Client? = null
+    private val publicKeyHex = signer.getPublicKeyHex()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val _events = MutableSharedFlow<NostrEvent>(extraBufferCapacity = 100)
@@ -33,10 +33,7 @@ class NostrClient(
 
     // ─── Connection ───────────────────────────────────────────────────────────
 
-    fun getSigner(): NostrSigner {
-        val keys = Keys.parse(privateKeyHex)
-        return NostrSigner.keys(keys)
-    }
+    fun getSigner(): AppSigner = signer
 
     fun connect() {
         scope.launch {
@@ -45,13 +42,19 @@ class NostrClient(
                 val dbPath = context.filesDir.absolutePath + "/nostrdb"
                 val database = NostrDatabase.lmdb(dbPath)
 
-                // 2. Setup signer
-                val keys = Keys.parse(privateKeyHex)
-                val signer: NostrSigner = NostrSigner.keys(keys)
+                // 2. Setup internal SDK signer (dummy if external)
+                val sdkSigner: NostrSigner = if (signer is InternalSigner) {
+                    val keys = Keys.parse(privateKeyHexForSdk())
+                    NostrSigner.keys(keys)
+                } else {
+                    // For external signers, we use a random key internally in the SDK Client
+                    // because we intercept signing calls manually.
+                    NostrSigner.keys(Keys.generate())
+                }
 
                 // 3. Build SDK Client
                 val client = ClientBuilder()
-                    .signer(signer)
+                    .signer(sdkSigner)
                     .database(database)
                     .build()
 
@@ -79,19 +82,52 @@ class NostrClient(
         }
     }
 
-    suspend fun publish(kind: Int, content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
+    private fun privateKeyHexForSdk(): String {
+        return (signer as? InternalSigner)?.privateKeyHex ?: ""
+    }
+
+    private suspend fun signAndSend(builder: EventBuilder): Event? {
         val client = sdkClient ?: return null
-        return withContext(Dispatchers.IO) {
-            try {
-                val sdkTags = tags.map { Tag.parse(it) }
-                val builder = EventBuilder(Kind(kind.toUShort()), content).tags(sdkTags)
-                val result = client.sendEventBuilder(builder)
-                val event = client.database().eventById(result.id)
-                event?.let { mapSdkEvent(it) }
-            } catch (e: Exception) {
-                Log.w(TAG, "Publish failed for kind $kind: ${e.message}")
-                null
+        return try {
+            if (signer is InternalSigner) {
+                val output = client.sendEventBuilder(builder)
+                client.database().eventById(output.id)
+            } else {
+                val publicKey = PublicKey.parse(publicKeyHex)
+                val unsignedEvent = builder.build(publicKey)
+                val unsignedJson = unsignedEvent.asJson()
+                Log.d(TAG, "Requesting external signature for: $unsignedJson")
+
+                val signedJson = signer.signEvent(unsignedJson) ?: run {
+                    Log.e(TAG, "External signer returned null")
+                    return null
+                }
+
+                Log.d(TAG, "Received signed JSON: $signedJson")
+                val signedEvent = try {
+                    Event.fromJson(signedJson)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse signed event JSON: $signedJson", e)
+                    // Add more context if it's a JSON parse error
+                    if (signedJson.trim().startsWith("{")) {
+                         Log.e(TAG, "Signed JSON seems well-formed but SDK rejected it. Check pubkey and signature.")
+                    }
+                    return null
+                }
+                client.sendEvent(signedEvent)
+                signedEvent
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Sign and send failed", e)
+            null
+        }
+    }
+
+    suspend fun publish(kind: Int, content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
+        return withContext(Dispatchers.IO) {
+            val sdkTags = tags.map { Tag.parse(it) }
+            val builder = EventBuilder(Kind(kind.toUShort()), content).tags(sdkTags)
+            signAndSend(builder)?.let { mapSdkEvent(it) }
         }
     }
 
@@ -220,31 +256,20 @@ class NostrClient(
     }
 
     suspend fun publishNote(content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
-        val client = sdkClient ?: return null
         return withContext(Dispatchers.IO) {
-            try {
-                val sdkTags = tags.map { Tag.parse(it) }
-                val builder = EventBuilder.textNote(content).tags(sdkTags)
-                val output = client.sendEventBuilder(builder)
-                val event = client.database().eventById(output.id)
-                event?.let { mapSdkEvent(it) }
-            } catch (e: Exception) {
-                Log.w(TAG, "Publish note failed: ${e.message}")
-                null
-            }
+            val sdkTags = tags.map { Tag.parse(it) }
+            val builder = EventBuilder.textNote(content).tags(sdkTags)
+            signAndSend(builder)?.let { mapSdkEvent(it) }
         }
     }
 
     suspend fun publishReaction(eventId: String, emoji: String = "+"): Boolean {
-        val client = sdkClient ?: return false
         return withContext(Dispatchers.IO) {
             try {
                 val id = EventId.parse(eventId)
-                // Use safe Tag.event(id) for reactions
                 val tags = listOf(Tag.event(id))
                 val builder = EventBuilder(Kind(7u), emoji).tags(tags)
-                client.sendEventBuilder(builder)
-                true
+                signAndSend(builder) != null
             } catch (e: Exception) {
                 false
             }
@@ -252,15 +277,12 @@ class NostrClient(
     }
 
     suspend fun publishRepost(eventId: String): Boolean {
-        val client = sdkClient ?: return false
         return withContext(Dispatchers.IO) {
             try {
                 val id = EventId.parse(eventId)
-                // Use safe Tag.event(id) for reposts
                 val tags = listOf(Tag.event(id))
                 val builder = EventBuilder(Kind(6u), "").tags(tags)
-                client.sendEventBuilder(builder)
-                true
+                signAndSend(builder) != null
             } catch (e: Exception) {
                 false
             }
@@ -270,12 +292,10 @@ class NostrClient(
     // ─── DMs ─────────────────────────────────────────────────────────────────
 
     suspend fun sendEncryptedDm(recipientPubkeyHex: String, content: String): Boolean {
-        val client = sdkClient ?: return false
         return withContext(Dispatchers.IO) {
             try {
-                val receiver = PublicKey.parse(recipientPubkeyHex)
-                client.sendPrivateMsg(receiver, content, emptyList())
-                true
+                val encrypted = encryptNip04(recipientPubkeyHex, content) ?: return@withContext false
+                publish(4, encrypted, listOf(listOf("p", recipientPubkeyHex))) != null
             } catch (e: Exception) {
                 false
             }
@@ -283,25 +303,18 @@ class NostrClient(
     }
 
     suspend fun decryptNip04(senderPubkeyHex: String, encryptedContent: String): String? {
-        val client = sdkClient ?: return null
-        return try {
-            val sender = PublicKey.parse(senderPubkeyHex)
-            val signer = client.signer()
-            // In 0.44.2, Signer has suspend nip04Decrypt
-            signer.nip04Decrypt(sender, encryptedContent)
-        } catch (e: Exception) {
-            null
-        }
+        return signer.nip04Decrypt(senderPubkeyHex, encryptedContent)
     }
 
     suspend fun decryptNip44(senderPubkeyHex: String, encryptedContent: String): String? {
-        val client = sdkClient ?: return null
-        return try {
-            val sender = PublicKey.parse(senderPubkeyHex)
-            val signer = client.signer()
-            signer.nip44Decrypt(sender, encryptedContent)
-        } catch (e: Exception) {
-            null
-        }
+        return signer.nip44Decrypt(senderPubkeyHex, encryptedContent)
+    }
+
+    suspend fun encryptNip04(receiverPubkeyHex: String, content: String): String? {
+        return signer.nip04Encrypt(receiverPubkeyHex, content)
+    }
+
+    suspend fun encryptNip44(receiverPubkeyHex: String, content: String): String? {
+        return signer.nip44Encrypt(receiverPubkeyHex, content)
     }
 }
