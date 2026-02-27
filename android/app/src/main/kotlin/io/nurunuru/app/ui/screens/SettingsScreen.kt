@@ -38,6 +38,7 @@ import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.miniapps.BadgeSettings
 import io.nurunuru.app.ui.miniapps.ElevenLabsSettings
+import io.nurunuru.app.ui.miniapps.EmojiSettings
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.AuthViewModel
@@ -616,6 +617,7 @@ private fun MiniAppDetailView(
         "relay" -> "リレー設定"
         "upload" -> "アップロード設定"
         "badge" -> "プロフィールバッジ"
+        "emoji" -> "カスタム絵文字"
         "elevenlabs" -> "音声入力設定"
         else -> "ミニアプリ"
     }
@@ -640,6 +642,7 @@ private fun MiniAppDetailView(
                 "relay" -> RelaySettingsViewContent(prefs = prefs)
                 "upload" -> UploadSettingsView(prefs = prefs)
                 "badge" -> BadgeSettings(pubkey = pubkeyHex, repository = repository)
+                "emoji" -> EmojiSettings(pubkey = pubkeyHex, repository = repository)
                 "elevenlabs" -> ElevenLabsSettings(prefs = prefs)
                 else -> {
                     Column(

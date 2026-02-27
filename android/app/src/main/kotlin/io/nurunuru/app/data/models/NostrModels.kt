@@ -80,6 +80,22 @@ data class BadgeInfo(
     val description: String = ""
 )
 
+@Serializable
+data class EmojiInfo(
+    val shortcode: String,
+    val url: String
+)
+
+@Serializable
+data class EmojiSet(
+    val pointer: String,
+    val name: String,
+    val author: String,
+    val dTag: String,
+    val emojiCount: Int,
+    val emojis: List<EmojiInfo> = emptyList()
+)
+
 // Default relay list matching web version
 val DEFAULT_RELAYS = listOf(
     "wss://yabu.me",
@@ -107,4 +123,6 @@ object NostrKind {
     const val BADGE_DEFINITION = 30009
     const val BADGE_AWARD = 8
     const val PROFILE_BADGES = 30008
+    const val EMOJI_LIST = 10030
+    const val EMOJI_SET = 30030
 }
