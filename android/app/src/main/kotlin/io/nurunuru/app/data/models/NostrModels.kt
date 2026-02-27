@@ -82,6 +82,13 @@ data class BadgeInfo(
     val description: String = ""
 )
 
+data class MuteListData(
+    val pubkeys: List<String> = emptyList(),
+    val eventIds: List<String> = emptyList(),
+    val hashtags: List<String> = emptyList(),
+    val words: List<String> = emptyList()
+)
+
 data class ImportResult(
     val total: Int,
     val success: Int,
@@ -134,4 +141,5 @@ object NostrKind {
     const val PROFILE_BADGES = 30008
     const val EMOJI_LIST = 10030
     const val EMOJI_SET = 30030
+    const val MUTE_LIST = 10000
 }

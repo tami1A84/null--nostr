@@ -679,10 +679,54 @@ class NostrRepository(
         return client.publish(kind = 1985, content = fullContent, tags = tags) != null
     }
 
+    suspend fun fetchMuteList(pubkeyHex: String): MuteListData {
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.MUTE_LIST),
+            authors = listOf(pubkeyHex),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        val event = events.maxByOrNull { it.createdAt } ?: return MuteListData()
+
+        return MuteListData(
+            pubkeys = event.getTagValues("p"),
+            eventIds = event.getTagValues("e"),
+            hashtags = event.getTagValues("t"),
+            words = event.getTagValues("word")
+        )
+    }
+
+    suspend fun removeFromMuteList(pubkeyHex: String, type: String, value: String): Boolean {
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.MUTE_LIST),
+            authors = listOf(pubkeyHex),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        val latest = events.maxByOrNull { it.createdAt } ?: return true
+
+        val tagType = when (type) {
+            "pubkey" -> "p"
+            "event" -> "e"
+            "hashtag" -> "t"
+            "word" -> "word"
+            else -> return false
+        }
+
+        val newTags = latest.tags.filter { !(it.firstOrNull() == tagType && it.getOrNull(1) == value) }
+        if (newTags.size == latest.tags.size) return true
+
+        return client.publish(
+            kind = NostrKind.MUTE_LIST,
+            content = latest.content,
+            tags = newTags
+        ) != null
+    }
+
     suspend fun muteUser(pubkeyHex: String): Boolean {
         // NIP-51 mute list (Kind 10000)
         val filter = NostrClient.Filter(
-            kinds = listOf(10000),
+            kinds = listOf(NostrKind.MUTE_LIST),
             authors = listOf(prefs.publicKeyHex ?: return false),
             limit = 1
         )
@@ -697,7 +741,7 @@ class NostrRepository(
         tags.add(listOf("p", pubkeyHex))
 
         return client.publish(
-            kind = 10000,
+            kind = NostrKind.MUTE_LIST,
             content = latest?.content ?: "",
             tags = tags
         ) != null
