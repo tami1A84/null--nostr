@@ -114,22 +114,22 @@ fun ProfileHeader(
                             }
                         }
 
-                        if (profile?.nip05 != null) {
+                        if (profile?.nip05 != null && isNip05Verified) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 modifier = Modifier.padding(top = 2.dp)
                             ) {
                                 Icon(
-                                    imageVector = if (isNip05Verified) Icons.Default.Check else Icons.Default.Close,
+                                    imageVector = Icons.Default.Check,
                                     contentDescription = null,
-                                    tint = if (isNip05Verified) LineGreen else Color.Gray,
+                                    tint = LineGreen,
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Text(
                                     text = formatNip05(profile.nip05),
                                     fontSize = 13.sp,
-                                    color = if (isNip05Verified) LineGreen else TextTertiary
+                                    color = LineGreen
                                 )
                             }
                         }

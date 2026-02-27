@@ -47,6 +47,12 @@ fun HomeScreen(
         if (!uiState.isRefreshing) pullRefreshState.endRefresh()
     }
 
+    LaunchedEffect(Unit) {
+        if (uiState.profile == null) {
+            viewModel.loadMyProfile()
+        }
+    }
+
     var showEditProfile by remember { mutableStateOf(false) }
     var showFollowList by remember { mutableStateOf(false) }
     var showPostModal by remember { mutableStateOf(false) }
