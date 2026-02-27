@@ -234,12 +234,7 @@ fun LongFormPostItem(
             EmojiPicker(
                 pubkey = post.event.pubkey,
                 onSelect = { emoji ->
-                    // For LongFormPostItem, onLike doesn't take parameters currently in its signature
-                    // Let's check the signature of LongFormPostItem
-                    // It is: onLike: () -> Unit
-                    // We should probably update it too if we want custom reactions there.
-                    // But standard reaction is better than nothing.
-                    onLike()
+                    onLike(":${emoji.shortcode}:", listOf(listOf("emoji", emoji.shortcode, emoji.url)))
                     showReactionPicker = false
                 },
                 onClose = { showReactionPicker = false },
