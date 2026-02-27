@@ -55,7 +55,9 @@ data class ScoredPost(
     val badges: List<String> = emptyList(),
     val quotedPost: ScoredPost? = null,
     val repostedBy: UserProfile? = null,
-    val repostTime: Long? = null
+    val repostTime: Long? = null,
+    val birdwatchNotes: List<NostrEvent> = emptyList(),
+    val isNip05Verified: Boolean = false
 )
 
 data class DmConversation(

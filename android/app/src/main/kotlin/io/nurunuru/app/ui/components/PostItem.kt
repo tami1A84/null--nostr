@@ -37,31 +37,27 @@ fun PostItem(
     val nuruColors = LocalNuruColors.current
     val profile = post.profile
 
-    // Internal NIP-05 verification
-    var internalVerified by remember { mutableStateOf(isVerified) }
-    LaunchedEffect(profile?.nip05, isVerified) {
-        if (!isVerified && profile?.nip05 != null) {
-            internalVerified = io.nurunuru.app.data.Nip05Utils.verifyNip05(profile.nip05, post.event.pubkey)
-        } else {
-            internalVerified = isVerified
-        }
-    }
+    // Internal NIP-05 verification - using state from profile if already verified
+    // To optimize scrolling, we don't trigger verification directly in the list item
+    // but rather rely on the verified state passed or from a central cache.
+    val internalVerified = isVerified
 
     // Content Warning state
-    val cwReason = post.event.getTagValue("content-warning")
-    var isCWExpanded by remember { mutableStateOf(cwReason == null) }
+    val cwReason = remember(post.event.id) { post.event.getTagValue("content-warning") }
+    var isCWExpanded by remember(post.event.id) { mutableStateOf(cwReason == null) }
 
-    var showReportModal by remember { mutableStateOf(false) }
-    var showBirdwatchModal by remember { mutableStateOf(false) }
-    var showZapModal by remember { mutableStateOf(false) }
-    var showZapCustomModal by remember { mutableStateOf(false) }
-    var showReactionPicker by remember { mutableStateOf(false) }
+    var showReportModal by remember(post.event.id) { mutableStateOf(false) }
+    var showBirdwatchModal by remember(post.event.id) { mutableStateOf(false) }
+    var showZapModal by remember(post.event.id) { mutableStateOf(false) }
+    var showZapCustomModal by remember(post.event.id) { mutableStateOf(false) }
+    var showReactionPicker by remember(post.event.id) { mutableStateOf(false) }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(nuruColors.bgPrimary)
     ) {
+        // Optimization: Use key for the entire post composition if possible or ensure sub-composables are stable
         PostIndicators(post = post, onProfileClick = onProfileClick)
 
         Row(

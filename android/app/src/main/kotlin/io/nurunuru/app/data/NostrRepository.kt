@@ -107,6 +107,14 @@ class NostrRepository(
         val events = client.fetchEvents(filter, timeoutMs = 4_000)
         val event = events.maxByOrNull { it.createdAt } ?: return null
         val profile = parseProfile(event)
+
+        // Background NIP-05 verification if needed
+        profile.nip05?.let { nip05 ->
+            CoroutineScope(Dispatchers.IO).launch {
+                Nip05Utils.verifyNip05(nip05, pubkeyHex)
+            }
+        }
+
         profileCache[pubkeyHex] = profile
         return profile
     }
@@ -122,7 +130,16 @@ class NostrRepository(
             val events = client.fetchEvents(filter, timeoutMs = 4_000)
             events.groupBy { it.pubkey }
                 .mapValues { (_, evts) -> evts.maxByOrNull { it.createdAt }!! }
-                .forEach { (pk, event) -> profileCache[pk] = parseProfile(event) }
+                .forEach { (pk, event) ->
+                    val profile = parseProfile(event)
+                    profileCache[pk] = profile
+                    // Background NIP-05 verification
+                    profile.nip05?.let { nip05 ->
+                        CoroutineScope(Dispatchers.IO).launch {
+                            Nip05Utils.verifyNip05(nip05, pk)
+                        }
+                    }
+                }
         }
         return pubkeys.associateWith { profileCache[it] ?: UserProfile(pubkey = it) }
     }
@@ -1036,8 +1053,8 @@ class NostrRepository(
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> {
-        if (events.isEmpty()) return emptyList()
+    private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> = coroutineScope {
+        if (events.isEmpty()) return@coroutineScope emptyList()
 
         val myPubkey = prefs.publicKeyHex
         val processedItems = mutableListOf<Pair<NostrEvent, NostrEvent?>>() // Original, Repost(optional)
@@ -1059,37 +1076,52 @@ class NostrRepository(
             }
         }
 
-        if (processedItems.isEmpty()) return emptyList()
+        if (processedItems.isEmpty()) return@coroutineScope emptyList()
 
-        val profiles = fetchProfiles(pubkeysToFetch.toList())
+        // Fetch everything in parallel
+        val profilesDeferred = async { fetchProfiles(pubkeysToFetch.toList()) }
         val ids = processedItems.map { it.first.id }
 
         // Fetch reactions and check if I liked
-        val reactionsFilter = NostrClient.Filter(
-            kinds = listOf(NostrKind.REACTION),
-            tags = mapOf("e" to ids),
-            limit = 500
-        )
-        val reactionEvents = client.fetchEvents(reactionsFilter, 3000)
-        val reactionCounts = reactionEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
-        val myLikes = if (myPubkey != null) reactionEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
+        val reactionCountsDeferred = async {
+            val reactionsFilter = NostrClient.Filter(
+                kinds = listOf(NostrKind.REACTION),
+                tags = mapOf("e" to ids),
+                limit = 500
+            )
+            val reactionEvents = client.fetchEvents(reactionsFilter, 3000)
+            val counts = reactionEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
+            val myLikes = if (myPubkey != null) reactionEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
+            counts to myLikes
+        }
 
         // Fetch reposts and check if I reposted
-        val repostsFilter = NostrClient.Filter(
-            kinds = listOf(NostrKind.REPOST),
-            tags = mapOf("e" to ids),
-            limit = 500
-        )
-        val repostEvents = client.fetchEvents(repostsFilter, 3000)
-        val repostCounts = repostEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
-        val myReposts = if (myPubkey != null) repostEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
+        val repostCountsDeferred = async {
+            val repostsFilter = NostrClient.Filter(
+                kinds = listOf(NostrKind.REPOST),
+                tags = mapOf("e" to ids),
+                limit = 500
+            )
+            val repostEvents = client.fetchEvents(repostsFilter, 3000)
+            val counts = repostEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
+            val myReposts = if (myPubkey != null) repostEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
+            counts to myReposts
+        }
 
-        val zaps = fetchZaps(ids)
+        val zapsDeferred = async { fetchZaps(ids) }
+        val birdwatchDeferred = async { fetchBirdwatchNotes(ids) }
 
-        return processedItems.map { (event, repost) ->
+        val profiles = profilesDeferred.await()
+        val (reactionCounts, myLikes) = reactionCountsDeferred.await()
+        val (repostCounts, myReposts) = repostCountsDeferred.await()
+        val zaps = zapsDeferred.await()
+        val birdwatchMap = birdwatchDeferred.await()
+
+        processedItems.map { (event, repost) ->
             val likeCount = reactionCounts[event.id] ?: 0
             val repostCount = repostCounts[event.id] ?: 0
             val zapAmount = zaps[event.id] ?: 0L
+            val bNotes = birdwatchMap[event.id] ?: emptyList()
 
             // Scoring matching web weights: Zap (100), Repost (25), Like (5)
             val engagementScore = (zapAmount / 1000.0) * 100.0 + likeCount * 5.0 + repostCount * 25.0
@@ -1107,7 +1139,9 @@ class NostrRepository(
                 isLiked = myLikes.contains(event.id),
                 isReposted = myReposts.contains(event.id),
                 repostedBy = if (repost != null) profiles[repost.pubkey] else null,
-                repostTime = repost?.createdAt
+                repostTime = repost?.createdAt,
+                birdwatchNotes = bNotes, // Enriched with birdwatch notes initially
+                isNip05Verified = Nip05Utils.isVerifiedCached(event.pubkey) // Fast cached check
             )
         }.sortedByDescending { it.repostTime ?: it.event.createdAt }
     }
