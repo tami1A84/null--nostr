@@ -61,12 +61,13 @@ fun ZapModal(
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
 
-    var amount by remember { mutableStateOf("21") }
+    val defaultAmount = remember { repository.getDefaultZapAmount().toString() }
+    var amount by remember { mutableStateOf(defaultAmount) }
     var comment by remember { mutableStateOf("") }
     var isZapping by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    val presetAmounts = listOf(21, 100, 500, 1000, 5000)
+    val presetAmounts = listOf(21, 100, 500, 1000, 5000, 10000)
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(

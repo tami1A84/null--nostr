@@ -50,6 +50,7 @@ import io.nurunuru.app.ui.miniapps.ElevenLabsSettings
 import io.nurunuru.app.ui.miniapps.EmojiSettings
 import io.nurunuru.app.ui.miniapps.EventBackupSettings
 import io.nurunuru.app.ui.miniapps.MuteList
+import io.nurunuru.app.ui.miniapps.ZapSettings
 import io.nurunuru.app.ui.miniapps.VanishRequest
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -658,7 +659,7 @@ private fun MiniAppDetailView(
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when (appId) {
-                "zap" -> ZapSettingsView(prefs = prefs)
+                "zap" -> ZapSettings(prefs = prefs)
                 "relay" -> RelaySettingsViewContent(prefs = prefs, repository = repository)
                 "upload" -> UploadSettingsView(prefs = prefs)
                 "badge" -> BadgeSettings(pubkey = pubkeyHex, repository = repository)
@@ -678,83 +679,6 @@ private fun MiniAppDetailView(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ZapSettingsView(prefs: AppPreferences) {
-    val nuruColors = LocalNuruColors.current
-    var defaultZap by remember { mutableStateOf(prefs.defaultZapAmount) }
-    var showZapInput by remember { mutableStateOf(false) }
-    var customZap by remember { mutableStateOf("") }
-    val presets = listOf(21, 100, 500, 1000, 5000, 10000)
-
-    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Surface(
-            color = nuruColors.bgSecondary,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("デフォルトZap金額", fontWeight = FontWeight.Bold)
-
-                // Grid of presets
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val rows = presets.chunked(3)
-                    rows.forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            row.forEach { amount ->
-                                val isSelected = defaultZap == amount
-                                Surface(
-                                    modifier = Modifier.weight(1f).height(48.dp).clickable {
-                                        defaultZap = amount
-                                        prefs.defaultZapAmount = amount
-                                        showZapInput = false
-                                    },
-                                    color = if (isSelected) LineGreen else nuruColors.bgTertiary,
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(amount.toString(), color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (showZapInput) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = customZap,
-                            onValueChange = { customZap = it },
-                            placeholder = { Text("金額") },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = true
-                        )
-                        Button(
-                            onClick = {
-                                customZap.toIntOrNull()?.let {
-                                    defaultZap = it
-                                    prefs.defaultZapAmount = it
-                                    showZapInput = false
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("設定")
-                        }
-                    }
-                } else {
-                    TextButton(onClick = { showZapInput = true }, modifier = Modifier.fillMaxWidth()) {
-                        Text("カスタム金額を設定", color = LineGreen)
-                    }
-                }
-            }
-        }
-        Text("現在の設定: $defaultZap sats", fontSize = 12.sp, color = nuruColors.textTertiary, modifier = Modifier.padding(horizontal = 8.dp))
     }
 }
 
