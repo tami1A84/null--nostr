@@ -491,6 +491,35 @@ object NuruIcons {
         verticalLineToRelative(12f)
     }.build()
 
+    val Download: ImageVector = ImageVector.Builder(
+        name = "Download",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 1.8f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+        moveTo(21f, 15f)
+        verticalLineToRelative(4f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+        horizontalLineTo(5f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+        verticalLineTo(15f)
+        // <polyline points="7 10 12 15 17 10"/>
+        moveTo(7f, 10f)
+        lineTo(12f, 15f)
+        lineTo(17f, 10f)
+        // <line x1="12" y1="15" x2="12" y2="3"/>
+        moveTo(12f, 15f)
+        verticalLineTo(3f)
+    }.build()
+
     fun Star(filled: Boolean): ImageVector {
         return ImageVector.Builder(
             name = "Star",
