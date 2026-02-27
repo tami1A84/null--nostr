@@ -329,6 +329,197 @@ object NuruIcons {
         lineTo(16.65f, 16.65f)
     }.build()
 
+    val Lock: ImageVector = ImageVector.Builder(
+        name = "Lock",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <path d="M12 2a4 4 0 014 4v2h2a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V10a2 2 0 012-2h2V6a4 4 0 014-4z"/>
+        moveTo(12f, 2f)
+        arcToRelative(4f, 4f, 0f, false, true, 4f, 4f)
+        verticalLineToRelative(2f)
+        horizontalLineToRelative(2f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, 2f)
+        verticalLineToRelative(10f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+        horizontalLineTo(6f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+        verticalLineTo(10f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+        horizontalLineToRelative(2f)
+        verticalLineTo(6f)
+        arcToRelative(4f, 4f, 0f, false, true, 4f, -4f)
+        close()
+        // <circle cx="12" cy="15" r="1"/>
+        moveTo(12f, 15f)
+        moveToRelative(-1f, 0f)
+        arcToRelative(1f, 1f, 0f, true, true, 2f, 0f)
+        arcToRelative(1f, 1f, 0f, true, true, -2f, 0f)
+    }.build()
+
+    val Badge: ImageVector = ImageVector.Builder(
+        name = "Badge",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 1.8f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <circle cx="12" cy="8" r="6"/>
+        moveTo(18f, 8f)
+        arcToRelative(6f, 6f, 0f, true, true, -12f, 0f)
+        arcToRelative(6f, 6f, 0f, false, true, 12f, 0f)
+        close()
+        // <path d="M12 14v8"/>
+        moveTo(12f, 14f)
+        verticalLineToRelative(8f)
+        // <path d="M9 18l3 3 3-3"/>
+        moveTo(9f, 18f)
+        lineToRelative(3f, 3f)
+        lineToRelative(3f, -3f)
+    }.build()
+
+    val Scheduler: ImageVector = ImageVector.Builder(
+        name = "Scheduler",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 1.8f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        moveTo(5f, 4f)
+        horizontalLineTo(19f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, 2f)
+        verticalLineToRelative(14f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+        horizontalLineTo(5f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+        verticalLineTo(6f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+        close()
+        // <line x1="16" y1="2" x2="16" y2="6"/>
+        moveTo(16f, 2f)
+        verticalLineToRelative(4f)
+        // <line x1="8" y1="2" x2="8" y2="6"/>
+        moveTo(8f, 2f)
+        verticalLineToRelative(4f)
+        // <line x1="3" y1="10" x2="21" y2="10"/>
+        moveTo(3f, 10f)
+        horizontalLineTo(21f)
+    }.build()
+
+    val Relay: ImageVector = ImageVector.Builder(
+        name = "Relay",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 1.8f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <circle cx="12" cy="12" r="3"/>
+        moveTo(15f, 12f)
+        arcToRelative(3f, 3f, 0f, true, true, -6f, 0f)
+        arcToRelative(3f, 3f, 0f, false, true, 6f, 0f)
+        close()
+        // <path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
+        moveTo(12f, 2f)
+        verticalLineToRelative(4f)
+        moveTo(12f, 18f)
+        verticalLineToRelative(4f)
+        moveTo(2f, 12f)
+        horizontalLineToRelative(4f)
+        moveTo(18f, 12f)
+        horizontalLineToRelative(4f)
+        // <circle cx="12" cy="12" r="8" strokeDasharray="4 2"/>
+        // Note: Compose doesn't support strokeDasharray in ImageVector easily,
+        // we'll just draw a full circle or skip it for simplicity
+        moveTo(20f, 12f)
+        arcToRelative(8f, 8f, 0f, true, true, -16f, 0f)
+        arcToRelative(8f, 8f, 0f, false, true, 16f, 0f)
+    }.build()
+
+    val Backup: ImageVector = ImageVector.Builder(
+        name = "Backup",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 1.8f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+        moveTo(21f, 15f)
+        verticalLineToRelative(4f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, 2f)
+        horizontalLineTo(5f)
+        arcToRelative(2f, 2f, 0f, false, true, -2f, -2f)
+        verticalLineTo(15f)
+        // <polyline points="17 8 12 3 7 8"/>
+        moveTo(17f, 8f)
+        lineTo(12f, 3f)
+        lineTo(7f, 8f)
+        // <line x1="12" y1="3" x2="12" y2="15"/>
+        moveTo(12f, 3f)
+        verticalLineToRelative(12f)
+    }.build()
+
+    fun Star(filled: Boolean): ImageVector {
+        return ImageVector.Builder(
+            name = "Star",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).path(
+            fill = if (filled) SolidColor(Color(0xFFFFD700)) else null,
+            stroke = if (filled) SolidColor(Color(0xFFFFD700)) else SolidColor(Color.White),
+            strokeLineWidth = 2f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ) {
+            // M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z
+            moveTo(12f, 2f)
+            lineToRelative(3.09f, 6.26f)
+            lineToRelative(6.91f, 1.01f)
+            lineToRelative(-5f, 4.87f)
+            lineToRelative(1.18f, 6.88f)
+            lineToRelative(-6.18f, -3.25f)
+            lineToRelative(-6.18f, 3.25f)
+            lineToRelative(1.18f, -6.88f)
+            lineToRelative(-5f, -4.87f)
+            lineToRelative(6.91f, -1.01f)
+            close()
+        }.build()
+    }
+
     val Notifications: ImageVector = ImageVector.Builder(
         name = "Notifications",
         defaultWidth = 24.dp,
