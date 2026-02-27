@@ -71,6 +71,15 @@ data class DmMessage(
     val timestamp: Long
 )
 
+@Serializable
+data class BadgeInfo(
+    val ref: String,
+    val awardEventId: String? = null,
+    val name: String = "",
+    val image: String = "",
+    val description: String = ""
+)
+
 // Default relay list matching web version
 val DEFAULT_RELAYS = listOf(
     "wss://yabu.me",

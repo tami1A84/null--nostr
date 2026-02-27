@@ -34,7 +34,9 @@ import androidx.compose.ui.unit.sp
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.models.DEFAULT_RELAYS
 import io.nurunuru.app.data.prefs.AppPreferences
+import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.ui.icons.NuruIcons
+import io.nurunuru.app.ui.miniapps.BadgeSettings
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.AuthViewModel
@@ -73,6 +75,7 @@ fun MiniAppData.getIcon(): ImageVector {
 @Composable
 fun SettingsScreen(
     authViewModel: AuthViewModel,
+    repository: NostrRepository,
     prefs: AppPreferences,
     pubkeyHex: String,
     pictureUrl: String?
@@ -112,6 +115,8 @@ fun SettingsScreen(
     if (selectedAppId != null) {
         MiniAppDetailView(
             appId = selectedAppId!!,
+            repository = repository,
+            pubkeyHex = pubkeyHex,
             prefs = prefs,
             onBack = { selectedAppId = null }
         )
@@ -597,12 +602,19 @@ private fun MiniAppRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MiniAppDetailView(appId: String, prefs: AppPreferences, onBack: () -> Unit) {
+private fun MiniAppDetailView(
+    appId: String,
+    repository: NostrRepository,
+    pubkeyHex: String,
+    prefs: AppPreferences,
+    onBack: () -> Unit
+) {
     val nuruColors = LocalNuruColors.current
     val title = when(appId) {
         "zap" -> "Zap設定"
         "relay" -> "リレー設定"
         "upload" -> "アップロード設定"
+        "badge" -> "プロフィールバッジ"
         else -> "ミニアプリ"
     }
 
@@ -625,6 +637,7 @@ private fun MiniAppDetailView(appId: String, prefs: AppPreferences, onBack: () -
                 "zap" -> ZapSettingsView(prefs = prefs)
                 "relay" -> RelaySettingsViewContent(prefs = prefs)
                 "upload" -> UploadSettingsView(prefs = prefs)
+                "badge" -> BadgeSettings(pubkey = pubkeyHex, repository = repository)
                 else -> {
                     Column(
                         modifier = Modifier.fillMaxSize(),
