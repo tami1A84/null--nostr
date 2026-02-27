@@ -8,7 +8,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,14 +114,23 @@ fun ProfileHeader(
                             }
                         }
 
-                        if (profile?.nip05 != null && isNip05Verified) {
+                        if (profile?.nip05 != null) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 modifier = Modifier.padding(top = 2.dp)
                             ) {
-                                Icon(Icons.Default.Check, null, tint = LineGreen, modifier = Modifier.size(14.dp))
-                                Text(text = formatNip05(profile.nip05), fontSize = 13.sp, color = LineGreen)
+                                Icon(
+                                    imageVector = if (isNip05Verified) Icons.Default.Check else Icons.Default.Close,
+                                    contentDescription = null,
+                                    tint = if (isNip05Verified) LineGreen else Color.Gray,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = formatNip05(profile.nip05),
+                                    fontSize = 13.sp,
+                                    color = if (isNip05Verified) LineGreen else TextTertiary
+                                )
                             }
                         }
 
@@ -347,6 +365,11 @@ fun MetaInfoItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: St
         Icon(icon, null, tint = TextTertiary, modifier = Modifier.size(16.dp))
         Text(text, fontSize = 14.sp, color = color, maxLines = 1)
     }
+}
+
+fun formatNip05(nip05: String): String {
+    if (nip05.startsWith("_@")) return nip05.substring(2)
+    return nip05
 }
 
 @Composable

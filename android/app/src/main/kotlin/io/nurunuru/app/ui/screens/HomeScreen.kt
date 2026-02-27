@@ -127,6 +127,9 @@ fun HomeScreen(
                 }
 
                 if (uiState.isLoading) {
+                    item {
+                        FriendlyLoading(message = "プロフィールを読み込んでいます")
+                    }
                     items(5) {
                         Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
                             PostSkeleton()
@@ -151,7 +154,7 @@ fun HomeScreen(
                                 if (post.event.kind == 30023) {
                                     LongFormPostItem(
                                         post = post,
-                                        onLike = { viewModel.likePost(post.event.id) },
+                                        onLike = { emoji, tags -> viewModel.likePost(post.event.id, emoji, tags) },
                                         onRepost = { viewModel.repostPost(post.event.id) },
                                         onProfileClick = { if (it != viewModel.myPubkeyHex) viewingPubkey = it },
                                         repository = repository,
@@ -165,7 +168,7 @@ fun HomeScreen(
                                     PostItem(
                                         modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
                                         post = post,
-                                        onLike = { viewModel.likePost(post.event.id) },
+                                        onLike = { emoji, tags -> viewModel.likePost(post.event.id, emoji, tags) },
                                         onRepost = { viewModel.repostPost(post.event.id) },
                                         onProfileClick = { if (it != viewModel.myPubkeyHex) viewingPubkey = it },
                                         repository = repository,

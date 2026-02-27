@@ -50,23 +50,32 @@ class TimelineViewModel(
     val navigationEvents = _navigationEvents.asSharedFlow()
 
     init {
-        loadFollowList()
-        loadGlobalTimeline()
-        loadFollowingTimeline()
-        loadRecentSearches()
+        loadData()
+    }
+
+    private fun loadData() {
+        viewModelScope.launch {
+            loadRecentSearches()
+
+            // Parallel load to speed up initial state
+            val followListJob = launch { loadFollowList() }
+            val globalJob = launch { loadGlobalTimeline() }
+
+            followListJob.join()
+            // Only load following timeline after follow list is known
+            loadFollowingTimeline()
+        }
     }
 
     private fun loadRecentSearches() {
         _uiState.update { it.copy(recentSearches = repository.getRecentSearches()) }
     }
 
-    private fun loadFollowList() {
-        viewModelScope.launch {
-            try {
-                val follows = repository.fetchFollowList(pubkeyHex)
-                _uiState.update { it.copy(followList = follows) }
-            } catch (e: Exception) { /* Ignore */ }
-        }
+    private suspend fun loadFollowList() {
+        try {
+            val follows = repository.fetchFollowList(pubkeyHex)
+            _uiState.update { it.copy(followList = follows) }
+        } catch (e: Exception) { /* Ignore */ }
     }
 
     fun loadGlobalTimeline(isRefresh: Boolean = false) {
@@ -249,9 +258,9 @@ class TimelineViewModel(
         loadRecentSearches()
     }
 
-    fun likePost(eventId: String) {
+    fun likePost(eventId: String, emoji: String = "+", customTags: List<List<String>> = emptyList()) {
         viewModelScope.launch {
-            val success = repository.likePost(eventId)
+            val success = repository.likePost(eventId, emoji, customTags)
             if (success) {
                 updatePostInteraction(eventId, isLike = true)
             }

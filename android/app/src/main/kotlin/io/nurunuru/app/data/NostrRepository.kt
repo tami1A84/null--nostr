@@ -27,13 +27,35 @@ class NostrRepository(
     }
 
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
-        val filter = NostrClient.Filter(
-            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
-            limit = limit,
-            since = System.currentTimeMillis() / 1000 - 3600 // last hour
+        val now = System.currentTimeMillis() / 1000
+
+        // 1. Fetch viral candidates (high engagement candidates from last 3 hours)
+        val viralFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
+            limit = 100,
+            since = now - 10800 // last 3 hours
         )
-        val events = client.fetchEvents(filter, timeoutMs = 6_000)
-        return enrichPosts(events)
+
+        // 2. Fetch recent global content (freshness)
+        val recentFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
+            limit = 50,
+            since = now - 1800 // last 30 mins
+        )
+
+        val allEvents = coroutineScope {
+            val viral = async { client.fetchEvents(viralFilter, timeoutMs = 4000) }
+            val recent = async { client.fetchEvents(recentFilter, timeoutMs = 4000) }
+            (viral.await() + recent.await()).distinctBy { it.id }
+        }
+
+        // 3. Enrich and score with detailed algorithm (synced with lib/recommendation.js)
+        val enriched = enrichPosts(allEvents)
+
+        // Secondary sort for diversity and finalized scoring
+        return enriched
+            .sortedByDescending { it.score }
+            .take(limit)
     }
 
     /** Fetch timeline for followed users. */
@@ -499,13 +521,21 @@ class NostrRepository(
         if (eventIds.isEmpty()) return emptyMap()
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.LABEL),
-            tags = mapOf("e" to eventIds),
+            tags = mapOf(
+                "e" to eventIds,
+                "L" to listOf("birdwatch")
+            ),
             limit = 200
         )
         val events = client.fetchEvents(filter, 3_000)
         val map = mutableMapOf<String, MutableList<NostrEvent>>()
         for (event in events) {
-            val targetId = event.getTagValue("e") ?: continue
+            // Robust check: must have L=birdwatch
+            if (event.tags.none { it.getOrNull(0) == "L" && it.getOrNull(1) == "birdwatch" }) continue
+
+            // Note must point to one of requested eventIds.
+            // We only take the first 'e' tag that matches our requested IDs to be safe.
+            val targetId = event.tags.firstOrNull { it.getOrNull(0) == "e" && it.getOrNull(1) in eventIds }?.getOrNull(1) ?: continue
             map.getOrPut(targetId) { mutableListOf() }.add(event)
         }
         return map
@@ -627,8 +657,14 @@ class NostrRepository(
 
     // ─── Actions ──────────────────────────────────────────────────────────────
 
-    suspend fun likePost(eventId: String): Boolean =
-        client.publishReaction(eventId, "+")
+    suspend fun likePost(eventId: String, emoji: String = "+", customTags: List<List<String>> = emptyList()): Boolean {
+        if (customTags.isEmpty()) {
+            return client.publishReaction(eventId, emoji)
+        }
+        val tags = mutableListOf(listOf("e", eventId))
+        tags.addAll(customTags)
+        return client.publish(kind = 7, content = emoji, tags = tags) != null
+    }
 
     suspend fun repostPost(eventId: String): Boolean =
         client.publishRepost(eventId)
@@ -641,12 +677,22 @@ class NostrRepository(
         kind: Int = NostrKind.TEXT_NOTE
     ): NostrEvent? {
         val tags = mutableListOf<List<String>>()
-        if (replyToId != null) tags.add(listOf("e", replyToId, "", "reply"))
-        if (contentWarning != null) tags.add(listOf("content-warning", contentWarning))
 
-        // Add client tag matching web
-        tags.add(listOf("client", "nullnull"))
+        // Use customTags as base to avoid duplicates if UI already added them
         tags.addAll(customTags)
+
+        if (replyToId != null && tags.none { it.getOrNull(0) == "e" && it.getOrNull(1) == replyToId }) {
+            tags.add(listOf("e", replyToId, "", "reply"))
+        }
+
+        if (contentWarning != null && tags.none { it.getOrNull(0) == "content-warning" }) {
+            tags.add(listOf("content-warning", contentWarning))
+        }
+
+        // Add client tag matching web, only if not present
+        if (tags.none { it.getOrNull(0) == "client" }) {
+            tags.add(listOf("client", "nullnull"))
+        }
 
         return client.publish(kind, content, tags)
     }

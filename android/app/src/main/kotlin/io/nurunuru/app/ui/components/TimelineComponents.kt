@@ -109,9 +109,7 @@ fun TimelineLoadingState(
     text: String = "読み込んでいます...",
     modifier: Modifier = Modifier.fillMaxSize()
 ) {
-    Box(modifier, contentAlignment = Alignment.Center) {
-        FriendlyLoading(message = text)
-    }
+    TimelineLoadingSkeleton()
 }
 
 @Composable

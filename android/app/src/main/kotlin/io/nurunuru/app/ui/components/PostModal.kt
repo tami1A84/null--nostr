@@ -157,7 +157,6 @@ fun PostModal(
                 selectedCustomEmojis.forEach { emoji ->
                     tags.add(listOf("emoji", emoji.shortcode, emoji.url))
                 }
-                tags.add(listOf("client", "nullnull"))
 
                 val hashtags = Regex("#([\\w\\u3000]+)").findAll(finalContent).map { it.groupValues[1] }.distinct()
                 hashtags.forEach { tags.add(listOf("t", it.lowercase())) }
