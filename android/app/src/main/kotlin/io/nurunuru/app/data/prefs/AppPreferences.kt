@@ -92,6 +92,14 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_AUTO_SIGN_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_SIGN_ENABLED, value).apply()
 
+    var elevenLabsApiKey: String
+        get() = prefs.getString(KEY_ELEVENLABS_API_KEY, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_ELEVENLABS_API_KEY, value).apply()
+
+    var elevenLabsLanguage: String
+        get() = prefs.getString(KEY_ELEVENLABS_LANGUAGE, "jpn") ?: "jpn"
+        set(value) = prefs.edit().putString(KEY_ELEVENLABS_LANGUAGE, value).apply()
+
     val isLoggedIn: Boolean
         get() = publicKeyHex != null && (privateKeyHex != null || isExternalSigner)
 
@@ -111,5 +119,7 @@ class AppPreferences(context: Context) {
         private const val KEY_EXTERNAL_APPS = "external_apps"
         private const val KEY_DEFAULT_ZAP_AMOUNT = "default_zap_amount"
         private const val KEY_AUTO_SIGN_ENABLED = "auto_sign_enabled"
+        private const val KEY_ELEVENLABS_API_KEY = "elevenlabs_api_key"
+        private const val KEY_ELEVENLABS_LANGUAGE = "elevenlabs_language"
     }
 }
