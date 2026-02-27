@@ -38,6 +38,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.nurunuru.app.data.GeohashUtils
 import io.nurunuru.app.data.RelayDiscovery
+import io.nurunuru.app.data.models.Nip65Relay
 import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -52,7 +53,7 @@ fun SignUpModal(
 ) {
     var step by remember { mutableStateOf("welcome") } // welcome, backup, relay, profile, success
     var generatedAccount by remember { mutableStateOf<GeneratedAccount?>(null) }
-    var selectedRelays by remember { mutableStateOf<List<Triple<String, Boolean, Boolean>>?>(null) }
+    var selectedRelays by remember { mutableStateOf<List<Nip65Relay>?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
 
@@ -144,6 +145,7 @@ fun SignUpModal(
                                         coroutineScope.launch {
                                             // Publish metadata and relay list
                                             val internalSigner = io.nurunuru.app.data.InternalSigner(generatedAccount!!.privateKeyHex)
+                                            val relayTriples: List<Triple<String, Boolean, Boolean>>? = selectedRelays?.map { Triple(it.url, it.read, it.write) }
                                             viewModel.publishInitialMetadata(
                                                 signer = internalSigner,
                                                 name = name,
@@ -154,7 +156,7 @@ fun SignUpModal(
                                                 lud16 = lud16,
                                                 website = website,
                                                 birthday = birthday,
-                                                relays = selectedRelays
+                                                relays = relayTriples
                                             )
                                             // Complete registration locally
                                             viewModel.completeRegistration(
@@ -291,12 +293,12 @@ fun BackupStep(
 }
 
 @Composable
-fun RelayStep(onRelaysSelected: (List<Triple<String, Boolean, Boolean>>) -> Unit) {
+fun RelayStep(onRelaysSelected: (List<Nip65Relay>) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val nuruColors = LocalNuruColors.current
     var selectionMode by remember { mutableStateOf("manual") } // auto, manual
-    var recommendedRelays by remember { mutableStateOf<List<Triple<String, Boolean, Boolean>>>(
-        RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503) // Default to Tokyo
+    var recommendedRelays by remember { mutableStateOf<List<Nip65Relay>>(
+        RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503).combined // Default to Tokyo
     ) }
     var regionName by remember { mutableStateOf("東京") }
     var isLoading by remember { mutableStateOf(false) }
@@ -341,7 +343,7 @@ fun RelayStep(onRelaysSelected: (List<Triple<String, Boolean, Boolean>>) -> Unit
                 // For this synchronization task, we'll simulate the detection once granted.
                 isLoading = true
                 regionName = "東京 (GPS推定)"
-                recommendedRelays = RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503)
+                recommendedRelays = RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503).combined
                 isLoading = false
             } else {
                 selectionMode = "manual"
@@ -356,7 +358,7 @@ fun RelayStep(onRelaysSelected: (List<Triple<String, Boolean, Boolean>>) -> Unit
                 if (hasFine || hasCoarse) {
                     isLoading = true
                     regionName = "東京 (GPS推定)"
-                    recommendedRelays = RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503)
+                    recommendedRelays = RelayDiscovery.generateRelayListByLocation(35.6762, 139.6503).combined
                     isLoading = false
                 } else {
                     permissionLauncher.launch(arrayOf(
@@ -385,7 +387,7 @@ fun RelayStep(onRelaysSelected: (List<Triple<String, Boolean, Boolean>>) -> Unit
                             text = { Text(region.name) },
                             onClick = {
                                 regionName = region.name
-                                recommendedRelays = RelayDiscovery.generateRelayListByLocation(region.lat, region.lon)
+                                recommendedRelays = RelayDiscovery.generateRelayListByLocation(region.lat, region.lon).combined
                                 expanded = false
                             }
                         )

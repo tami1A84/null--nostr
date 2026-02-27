@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import io.nurunuru.app.data.models.DEFAULT_RELAYS
+import io.nurunuru.app.data.models.Nip65Relay
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -80,6 +81,36 @@ class AppPreferences(context: Context) {
             prefs.edit().putString(KEY_FAVORITE_APPS, jsonStr).apply()
         }
 
+    var selectedRegionId: String?
+        get() = prefs.getString(KEY_SELECTED_REGION_ID, null)
+        set(value) = prefs.edit().putString(KEY_SELECTED_REGION_ID, value).apply()
+
+    var userGeohash: String?
+        get() = prefs.getString(KEY_USER_GEOHASH, null)
+        set(value) = prefs.edit().putString(KEY_USER_GEOHASH, value).apply()
+
+    var userLat: Double
+        get() = prefs.getFloat(KEY_USER_LAT, 0.0f).toDouble()
+        set(value) = prefs.edit().putFloat(KEY_USER_LAT, value.toFloat()).apply()
+
+    var userLon: Double
+        get() = prefs.getFloat(KEY_USER_LON, 0.0f).toDouble()
+        set(value) = prefs.edit().putFloat(KEY_USER_LON, value.toFloat()).apply()
+
+    var nip65Relays: List<io.nurunuru.app.data.models.Nip65Relay>
+        get() {
+            val jsonStr = prefs.getString(KEY_NIP65_RELAYS, "[]") ?: "[]"
+            return try {
+                Json.decodeFromString(jsonStr)
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+        set(value) {
+            val jsonStr = Json.encodeToString(value)
+            prefs.edit().putString(KEY_NIP65_RELAYS, jsonStr).apply()
+        }
+
     var externalApps: String
         get() = prefs.getString(KEY_EXTERNAL_APPS, "[]") ?: "[]"
         set(value) = prefs.edit().putString(KEY_EXTERNAL_APPS, value).apply()
@@ -121,5 +152,10 @@ class AppPreferences(context: Context) {
         private const val KEY_AUTO_SIGN_ENABLED = "auto_sign_enabled"
         private const val KEY_ELEVENLABS_API_KEY = "elevenlabs_api_key"
         private const val KEY_ELEVENLABS_LANGUAGE = "elevenlabs_language"
+        private const val KEY_SELECTED_REGION_ID = "selected_region_id"
+        private const val KEY_USER_GEOHASH = "user_geohash"
+        private const val KEY_USER_LAT = "user_lat"
+        private const val KEY_USER_LON = "user_lon"
+        private const val KEY_NIP65_RELAYS = "nip65_relays"
     }
 }
