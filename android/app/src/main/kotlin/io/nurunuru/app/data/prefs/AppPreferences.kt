@@ -66,6 +66,32 @@ class AppPreferences(context: Context) {
             prefs.edit().putString(KEY_RECENT_SEARCHES, jsonStr).apply()
         }
 
+    var favoriteApps: List<String>
+        get() {
+            val jsonStr = prefs.getString(KEY_FAVORITE_APPS, "[]") ?: "[]"
+            return try {
+                Json.decodeFromString(jsonStr)
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+        set(value) {
+            val jsonStr = Json.encodeToString(value)
+            prefs.edit().putString(KEY_FAVORITE_APPS, jsonStr).apply()
+        }
+
+    var externalApps: String
+        get() = prefs.getString(KEY_EXTERNAL_APPS, "[]") ?: "[]"
+        set(value) = prefs.edit().putString(KEY_EXTERNAL_APPS, value).apply()
+
+    var defaultZapAmount: Int
+        get() = prefs.getInt(KEY_DEFAULT_ZAP_AMOUNT, 21)
+        set(value) = prefs.edit().putInt(KEY_DEFAULT_ZAP_AMOUNT, value).apply()
+
+    var autoSignEnabled: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_SIGN_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO_SIGN_ENABLED, value).apply()
+
     val isLoggedIn: Boolean
         get() = publicKeyHex != null && (privateKeyHex != null || isExternalSigner)
 
@@ -81,5 +107,9 @@ class AppPreferences(context: Context) {
         private const val KEY_BLOSSOM_URL = "blossom_url"
         private const val KEY_RECENT_SEARCHES = "recent_searches"
         private const val KEY_IS_EXTERNAL_SIGNER = "is_external_signer"
+        private const val KEY_FAVORITE_APPS = "favorite_apps"
+        private const val KEY_EXTERNAL_APPS = "external_apps"
+        private const val KEY_DEFAULT_ZAP_AMOUNT = "default_zap_amount"
+        private const val KEY_AUTO_SIGN_ENABLED = "auto_sign_enabled"
     }
 }
