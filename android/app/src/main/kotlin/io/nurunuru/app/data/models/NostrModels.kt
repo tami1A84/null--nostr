@@ -19,6 +19,8 @@ data class NostrEvent(
 
     fun getTagValues(tagName: String): List<String> =
         tags.filter { it.firstOrNull() == tagName }.mapNotNull { it.getOrNull(1) }
+
+    fun isProtected(): Boolean = tags.any { it.size == 1 && it[0] == "-" }
 }
 
 @Serializable
@@ -78,6 +80,13 @@ data class BadgeInfo(
     val name: String = "",
     val image: String = "",
     val description: String = ""
+)
+
+data class ImportResult(
+    val total: Int,
+    val success: Int,
+    val failed: Int,
+    val skipped: Int
 )
 
 @Serializable

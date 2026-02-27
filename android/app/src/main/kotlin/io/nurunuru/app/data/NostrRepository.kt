@@ -760,6 +760,95 @@ class NostrRepository(
         prefs.recentSearches = emptyList()
     }
 
+    // ─── Backup ──────────────────────────────────────────────────────────────
+
+    suspend fun fetchAllUserEvents(
+        pubkey: String,
+        onProgress: (fetched: Int, batch: Int) -> Unit
+    ): List<NostrEvent> {
+        val allEvents = mutableListOf<NostrEvent>()
+        val seenIds = mutableSetOf<String>()
+        val batchSize = 500
+        var lastTimestamp = System.currentTimeMillis() / 1000
+        var hasMore = true
+        var batchCount = 0
+
+        while (hasMore) {
+            val filter = NostrClient.Filter(
+                authors = listOf(pubkey),
+                until = lastTimestamp,
+                limit = batchSize
+            )
+
+            try {
+                val events = client.fetchEvents(filter, timeoutMs = 10_000)
+
+                if (events.isEmpty()) {
+                    hasMore = false
+                    break
+                }
+
+                var newEventsInBatch = 0
+                for (event in events) {
+                    if (!seenIds.contains(event.id)) {
+                        seenIds.add(event.id)
+                        allEvents.add(event)
+                        newEventsInBatch++
+                    }
+                }
+
+                val minTimestamp = events.minOf { it.createdAt }
+                if (minTimestamp >= lastTimestamp) {
+                    hasMore = false
+                } else {
+                    lastTimestamp = minTimestamp - 1
+                }
+
+                batchCount++
+                onProgress(allEvents.size, batchCount)
+
+                if (newEventsInBatch == 0) {
+                    hasMore = false
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("NostrRepository", "Batch fetch failed", e)
+                hasMore = false
+            }
+        }
+
+        return allEvents.sortedBy { it.createdAt }
+    }
+
+    suspend fun importEventsToRelays(
+        events: List<NostrEvent>,
+        onProgress: (current: Int, total: Int, success: Int, failed: Int) -> Unit
+    ): ImportResult {
+        var success = 0
+        var failed = 0
+        var skipped = 0
+        val myPubkey = prefs.publicKeyHex
+
+        events.forEachIndexed { index, event ->
+            // NIP-70 protection check
+            if (event.isProtected() && event.pubkey != myPubkey) {
+                skipped++
+            } else {
+                val published = client.publishEvent(event)
+                if (published) {
+                    success++
+                } else {
+                    failed++
+                }
+            }
+
+            onProgress(index + 1, events.size, success, failed)
+            // Small delay to avoid hammering relays
+            delay(50)
+        }
+
+        return ImportResult(events.size, success, failed, skipped)
+    }
+
     suspend fun uploadImage(fileBytes: ByteArray, mimeType: String): String? {
         val server = prefs.uploadServer
         return if (server == "nostr.build") {
