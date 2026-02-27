@@ -89,46 +89,38 @@ class NostrClient(
     private suspend fun signAndSend(builder: EventBuilder, targetRelays: List<String>? = null): Event? {
         val client = sdkClient ?: return null
         return try {
-            if (signer is InternalSigner) {
-                if (targetRelays.isNullOrEmpty()) {
-                    val output = client.sendEventBuilder(builder)
-                    client.database().eventById(output.id)
-                } else {
-                    val keys = Keys.parse(privateKeyHexForSdk())
-                    val event = builder.build(keys.publicKey())
-                    val signedEvent = keys.signEvent(event)
-                    client.sendEventTo(targetRelays.map { RelayUrl.parse(it) }, signedEvent)
-                    signedEvent
-                }
-            } else {
-                val publicKey = PublicKey.parse(publicKeyHex)
-                val unsignedEvent = builder.build(publicKey)
-                val unsignedJson = unsignedEvent.asJson()
-                Log.d(TAG, "Requesting external signature for: $unsignedJson")
-
-                val signedJson = signer.signEvent(unsignedJson) ?: run {
-                    Log.e(TAG, "External signer returned null")
-                    return null
-                }
-
-                Log.d(TAG, "Received signed JSON: $signedJson")
-                val signedEvent = try {
-                    Event.fromJson(signedJson)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to parse signed event JSON: $signedJson", e)
-                    // Add more context if it's a JSON parse error
-                    if (signedJson.trim().startsWith("{")) {
-                         Log.e(TAG, "Signed JSON seems well-formed but SDK rejected it. Check pubkey and signature.")
-                    }
-                    return null
-                }
-                if (targetRelays.isNullOrEmpty()) {
-                    client.sendEvent(signedEvent)
-                } else {
-                    client.sendEventTo(targetRelays.map { RelayUrl.parse(it) }, signedEvent)
-                }
-                signedEvent
+            // For internal signer and no target relays, we use client.sendEventBuilder
+            // because it handles more things internally (like auth-required callbacks).
+            if (signer is InternalSigner && targetRelays.isNullOrEmpty()) {
+                val output = client.sendEventBuilder(builder)
+                return client.database().eventById(output.id)
             }
+
+            // Otherwise, manually sign and send
+            val publicKey = PublicKey.parse(publicKeyHex)
+            val unsignedEvent = builder.build(publicKey)
+            val unsignedJson = unsignedEvent.asJson()
+
+            Log.d(TAG, "Requesting signature for: $unsignedJson")
+            val signedJson = signer.signEvent(unsignedJson) ?: run {
+                Log.e(TAG, "Signer returned null")
+                return null
+            }
+
+            val signedEvent = Event.fromJson(signedJson)
+            if (targetRelays.isNullOrEmpty()) {
+                client.sendEvent(signedEvent)
+            } else {
+                val urls = targetRelays.mapNotNull {
+                    try { RelayUrl.parse(it) } catch (e: Exception) { null }
+                }
+                if (urls.isNotEmpty()) {
+                    client.sendEventTo(urls, signedEvent)
+                } else {
+                    client.sendEvent(signedEvent)
+                }
+            }
+            signedEvent
         } catch (e: Exception) {
             Log.e(TAG, "Sign and send failed", e)
             null
