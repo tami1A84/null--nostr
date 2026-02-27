@@ -1,8 +1,12 @@
 package io.nurunuru.app.ui.screens
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,8 +35,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.location.Location
+import android.location.LocationManager
+import io.nurunuru.app.data.*
 import io.nurunuru.app.data.NostrKeyUtils
+import io.nurunuru.app.data.RelayDiscovery
 import io.nurunuru.app.data.models.DEFAULT_RELAYS
+import io.nurunuru.app.data.models.Nip65Relay
 import io.nurunuru.app.data.prefs.AppPreferences
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.ui.icons.NuruIcons
@@ -44,6 +53,8 @@ import io.nurunuru.app.ui.miniapps.MuteList
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.AuthViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -645,7 +656,7 @@ private fun MiniAppDetailView(
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when (appId) {
                 "zap" -> ZapSettingsView(prefs = prefs)
-                "relay" -> RelaySettingsViewContent(prefs = prefs)
+                "relay" -> RelaySettingsViewContent(prefs = prefs, repository = repository)
                 "upload" -> UploadSettingsView(prefs = prefs)
                 "badge" -> BadgeSettings(pubkey = pubkeyHex, repository = repository)
                 "emoji" -> EmojiSettings(pubkey = pubkeyHex, repository = repository)
@@ -821,56 +832,315 @@ private fun UploadSettingsView(prefs: AppPreferences) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RelaySettingsViewContent(prefs: AppPreferences) {
+private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRepository) {
+    val context = LocalContext.current
     val nuruColors = LocalNuruColors.current
-    var relays by remember { mutableStateOf(prefs.relays.toList()) }
-    var newRelayInput by remember { mutableStateOf("") }
+    val coroutineScope = rememberCoroutineScope()
 
-    LazyColumn {
-        items(relays) { relay ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(relay, style = MaterialTheme.typography.bodyMedium)
-                IconButton(onClick = {
-                    relays = relays - relay
-                    prefs.relays = relays.toSet()
-                }) {
-                    Icon(Icons.Default.Delete, null, tint = nuruColors.textTertiary)
-                }
-            }
-            HorizontalDivider(color = nuruColors.border)
-        }
-        item {
-            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = newRelayInput,
-                    onValueChange = { newRelayInput = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("wss://...") },
-                    singleLine = true
-                )
-                IconButton(onClick = {
-                    if (newRelayInput.isNotBlank()) {
-                        relays = relays + newRelayInput
-                        prefs.relays = relays.toSet()
-                        newRelayInput = ""
+    var currentRelays by remember { mutableStateOf(prefs.nip65Relays) }
+    var userGeohash by remember { mutableStateOf(prefs.userGeohash) }
+    var selectedRegionId by remember { mutableStateOf(prefs.selectedRegionId) }
+    var nearestRelays by remember { mutableStateOf<List<RelayInfoWithDistance>>(emptyList()) }
+    var detectingLocation by remember { mutableStateOf(false) }
+    var publishingNip65 by remember { mutableStateOf(false) }
+
+    val selectedRegion = remember(selectedRegionId) {
+        RelayDiscovery.REGION_COORDINATES.find { it.id == selectedRegionId }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                      permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) {
+            detectingLocation = true
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                    val providers = locationManager.getProviders(true)
+                    var bestLocation: Location? = null
+
+                    for (provider in providers) {
+                        try {
+                            val l = locationManager.getLastKnownLocation(provider) ?: continue
+                            if (bestLocation == null || l.accuracy < bestLocation.accuracy) {
+                                bestLocation = l
+                            }
+                        } catch (e: SecurityException) {
+                            // Should not happen as we just got permission
+                        }
                     }
-                }) {
-                    Icon(Icons.Default.Add, null, tint = LineGreen)
+
+                    if (bestLocation != null) {
+                        val lat = bestLocation.latitude
+                        val lon = bestLocation.longitude
+                        val geohash = GeohashUtils.encodeGeohash(lat, lon)
+                        val config = RelayDiscovery.generateRelayListByLocation(lat, lon)
+
+                        withContext(Dispatchers.Main) {
+                            prefs.userLat = lat
+                            prefs.userLon = lon
+                            prefs.userGeohash = geohash
+                            prefs.selectedRegionId = null
+                            prefs.nip65Relays = config.combined
+
+                            userGeohash = geohash
+                            selectedRegionId = null
+                            currentRelays = config.combined
+                            nearestRelays = config.outbox
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "位置情報を取得できませんでした", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "位置情報の取得に失敗しました", Toast.LENGTH_SHORT).show()
+                    }
+                } finally {
+                    withContext(Dispatchers.Main) {
+                        detectingLocation = false
+                    }
                 }
             }
-            TextButton(
-                onClick = {
-                    relays = DEFAULT_RELAYS
-                    prefs.relays = DEFAULT_RELAYS.toSet()
-                },
-                modifier = Modifier.padding(start = 8.dp)
+        } else {
+            Toast.makeText(context, "位置情報の権限が必要です", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun handleSelectRegion(regionId: String) {
+        val region = RelayDiscovery.REGION_COORDINATES.find { it.id == regionId } ?: return
+        val config = if (regionId == "global") {
+            val globalRelays = RelayDiscovery.GPS_RELAY_DATABASE
+                .filter { it.priority == 1 }
+                .take(10)
+                .map { RelayInfoWithDistance(it, 0.0) }
+            Nip65Config(
+                inbox = globalRelays.take(4),
+                outbox = globalRelays.take(5),
+                discover = RelayDiscovery.DIRECTORY_RELAYS,
+                combined = globalRelays.take(5).map { Nip65Relay(it.info.url, true, true) }
+            )
+        } else {
+            RelayDiscovery.generateRelayListByLocation(region.lat, region.lon)
+        }
+
+        prefs.selectedRegionId = regionId
+        prefs.userLat = region.lat
+        prefs.userLon = region.lon
+        prefs.userGeohash = if (regionId == "global") "global" else GeohashUtils.encodeGeohash(region.lat, region.lon)
+        prefs.nip65Relays = config.combined
+
+        selectedRegionId = regionId
+        userGeohash = prefs.userGeohash
+        currentRelays = config.combined
+        nearestRelays = config.outbox
+    }
+
+    LaunchedEffect(Unit) {
+        if (selectedRegionId != null) {
+            val region = RelayDiscovery.REGION_COORDINATES.find { it.id == selectedRegionId }
+            if (region != null) {
+                val config = if (selectedRegionId == "global") {
+                    val globalRelays = RelayDiscovery.GPS_RELAY_DATABASE.filter { it.priority == 1 }.take(10).map { RelayInfoWithDistance(it, 0.0) }
+                    Nip65Config(globalRelays.take(4), globalRelays.take(5), RelayDiscovery.DIRECTORY_RELAYS, globalRelays.take(5).map { Nip65Relay(it.info.url, true, true) })
+                } else {
+                    RelayDiscovery.generateRelayListByLocation(region.lat, region.lon)
+                }
+                nearestRelays = config.outbox
+            }
+        } else if (prefs.userLat != 0.0) {
+            val config = RelayDiscovery.generateRelayListByLocation(prefs.userLat, prefs.userLon)
+            nearestRelays = config.outbox
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Surface(
+                color = nuruColors.bgSecondary,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("デフォルトに戻す", color = nuruColors.textTertiary)
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "リレー設定",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+
+                    Surface(
+                        color = LineGreen.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, LineGreen),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("現在の設定", fontSize = 10.sp, color = nuruColors.textTertiary)
+                            Text(
+                                if (selectedRegion != null) selectedRegion.name else if (userGeohash != null) "GPS検出" else "未設定",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = nuruColors.textPrimary
+                            )
+                            if (currentRelays.isNotEmpty()) {
+                                Text(
+                                    "メインリレー: ${currentRelays.first().url.replace("wss://", "")}",
+                                    fontSize = 10.sp,
+                                    color = nuruColors.textTertiary,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("地域を選択", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = nuruColors.textSecondary)
+
+                        var expanded by remember { mutableStateOf(false) }
+                        Box {
+                            OutlinedButton(
+                                onClick = { expanded = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = nuruColors.textPrimary)
+                            ) {
+                                Text(selectedRegion?.name ?: "地域を選択...")
+                                Spacer(Modifier.weight(1f))
+                                Icon(Icons.Default.ArrowDropDown, null)
+                            }
+                            DropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false },
+                                modifier = Modifier.fillMaxWidth(0.9f).maxHeight(400.dp)
+                            ) {
+                                val groupedRegions = RelayDiscovery.REGION_COORDINATES.groupBy {
+                                    when (it.country) {
+                                        "JP" -> "日本"
+                                        "SG", "TW", "KR", "CN", "IN" -> "アジア"
+                                        "US", "CA" -> "北米"
+                                        "EU", "UK" -> "ヨーロッパ"
+                                        else -> "その他"
+                                    }
+                                }
+
+                                groupedRegions.forEach { (group, regions) ->
+                                    DropdownMenuItem(
+                                        text = { Text(group, fontWeight = FontWeight.Bold, color = nuruColors.textTertiary, fontSize = 12.sp) },
+                                        onClick = {},
+                                        enabled = false
+                                    )
+                                    regions.forEach { region ->
+                                        DropdownMenuItem(
+                                            text = { Text(region.name) },
+                                            onClick = {
+                                                handleSelectRegion(region.id)
+                                                expanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                permissionLauncher.launch(arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                ))
+                            },
+                            enabled = !detectingLocation,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = nuruColors.bgTertiary),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (detectingLocation) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = nuruColors.textSecondary)
+                                Spacer(Modifier.width(8.dp))
+                                Text("位置情報を取得中...", fontSize = 12.sp, color = nuruColors.textSecondary)
+                            } else {
+                                Icon(Icons.Default.MyLocation, null, modifier = Modifier.size(16.dp), tint = nuruColors.textSecondary)
+                                Spacer(Modifier.width(8.dp))
+                                Text("GPSで自動検出", fontSize = 12.sp, color = nuruColors.textSecondary)
+                            }
+                        }
+                    }
+
+                    if (nearestRelays.isNotEmpty()) {
+                        Column(modifier = Modifier.padding(top = 16.dp)) {
+                            HorizontalDivider(color = nuruColors.border, modifier = Modifier.padding(vertical = 12.dp))
+                            Text("最寄りのリレー:", fontSize = 10.sp, color = nuruColors.textTertiary, modifier = Modifier.padding(bottom = 8.dp))
+
+                            nearestRelays.take(5).forEach { relay ->
+                                val isSelected = currentRelays.any { it.url == relay.info.url }
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
+                                        val newRelay = Nip65Relay(relay.info.url, true, true)
+                                        val newList = listOf(newRelay) + currentRelays.filter { it.url != relay.info.url }.take(4)
+                                        currentRelays = newList
+                                        prefs.nip65Relays = newList
+                                    },
+                                    color = if (isSelected) LineGreen else nuruColors.bgTertiary,
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            "${relay.info.name} (${relay.info.region})",
+                                            fontSize = 12.sp,
+                                            color = if (isSelected) Color.White else nuruColors.textPrimary
+                                        )
+                                        Text(
+                                            RelayDiscovery.formatDistance(relay.distance),
+                                            fontSize = 10.sp,
+                                            color = if (isSelected) Color.White.copy(alpha = 0.7f) else nuruColors.textTertiary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (currentRelays.isNotEmpty()) {
+                        Button(
+                            onClick = {
+                                publishingNip65 = true
+                                coroutineScope.launch {
+                                    val triples = currentRelays.map { Triple(it.url, it.read, it.write) }
+                                    val success = repository.updateRelayList(triples)
+                                    if (success) {
+                                        Toast.makeText(context, "リレーリストを発行しました (NIP-65)", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "発行に失敗しました", Toast.LENGTH_SHORT).show()
+                                    }
+                                    publishingNip65 = false
+                                }
+                            },
+                            enabled = !publishingNip65,
+                            modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9C27B0)), // Purple
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (publishingNip65) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+                            } else {
+                                Text("リレーリストを発行 (NIP-65)", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
             }
         }
     }

@@ -112,6 +112,13 @@ data class EmojiSet(
     val emojis: List<EmojiInfo> = emptyList()
 )
 
+@Serializable
+data class Nip65Relay(
+    val url: String,
+    val read: Boolean = true,
+    val write: Boolean = true
+)
+
 // Default relay list matching web version
 val DEFAULT_RELAYS = listOf(
     "wss://yabu.me",
@@ -142,4 +149,5 @@ object NostrKind {
     const val EMOJI_LIST = 10030
     const val EMOJI_SET = 30030
     const val MUTE_LIST = 10000
+    const val RELAY_LIST = 10002
 }
