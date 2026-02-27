@@ -71,14 +71,17 @@ fun MainScreen(
     }
     val repository = remember { NostrRepository(nostrClient, app.prefs) }
 
-    // ViewModels
+    // ViewModels - Initialized here to start background prefetch immediately
     val timelineVM: TimelineViewModel = viewModel(
+        key = "timeline",
         factory = TimelineViewModel.Factory(repository, pubkeyHex)
     )
     val talkVM: TalkViewModel = viewModel(
+        key = "talk",
         factory = TalkViewModel.Factory(repository, nostrClient, pubkeyHex)
     )
     val homeVM: HomeViewModel = viewModel(
+        key = "home",
         factory = HomeViewModel.Factory(repository, pubkeyHex)
     )
 

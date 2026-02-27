@@ -57,14 +57,22 @@ class TimelineViewModel(
         viewModelScope.launch {
             loadRecentSearches()
 
-            // Parallel load to speed up initial state
-            val followListJob = launch { loadFollowList() }
-            val globalJob = launch { loadGlobalTimeline() }
+            // Parallel load to speed up initial state matching web prefetch
+            launch { loadFollowList() }
+            launch { loadGlobalTimeline() }
 
-            followListJob.join()
-            // Only load following timeline after follow list is known
-            loadFollowingTimeline()
+            // Periodically refresh global timeline in background if not active
+            // (Similar to web background updates if we wanted, but let's stick to initial load for now)
         }
+    }
+
+    private suspend fun loadFollowList() {
+        try {
+            val follows = repository.fetchFollowList(pubkeyHex)
+            _uiState.update { it.copy(followList = follows) }
+            // Once follow list is loaded, immediately fetch following timeline
+            loadFollowingTimeline()
+        } catch (e: Exception) { /* Ignore */ }
     }
 
     private fun loadRecentSearches() {

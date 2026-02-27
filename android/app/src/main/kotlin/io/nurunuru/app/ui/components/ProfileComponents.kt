@@ -334,6 +334,7 @@ fun ProfileTabs(
 @Composable
 fun ProfileAbout(about: String) {
     val nuruColors = LocalNuruColors.current
+    // Move heavy Regex operation to remember with about as key
     val annotated = remember(about) {
         buildAnnotatedString {
             val regex = Regex("(https?://[^\\s]+|nostr:(?:note1|nevent1|npub1|nprofile1|naddr1)[a-z0-9]{58,})")

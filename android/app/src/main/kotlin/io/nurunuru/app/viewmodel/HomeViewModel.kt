@@ -46,6 +46,8 @@ class HomeViewModel(
 
     init {
         _uiState.update { it.copy(uploadServer = repository.getUploadServer()) }
+        // Background prefetch matching web behavior
+        loadMyProfile()
     }
 
     fun loadMyProfile() {

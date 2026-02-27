@@ -14,6 +14,11 @@ object Nip05Utils {
     private val client = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
     private val cache = ConcurrentHashMap<String, Boolean>()
+    private val pubkeyToNip05Cache = ConcurrentHashMap<String, Boolean>()
+
+    fun isVerifiedCached(pubkeyHex: String): Boolean {
+        return pubkeyToNip05Cache[pubkeyHex.lowercase()] == true
+    }
 
     suspend fun verifyNip05(nip05: String, pubkeyHex: String): Boolean = withContext(Dispatchers.IO) {
         // Normalize NIP-05 format (handle domain-only format)
@@ -48,8 +53,11 @@ object Nip05Utils {
                 val root = json.parseToJsonElement(body).jsonObject
                 val names = root["names"]?.jsonObject ?: return@withContext false
                 val foundPubkey = names[name]?.jsonPrimitive?.content ?: return@withContext false
-
-                return@withContext foundPubkey.lowercase() == pubkeyHex.lowercase()
+                val isVerified = foundPubkey.lowercase() == pubkeyHex.lowercase()
+                if (isVerified) {
+                    pubkeyToNip05Cache[pubkeyHex.lowercase()] = true
+                }
+                return@withContext isVerified
             }
         } catch (e: Exception) {
             Log.w("Nip05Utils", "Verification failed for $nip05: ${e.message}")

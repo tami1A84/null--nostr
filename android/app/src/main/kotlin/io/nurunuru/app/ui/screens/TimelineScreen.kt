@@ -238,7 +238,8 @@ private fun TimelineContent(
                                 onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
                                 onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
                                 onNotInterested = notInterestedCallback,
-                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
+                                birdwatchNotes = post.birdwatchNotes,
+                                isVerified = post.isNip05Verified,
                                 isOwnPost = post.event.pubkey == myPubkey
                             )
                         } else {
@@ -254,7 +255,8 @@ private fun TimelineContent(
                                 onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
                                 onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
                                 onNotInterested = notInterestedCallback,
-                                birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
+                                birdwatchNotes = post.birdwatchNotes,
+                                isVerified = post.isNip05Verified,
                                 isOwnPost = post.event.pubkey == myPubkey
                             )
                         }
