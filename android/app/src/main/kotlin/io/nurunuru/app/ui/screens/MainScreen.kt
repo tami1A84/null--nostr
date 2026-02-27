@@ -172,6 +172,7 @@ fun MainScreen(
                 )
                 BottomTab.MINIAPP -> SettingsScreen(
                     authViewModel = authViewModel,
+                    repository = repository,
                     prefs = app.prefs,
                     pubkeyHex = pubkeyHex,
                     pictureUrl = myProfile?.picture

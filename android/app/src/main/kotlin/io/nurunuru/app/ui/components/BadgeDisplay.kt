@@ -15,6 +15,10 @@ import kotlinx.coroutines.launch
 
 private val badgeCache = mutableMapOf<String, List<String>>()
 
+fun clearBadgeCache(pubkey: String) {
+    badgeCache.remove(pubkey)
+}
+
 @Composable
 fun BadgeDisplay(
     pubkey: String,

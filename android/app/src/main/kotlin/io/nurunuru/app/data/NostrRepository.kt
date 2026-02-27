@@ -191,36 +191,151 @@ class NostrRepository(
             limit = 1
         )
         val events = client.fetchEvents(filter, timeoutMs = 4_000)
-        val awardEvent = events.maxByOrNull { it.createdAt } ?: return emptyList()
+        val profileBadgeEvent = events.maxByOrNull { it.createdAt } ?: return emptyList()
 
-        // Tags are like ["a", "kind:pubkey:d-tag", "relay"], we want the kind 8 events
-        val badgeTags = awardEvent.tags.filter { it.getOrNull(0) == "a" }
-
-        // Extract kind, pubkey, and d-tag from kind:pubkey:d-tag
         val badgeDefinitions = mutableListOf<NostrEvent>()
+        val tags = profileBadgeEvent.tags
+        for (i in tags.indices) {
+            if (tags[i].getOrNull(0) == "a" && tags[i].getOrNull(1)?.startsWith("30009:") == true) {
+                val ref = tags[i][1]
+                val parts = ref.split(":")
+                if (parts.size < 3) continue
+                val creator = parts[1]
+                val dTag = parts.drop(2).joinToString(":")
 
-        for (tag in badgeTags) {
-            val identifier = tag.getOrNull(1) ?: continue
-            val parts = identifier.split(":")
-            if (parts.size < 3) continue
-
-            val kind = parts[0].toIntOrNull() ?: continue
-            val pubkey = parts[1]
-            val dTag = parts[2]
-
-            val defFilter = NostrClient.Filter(
-                kinds = listOf(kind),
-                authors = listOf(pubkey),
-                tags = mapOf("d" to listOf(dTag)),
-                limit = 1
-            )
-            val defEvents = client.fetchEvents(defFilter, timeoutMs = 2_000)
-            defEvents.maxByOrNull { it.createdAt }?.let { badgeDefinitions.add(it) }
-
+                val defFilter = NostrClient.Filter(
+                    kinds = listOf(NostrKind.BADGE_DEFINITION),
+                    authors = listOf(creator),
+                    tags = mapOf("d" to listOf(dTag)),
+                    limit = 1
+                )
+                val defEvents = client.fetchEvents(defFilter, timeoutMs = 2_000)
+                defEvents.maxByOrNull { it.createdAt }?.let { badgeDefinitions.add(it) }
+            }
             if (badgeDefinitions.size >= 3) break
         }
-
         return badgeDefinitions
+    }
+
+    suspend fun fetchProfileBadgesInfo(pubkeyHex: String): List<BadgeInfo> = coroutineScope {
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.PROFILE_BADGES),
+            authors = listOf(pubkeyHex),
+            limit = 1
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 4_000)
+        val profileBadgeEvent = events.maxByOrNull { it.createdAt } ?: return@coroutineScope emptyList()
+
+        val tags = profileBadgeEvent.tags
+        val badgeRequests = mutableListOf<Deferred<BadgeInfo?>>()
+        val seenRefs = mutableSetOf<String>()
+
+        for (i in tags.indices) {
+            if (tags[i].getOrNull(0) == "a" && tags[i].getOrNull(1)?.startsWith("30009:") == true) {
+                val ref = tags[i][1]
+                if (!seenRefs.contains(ref)) {
+                    seenRefs.add(ref)
+                    val awardEventId = if (i + 1 < tags.size && tags[i+1].getOrNull(0) == "e") tags[i+1].getOrNull(1) else null
+
+                    val parts = ref.split(":")
+                    if (parts.size >= 3) {
+                        val creator = parts[1]
+                        val dTag = parts.drop(2).joinToString(":")
+
+                        badgeRequests.add(async {
+                            try {
+                                val defFilter = NostrClient.Filter(
+                                    kinds = listOf(NostrKind.BADGE_DEFINITION),
+                                    authors = listOf(creator),
+                                    tags = mapOf("d" to listOf(dTag)),
+                                    limit = 1
+                                )
+                                val defEvents = client.fetchEvents(defFilter, timeoutMs = 2_000)
+                                val defEvent = defEvents.maxByOrNull { it.createdAt }
+
+                                BadgeInfo(
+                                    ref = ref,
+                                    awardEventId = awardEventId,
+                                    name = defEvent?.getTagValue("name") ?: dTag,
+                                    image = defEvent?.getTagValue("thumb") ?: defEvent?.getTagValue("image") ?: "",
+                                    description = defEvent?.getTagValue("description") ?: ""
+                                )
+                            } catch (e: Exception) {
+                                android.util.Log.e("NostrRepository", "Error fetching badge definition: $ref", e)
+                                null
+                            }
+                        })
+                    }
+                }
+            }
+        }
+        badgeRequests.awaitAll().filterNotNull()
+    }
+
+    suspend fun fetchAwardedBadges(pubkeyHex: String, currentBadgeRefs: Set<String>): List<BadgeInfo> = coroutineScope {
+        val awardFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.BADGE_AWARD),
+            tags = mapOf("p" to listOf(pubkeyHex)),
+            limit = 50
+        )
+        val awardEvents = client.fetchEvents(awardFilter, timeoutMs = 5_000)
+
+        val badgeRequests = mutableListOf<Deferred<BadgeInfo?>>()
+        val seenAwards = currentBadgeRefs.toMutableSet()
+
+        for (event in awardEvents) {
+            val aTag = event.tags.find { it.getOrNull(0) == "a" && it.getOrNull(1)?.startsWith("30009:") == true }
+            if (aTag != null) {
+                val ref = aTag[1]
+                if (seenAwards.contains(ref)) continue
+                seenAwards.add(ref)
+
+                val parts = ref.split(":")
+                if (parts.size >= 3) {
+                    val creator = parts[1]
+                    val dTag = parts.drop(2).joinToString(":")
+
+                    badgeRequests.add(async {
+                        try {
+                            val defFilter = NostrClient.Filter(
+                                kinds = listOf(NostrKind.BADGE_DEFINITION),
+                                authors = listOf(creator),
+                                tags = mapOf("d" to listOf(dTag)),
+                                limit = 1
+                            )
+                            val defEvents = client.fetchEvents(defFilter, timeoutMs = 2_000)
+                            val defEvent = defEvents.maxByOrNull { it.createdAt }
+
+                            BadgeInfo(
+                                ref = ref,
+                                awardEventId = event.id,
+                                name = defEvent?.getTagValue("name") ?: dTag,
+                                image = defEvent?.getTagValue("thumb") ?: defEvent?.getTagValue("image") ?: "",
+                                description = defEvent?.getTagValue("description") ?: ""
+                            )
+                        } catch (e: Exception) {
+                            android.util.Log.e("NostrRepository", "Error fetching awarded badge: $ref", e)
+                            null
+                        }
+                    })
+                }
+            }
+        }
+        badgeRequests.awaitAll().filterNotNull()
+    }
+
+    suspend fun updateProfileBadges(pubkeyHex: String, badges: List<BadgeInfo>): Boolean {
+        val tags = mutableListOf(listOf("d", "profile_badges"))
+        for (badge in badges) {
+            tags.add(listOf("a", badge.ref))
+            badge.awardEventId?.let { tags.add(listOf("e", it)) }
+        }
+
+        return client.publish(
+            kind = NostrKind.PROFILE_BADGES,
+            content = "",
+            tags = tags
+        ) != null
     }
 
     // ─── Reactions ────────────────────────────────────────────────────────────
