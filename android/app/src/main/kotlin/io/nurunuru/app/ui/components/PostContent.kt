@@ -10,7 +10,15 @@ import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.*
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -560,8 +568,3 @@ fun formatPostTimestamp(unixSec: Long): String {
     }
 }
 
-fun formatNip05(nip05: String): String = when {
-    nip05.startsWith("_@") -> nip05.drop(1)
-    !nip05.contains("@") -> "@$nip05"
-    else -> nip05
-}

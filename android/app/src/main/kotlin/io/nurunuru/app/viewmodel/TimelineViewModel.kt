@@ -50,27 +50,32 @@ class TimelineViewModel(
     val navigationEvents = _navigationEvents.asSharedFlow()
 
     init {
-        loadFollowList()
-        loadGlobalTimeline()
-        loadFollowingTimeline()
-        loadRecentSearches()
+        loadData()
+    }
+
+    private fun loadData() {
+        viewModelScope.launch {
+            loadRecentSearches()
+
+            // Parallel load to speed up initial state
+            val followListJob = launch { loadFollowList() }
+            val globalJob = launch { loadGlobalTimeline() }
+
+            followListJob.join()
+            // Only load following timeline after follow list is known
+            loadFollowingTimeline()
+        }
     }
 
     private fun loadRecentSearches() {
         _uiState.update { it.copy(recentSearches = repository.getRecentSearches()) }
     }
 
-    private fun loadFollowList() {
-        viewModelScope.launch {
-            try {
-                val follows = repository.fetchFollowList(pubkeyHex)
-                _uiState.update { it.copy(followList = follows) }
-                // Once follow list is loaded, trigger following timeline if needed
-                if (_uiState.value.feedType == FeedType.FOLLOWING) {
-                    loadFollowingTimeline()
-                }
-            } catch (e: Exception) { /* Ignore */ }
-        }
+    private suspend fun loadFollowList() {
+        try {
+            val follows = repository.fetchFollowList(pubkeyHex)
+            _uiState.update { it.copy(followList = follows) }
+        } catch (e: Exception) { /* Ignore */ }
     }
 
     fun loadGlobalTimeline(isRefresh: Boolean = false) {

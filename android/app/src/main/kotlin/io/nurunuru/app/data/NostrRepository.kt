@@ -29,16 +29,16 @@ class NostrRepository(
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
         val now = System.currentTimeMillis() / 1000
 
-        // 1. Fetch recent viral content (high engagement candidate)
+        // 1. Fetch viral candidates (high engagement candidates from last 3 hours)
         val viralFilter = NostrClient.Filter(
-            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
+            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
             limit = 100,
             since = now - 10800 // last 3 hours
         )
 
-        // 2. Fetch some from global recent
+        // 2. Fetch recent global content (freshness)
         val recentFilter = NostrClient.Filter(
-            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
+            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
             limit = 50,
             since = now - 1800 // last 30 mins
         )
@@ -49,14 +49,13 @@ class NostrRepository(
             (viral.await() + recent.await()).distinctBy { it.id }
         }
 
+        // 3. Enrich and score with detailed algorithm (synced with lib/recommendation.js)
         val enriched = enrichPosts(allEvents)
 
-        // Sort by the calculated engagement score (already done in enrichPosts but we can re-sort)
-        // Similar to web mixing:
-        // 1. Give some boost to very recent posts
-        // 2. Use the engagement score (Zaps/Reposts/Likes)
-
-        return enriched.sortedByDescending { it.score }.take(limit)
+        // Secondary sort for diversity and finalized scoring
+        return enriched
+            .sortedByDescending { it.score }
+            .take(limit)
     }
 
     /** Fetch timeline for followed users. */
@@ -534,11 +533,10 @@ class NostrRepository(
             // Robust check: must have L=birdwatch
             if (event.tags.none { it.getOrNull(0) == "L" && it.getOrNull(1) == "birdwatch" }) continue
 
-            // Note must point to one of requested eventIds
-            val targetId = event.getTagValue("e") ?: continue
-            if (targetId in eventIds) {
-                map.getOrPut(targetId) { mutableListOf() }.add(event)
-            }
+            // Note must point to one of requested eventIds.
+            // We only take the first 'e' tag that matches our requested IDs to be safe.
+            val targetId = event.tags.firstOrNull { it.getOrNull(0) == "e" && it.getOrNull(1) in eventIds }?.getOrNull(1) ?: continue
+            map.getOrPut(targetId) { mutableListOf() }.add(event)
         }
         return map
     }
@@ -679,12 +677,22 @@ class NostrRepository(
         kind: Int = NostrKind.TEXT_NOTE
     ): NostrEvent? {
         val tags = mutableListOf<List<String>>()
-        if (replyToId != null) tags.add(listOf("e", replyToId, "", "reply"))
-        if (contentWarning != null) tags.add(listOf("content-warning", contentWarning))
 
-        // Add client tag matching web
-        tags.add(listOf("client", "nullnull"))
+        // Use customTags as base to avoid duplicates if UI already added them
         tags.addAll(customTags)
+
+        if (replyToId != null && tags.none { it.getOrNull(0) == "e" && it.getOrNull(1) == replyToId }) {
+            tags.add(listOf("e", replyToId, "", "reply"))
+        }
+
+        if (contentWarning != null && tags.none { it.getOrNull(0) == "content-warning" }) {
+            tags.add(listOf("content-warning", contentWarning))
+        }
+
+        // Add client tag matching web, only if not present
+        if (tags.none { it.getOrNull(0) == "client" }) {
+            tags.add(listOf("client", "nullnull"))
+        }
 
         return client.publish(kind, content, tags)
     }
