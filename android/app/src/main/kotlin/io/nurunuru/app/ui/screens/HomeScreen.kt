@@ -154,7 +154,7 @@ fun HomeScreen(
                                 if (post.event.kind == 30023) {
                                     LongFormPostItem(
                                         post = post,
-                                        onLike = { viewModel.likePost(post.event.id) },
+                                        onLike = { emoji, tags -> viewModel.likePost(post.event.id, emoji, tags) },
                                         onRepost = { viewModel.repostPost(post.event.id) },
                                         onProfileClick = { if (it != viewModel.myPubkeyHex) viewingPubkey = it },
                                         repository = repository,

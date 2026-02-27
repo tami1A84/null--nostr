@@ -85,9 +85,11 @@ class HomeViewModel(
 
                 // Verify NIP-05
                 profile?.nip05?.let { nip05 ->
-                    val verified = Nip05Utils.verifyNip05(nip05, pubkeyHex)
-                    _uiState.update { it.copy(isNip05Verified = verified) }
-                } else {
+                    viewModelScope.launch {
+                        val verified = Nip05Utils.verifyNip05(nip05, pubkeyHex)
+                        _uiState.update { it.copy(isNip05Verified = verified) }
+                    }
+                } ?: run {
                     _uiState.update { it.copy(isNip05Verified = false) }
                 }
 
@@ -202,9 +204,11 @@ class HomeViewModel(
                 }
 
                 profile?.nip05?.let { nip05 ->
-                    val verified = Nip05Utils.verifyNip05(nip05, targetPubkey)
-                    _uiState.update { it.copy(isNip05Verified = verified) }
-                } else {
+                    viewModelScope.launch {
+                        val verified = Nip05Utils.verifyNip05(nip05, targetPubkey)
+                        _uiState.update { it.copy(isNip05Verified = verified) }
+                    }
+                } ?: run {
                     _uiState.update { it.copy(isNip05Verified = false) }
                 }
             } catch (e: Exception) {

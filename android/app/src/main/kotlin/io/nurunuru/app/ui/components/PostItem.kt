@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.ui.theme.LocalNuruColors
+import kotlinx.coroutines.launch
 
 @Composable
 fun PostItem(
@@ -112,7 +113,7 @@ fun PostItem(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                val scope = rememberCoroutineScope()
+                val coroutineScope = rememberCoroutineScope()
                 val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
                 val toastState = LocalToastState.current
 
@@ -124,7 +125,7 @@ fun PostItem(
                     onZap = {
                         val lud16 = profile?.lud16
                         if (lud16 != null) {
-                            scope.launch {
+                            coroutineScope.launch {
                                 val amount = repository.getDefaultZapAmount().toLong()
                                 try {
                                     val invoice = repository.fetchLightningInvoice(lud16, amount)

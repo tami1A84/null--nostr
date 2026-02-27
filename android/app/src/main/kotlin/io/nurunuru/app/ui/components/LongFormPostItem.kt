@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.launch
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import io.nurunuru.app.data.models.ScoredPost
@@ -31,7 +32,7 @@ import io.nurunuru.app.ui.theme.LocalNuruColors
 @Composable
 fun LongFormPostItem(
     post: ScoredPost,
-    onLike: () -> Unit,
+    onLike: (emoji: String, tags: List<List<String>>) -> Unit,
     onRepost: () -> Unit,
     onProfileClick: (String) -> Unit,
     repository: io.nurunuru.app.data.NostrRepository,
@@ -162,19 +163,19 @@ fun LongFormPostItem(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                val scope = rememberCoroutineScope()
+                val coroutineScope = rememberCoroutineScope()
                 val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
                 val toastState = LocalToastState.current
 
                 PostActions(
                     post = post,
-                    onLike = onLike,
+                    onLike = { onLike("+", emptyList()) },
                     onLikeLongPress = { showReactionPicker = true },
                     onRepost = onRepost,
                     onZap = {
                         val lud16 = profile?.lud16
                         if (lud16 != null) {
-                            scope.launch {
+                            coroutineScope.launch {
                                 val amount = repository.getDefaultZapAmount().toLong()
                                 try {
                                     val invoice = repository.fetchLightningInvoice(lud16, amount)
