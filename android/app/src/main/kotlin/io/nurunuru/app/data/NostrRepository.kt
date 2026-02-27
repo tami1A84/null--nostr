@@ -227,7 +227,7 @@ class NostrRepository(
         val profileBadgeEvent = events.maxByOrNull { it.createdAt } ?: return@coroutineScope emptyList()
 
         val tags = profileBadgeEvent.tags
-        val badgeRequests = mutableListOf<Deferred<BadgeInfo?>>()
+        val badgeRequests = mutableListOf<Deferred<BadgeInfo>>()
         val seenRefs = mutableSetOf<String>()
 
         for (i in tags.indices) {
@@ -262,14 +262,14 @@ class NostrRepository(
                                 )
                             } catch (e: Exception) {
                                 android.util.Log.e("NostrRepository", "Error fetching badge definition: $ref", e)
-                                null
+                                BadgeInfo(ref = ref, awardEventId = awardEventId, name = dTag)
                             }
                         })
                     }
                 }
             }
         }
-        badgeRequests.awaitAll().filterNotNull()
+        badgeRequests.awaitAll()
     }
 
     suspend fun fetchAwardedBadges(pubkeyHex: String, currentBadgeRefs: Set<String>): List<BadgeInfo> = coroutineScope {
@@ -280,7 +280,7 @@ class NostrRepository(
         )
         val awardEvents = client.fetchEvents(awardFilter, timeoutMs = 5_000)
 
-        val badgeRequests = mutableListOf<Deferred<BadgeInfo?>>()
+        val badgeRequests = mutableListOf<Deferred<BadgeInfo>>()
         val seenAwards = currentBadgeRefs.toMutableSet()
 
         for (event in awardEvents) {
@@ -315,13 +315,13 @@ class NostrRepository(
                             )
                         } catch (e: Exception) {
                             android.util.Log.e("NostrRepository", "Error fetching awarded badge: $ref", e)
-                            null
+                            BadgeInfo(ref = ref, awardEventId = event.id, name = dTag)
                         }
                     })
                 }
             }
         }
-        badgeRequests.awaitAll().filterNotNull()
+        badgeRequests.awaitAll()
     }
 
     suspend fun updateProfileBadges(pubkeyHex: String, badges: List<BadgeInfo>): Boolean {

@@ -38,22 +38,35 @@ fun BadgeSettings(
 
     var profileBadges by remember { mutableStateOf<List<BadgeInfo>>(emptyList()) }
     var awardedBadges by remember { mutableStateOf<List<BadgeInfo>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
+    var isLoadingCurrent by remember { mutableStateOf(true) }
+    var isLoadingAwarded by remember { mutableStateOf(true) }
     var removingBadgeRef by remember { mutableStateOf<String?>(null) }
     var addingBadgeRef by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(pubkey) {
-        isLoading = true
-        try {
-            val current = repository.fetchProfileBadgesInfo(pubkey)
-            profileBadges = current
+        scope.launch {
+            isLoadingCurrent = true
+            try {
+                profileBadges = repository.fetchProfileBadgesInfo(pubkey)
+            } catch (e: Exception) {
+                android.util.Log.e("BadgeSettings", "Failed to fetch profile badges", e)
+            } finally {
+                isLoadingCurrent = false
+            }
+        }
 
-            val awarded = repository.fetchAwardedBadges(pubkey, current.map { it.ref }.toSet())
-            awardedBadges = awarded
-        } catch (e: Exception) {
-            // Error handling
-        } finally {
-            isLoading = false
+        scope.launch {
+            isLoadingAwarded = true
+            try {
+                // We need profileBadges to filter, but we can also just fetch all and filter in UI or after both finish
+                // For better UX, we fetch awarded badges independently
+                val current = repository.fetchProfileBadgesInfo(pubkey)
+                awardedBadges = repository.fetchAwardedBadges(pubkey, current.map { it.ref }.toSet())
+            } catch (e: Exception) {
+                android.util.Log.e("BadgeSettings", "Failed to fetch awarded badges", e)
+            } finally {
+                isLoadingAwarded = false
+            }
         }
     }
 
@@ -69,7 +82,7 @@ fun BadgeSettings(
                         awardedBadges = awardedBadges.filter { it.ref != badge.ref }
                     }
                 } catch (e: Exception) {
-                    // Error
+                    android.util.Log.e("BadgeSettings", "Failed to add badge", e)
                 } finally {
                     addingBadgeRef = null
                 }
@@ -86,10 +99,13 @@ fun BadgeSettings(
                     if (repository.updateProfileBadges(pubkey, newList)) {
                         clearBadgeCache(pubkey)
                         profileBadges = newList
-                        awardedBadges = awardedBadges + badge
+                        // Only add back to awarded if it was an awarded badge (has awardEventId)
+                        if (badge.awardEventId != null) {
+                            awardedBadges = (awardedBadges + badge).distinctBy { it.ref }
+                        }
                     }
                 } catch (e: Exception) {
-                    // Error
+                    android.util.Log.e("BadgeSettings", "Failed to remove badge", e)
                 } finally {
                     removingBadgeRef = null
                 }
@@ -97,27 +113,25 @@ fun BadgeSettings(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Surface(
-            color = nuruColors.bgSecondary,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("プロフィールバッジ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        item {
+            Surface(
+                color = nuruColors.bgSecondary,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text("プロフィールバッジ", fontWeight = FontWeight.Bold, fontSize = 18.sp)
 
-                if (isLoading) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = LineGreen, modifier = Modifier.size(24.dp))
-                    }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                        // Displayed Badges
+                    if (isLoadingCurrent) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = LineGreen, modifier = Modifier.size(24.dp))
+                        }
+                    } else {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("表示中のバッジ (最大3つ)", fontSize = 14.sp, color = nuruColors.textSecondary, fontWeight = FontWeight.Medium)
                             if (profileBadges.isEmpty()) {
@@ -134,21 +148,27 @@ fun BadgeSettings(
                                 }
                             }
                         }
+                    }
 
-                        // Awarded Badges
-                        if (awardedBadges.isNotEmpty()) {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("獲得済みバッジ", fontSize = 14.sp, color = nuruColors.textSecondary, fontWeight = FontWeight.Medium)
-                                awardedBadges.forEach { badge ->
-                                    BadgeItemRow(
-                                        badge = badge,
-                                        actionText = if (addingBadgeRef == badge.ref) "..." else "追加",
-                                        actionColor = LineGreen,
-                                        onAction = { handleAddBadge(badge) },
-                                        isLoading = addingBadgeRef == badge.ref,
-                                        disabled = profileBadges.size >= 3
-                                    )
-                                }
+                    if (isLoadingAwarded) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("獲得済みバッジ", fontSize = 14.sp, color = nuruColors.textSecondary, fontWeight = FontWeight.Medium)
+                            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = LineGreen, modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    } else if (awardedBadges.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("獲得済みバッジ", fontSize = 14.sp, color = nuruColors.textSecondary, fontWeight = FontWeight.Medium)
+                            awardedBadges.forEach { badge ->
+                                BadgeItemRow(
+                                    badge = badge,
+                                    actionText = if (addingBadgeRef == badge.ref) "..." else "追加",
+                                    actionColor = LineGreen,
+                                    onAction = { handleAddBadge(badge) },
+                                    isLoading = addingBadgeRef == badge.ref,
+                                    disabled = profileBadges.size >= 3
+                                )
                             }
                         }
                     }
