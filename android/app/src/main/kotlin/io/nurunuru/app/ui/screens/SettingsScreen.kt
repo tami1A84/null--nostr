@@ -40,6 +40,7 @@ import io.nurunuru.app.ui.miniapps.BadgeSettings
 import io.nurunuru.app.ui.miniapps.ElevenLabsSettings
 import io.nurunuru.app.ui.miniapps.EmojiSettings
 import io.nurunuru.app.ui.miniapps.EventBackupSettings
+import io.nurunuru.app.ui.miniapps.MuteList
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.AuthViewModel
@@ -93,18 +94,20 @@ fun SettingsScreen(
     val npub = remember(pubkeyHex) { NostrKeyUtils.encodeNpub(pubkeyHex) ?: pubkeyHex }
     val favorites = remember { mutableStateListOf<String>().apply { addAll(prefs.favoriteApps) } }
 
-    val allApps = listOf(
-        MiniAppData("emoji", "カスタム絵文字", "投稿やリアクションに使える絵文字を管理・追加", "entertainment"),
-        MiniAppData("badge", "プロフィールバッジ", "プロフィールに表示するバッジを設定・管理", "entertainment"),
-        MiniAppData("scheduler", "調整くん", "オフ会や会議の予定を簡単に調整", "entertainment"),
-        MiniAppData("zap", "Zap設定", "デフォルトのZap金額をクイック設定", "tools"),
-        MiniAppData("relay", "リレー設定", "地域に基づいた最適なリレーを自動設定", "tools"),
-        MiniAppData("upload", "アップロード設定", "画像のアップロード先サーバーを選択", "tools"),
-        MiniAppData("mute", "ミュートリスト", "不快なユーザーやキーワードを非表示に管理", "tools"),
-        MiniAppData("elevenlabs", "音声入力設定", "ElevenLabs Scribeによる高精度な音声入力", "tools"),
-        MiniAppData("backup", "バックアップ", "自分の投稿データをJSON形式でエクスポート", "tools"),
-        MiniAppData("vanish", "削除リクエスト", "リレーに対して全データの削除を要求", "tools")
-    )
+    val allApps = remember {
+        listOf(
+            MiniAppData("emoji", "カスタム絵文字", "投稿やリアクションに使える絵文字を管理・追加", "entertainment"),
+            MiniAppData("badge", "プロフィールバッジ", "プロフィールに表示するバッジを設定・管理", "entertainment"),
+            MiniAppData("scheduler", "調整くん", "オフ会や会議の予定を簡単に調整", "entertainment"),
+            MiniAppData("mute", "ミュートリスト", "不快なユーザーやキーワードを非表示に管理", "tools"),
+            MiniAppData("zap", "Zap設定", "デフォルトのZap金額をクイック設定", "tools"),
+            MiniAppData("relay", "リレー設定", "地域に基づいた最適なリレーを自動設定", "tools"),
+            MiniAppData("upload", "アップロード設定", "画像のアップロード先サーバーを選択", "tools"),
+            MiniAppData("elevenlabs", "音声入力設定", "ElevenLabs Scribeによる高精度な音声入力", "tools"),
+            MiniAppData("backup", "バックアップ", "自分の投稿データをJSON形式でエクスポート", "tools"),
+            MiniAppData("vanish", "削除リクエスト", "リレーに対して全データの削除を要求", "tools")
+        )
+    }
 
     val externalAppsJson = prefs.externalApps
     val externalApps = remember(externalAppsJson) {
@@ -619,6 +622,7 @@ private fun MiniAppDetailView(
         "upload" -> "アップロード設定"
         "badge" -> "プロフィールバッジ"
         "emoji" -> "カスタム絵文字"
+        "mute" -> "ミュートリスト"
         "elevenlabs" -> "音声入力設定"
         "backup" -> "バックアップ"
         else -> "ミニアプリ"
@@ -645,6 +649,7 @@ private fun MiniAppDetailView(
                 "upload" -> UploadSettingsView(prefs = prefs)
                 "badge" -> BadgeSettings(pubkey = pubkeyHex, repository = repository)
                 "emoji" -> EmojiSettings(pubkey = pubkeyHex, repository = repository)
+                "mute" -> MuteList(pubkey = pubkeyHex, repository = repository)
                 "elevenlabs" -> ElevenLabsSettings(prefs = prefs)
                 "backup" -> EventBackupSettings(pubkey = pubkeyHex, repository = repository)
                 else -> {
