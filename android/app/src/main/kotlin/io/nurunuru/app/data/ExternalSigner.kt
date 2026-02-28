@@ -192,8 +192,11 @@ object ExternalSigner : AppSigner {
         val currentUser = intent.getStringExtra("current_user") ?: ""
         val pubKey = intent.getStringExtra("pubkey") ?: ""
 
-        Log.d("ExternalSigner", "tryContentResolver: type=$type, data.len=${data.length}, currentUser=$currentUser, pubKey=$pubKey")
-        return queryProvider(context, CONTENT_URI, type, data, currentUser, pubKey)
+        // For sign_event, the signer's pubkey is often passed as current_user
+        val effectivePubKey = if (pubKey.isBlank() && type == "sign_event") currentUser else pubKey
+
+        Log.d("ExternalSigner", "tryContentResolver: type=$type, data.len=${data.length}, currentUser=$currentUser, effectivePubKey=$effectivePubKey")
+        return queryProvider(context, CONTENT_URI, type, data, currentUser, effectivePubKey)
     }
 
     private fun queryProvider(
@@ -205,14 +208,22 @@ object ExternalSigner : AppSigner {
         pubKey: String
     ): Intent? {
         try {
-            Log.d("ExternalSigner", "Querying provider: $baseUri/$type with currentUser: $currentUser")
+            Log.d("ExternalSigner", "Querying provider: $baseUri/$type with currentUser: $currentUser, pubKey: $pubKey")
             val uri = Uri.parse("$baseUri/$type")
 
-            // NIP-55 Content Provider query:
-            // projection: [data (event json or content), pubKey (receiver), currentUser]
-            val projection = arrayOf(data, pubKey, currentUser)
+            // NIP-55 Content Provider query (Amber/Official style):
+            // projection: [data]
+            // selectionArgs: [currentUser, pubKey]
+            val projection = arrayOf(data)
+            // Some signers expect [currentUser, pubKey], others [pubKey, currentUser].
+            // We'll try to be compatible.
+            val selectionArgs = if (pubKey.isNotBlank() && pubKey != currentUser) {
+                arrayOf(pubKey, currentUser)
+            } else {
+                arrayOf(currentUser)
+            }
 
-            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+            context.contentResolver.query(uri, projection, null, selectionArgs, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val signatureIndex = cursor.getColumnIndex("signature")
                     val sigIndex = cursor.getColumnIndex("sig")
