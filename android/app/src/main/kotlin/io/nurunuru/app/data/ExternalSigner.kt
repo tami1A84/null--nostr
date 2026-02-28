@@ -188,15 +188,15 @@ object ExternalSigner : AppSigner {
 
     private fun tryContentResolver(context: Context, intent: Intent): Intent? {
         val type = intent.getStringExtra("type") ?: return null
-        val data = if (type == "sign_event") {
-            intent.data?.toString()?.removePrefix("nostrsigner:") ?: ""
-        } else {
-            intent.data?.toString()?.removePrefix("nostrsigner:") ?: ""
-        }
+        val data = intent.data?.toString()?.removePrefix("nostrsigner:") ?: ""
         val currentUser = intent.getStringExtra("current_user") ?: ""
         val pubKey = intent.getStringExtra("pubkey") ?: ""
 
-        return queryProvider(context, CONTENT_URI, type, data, currentUser, pubKey)
+        // For sign_event, the signer's pubkey is often passed as current_user
+        val effectivePubKey = if (pubKey.isBlank() && type == "sign_event") currentUser else pubKey
+
+        Log.d("ExternalSigner", "tryContentResolver: type=$type, data.len=${data.length}, currentUser=$currentUser, effectivePubKey=$effectivePubKey")
+        return queryProvider(context, CONTENT_URI, type, data, currentUser, effectivePubKey)
     }
 
     private fun queryProvider(
@@ -208,25 +208,29 @@ object ExternalSigner : AppSigner {
         pubKey: String
     ): Intent? {
         try {
-            Log.d("ExternalSigner", "Querying provider: $baseUri/$type with currentUser: $currentUser")
+            Log.d("ExternalSigner", "Querying provider: $baseUri/$type with currentUser: $currentUser, pubKey: $pubKey")
             val uri = Uri.parse("$baseUri/$type")
 
-            // NIP-55 Content Provider query:
-            // projection: data (event json or content)
-            // selection: [pubKey, currentUser]
-            val selectionArgs = if (pubKey.isNotBlank()) {
+            // NIP-55 Content Provider query (Amber/Official style):
+            // projection: [data]
+            // selectionArgs: [currentUser, pubKey]
+            val projection = arrayOf(data)
+            // Some signers expect [currentUser, pubKey], others [pubKey, currentUser].
+            // We'll try to be compatible.
+            val selectionArgs = if (pubKey.isNotBlank() && pubKey != currentUser) {
                 arrayOf(pubKey, currentUser)
             } else {
                 arrayOf(currentUser)
             }
 
-            context.contentResolver.query(uri, null, data, selectionArgs, null)?.use { cursor ->
+            context.contentResolver.query(uri, projection, null, selectionArgs, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val signatureIndex = cursor.getColumnIndex("signature")
+                    val sigIndex = cursor.getColumnIndex("sig")
                     val eventIndex = cursor.getColumnIndex("event")
                     val resultIndex = cursor.getColumnIndex("result")
 
-                    val signature = if (signatureIndex != -1) cursor.getString(signatureIndex) else null
+                    val signature = if (signatureIndex != -1) cursor.getString(signatureIndex) else if (sigIndex != -1) cursor.getString(sigIndex) else null
                     val event = if (eventIndex != -1) cursor.getString(eventIndex) else null
                     val result = if (resultIndex != -1) cursor.getString(resultIndex) else null
 

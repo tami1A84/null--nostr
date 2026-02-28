@@ -132,7 +132,11 @@ fun PostModal(
                         if (bytes != null) {
                             val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
                             val url = repository.uploadImage(bytes, mimeType)
-                            if (url != null) uploadedUrls.add(url)
+                            if (url != null) {
+                                uploadedUrls.add(url)
+                            } else {
+                                throw Exception("画像のアップロードに失敗しました (${index + 1}枚目)。署名が拒否されたか、サーバーエラーの可能性があります。")
+                            }
                         }
                     }
                     if (uploadedUrls.isNotEmpty()) {
