@@ -111,7 +111,7 @@ object ImageUploadUtils {
                     return@withContext null
                 }
 
-                Log.d("ImageUploadUtils", "Upload response: $body")
+                Log.d("ImageUploadUtils", "Upload success. Response: $body")
                 val root = json.parseToJsonElement(body).jsonObject
 
                 // nostr.build V2 response handling

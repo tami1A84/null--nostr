@@ -188,14 +188,11 @@ object ExternalSigner : AppSigner {
 
     private fun tryContentResolver(context: Context, intent: Intent): Intent? {
         val type = intent.getStringExtra("type") ?: return null
-        val data = if (type == "sign_event") {
-            intent.data?.toString()?.removePrefix("nostrsigner:") ?: ""
-        } else {
-            intent.data?.toString()?.removePrefix("nostrsigner:") ?: ""
-        }
+        val data = intent.data?.toString()?.removePrefix("nostrsigner:") ?: ""
         val currentUser = intent.getStringExtra("current_user") ?: ""
         val pubKey = intent.getStringExtra("pubkey") ?: ""
 
+        Log.d("ExternalSigner", "tryContentResolver: type=$type, data.len=${data.length}, currentUser=$currentUser, pubKey=$pubKey")
         return queryProvider(context, CONTENT_URI, type, data, currentUser, pubKey)
     }
 
@@ -212,21 +209,17 @@ object ExternalSigner : AppSigner {
             val uri = Uri.parse("$baseUri/$type")
 
             // NIP-55 Content Provider query:
-            // projection: data (event json or content)
-            // selection: [pubKey, currentUser]
-            val selectionArgs = if (pubKey.isNotBlank()) {
-                arrayOf(pubKey, currentUser)
-            } else {
-                arrayOf(currentUser)
-            }
+            // projection: [data (event json or content), pubKey (receiver), currentUser]
+            val projection = arrayOf(data, pubKey, currentUser)
 
-            context.contentResolver.query(uri, null, data, selectionArgs, null)?.use { cursor ->
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val signatureIndex = cursor.getColumnIndex("signature")
+                    val sigIndex = cursor.getColumnIndex("sig")
                     val eventIndex = cursor.getColumnIndex("event")
                     val resultIndex = cursor.getColumnIndex("result")
 
-                    val signature = if (signatureIndex != -1) cursor.getString(signatureIndex) else null
+                    val signature = if (signatureIndex != -1) cursor.getString(signatureIndex) else if (sigIndex != -1) cursor.getString(sigIndex) else null
                     val event = if (eventIndex != -1) cursor.getString(eventIndex) else null
                     val result = if (resultIndex != -1) cursor.getString(resultIndex) else null
 
