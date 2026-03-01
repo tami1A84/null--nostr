@@ -2,6 +2,7 @@ package io.nurunuru.app.data
 
 import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
+import kotlin.math.pow
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import okhttp3.OkHttpClient
@@ -1103,7 +1104,7 @@ class NostrRepository(
             val timeMultiplier = if (ageHours < 1.0) {
                 Constants.TimeDecay.FRESHNESS_BOOST // 1.5x boost for <1 hour
             } else {
-                kotlin.math.max(0.001, kotlin.math.pow(0.5, ageHours / Constants.TimeDecay.HALF_LIFE_HOURS))
+                kotlin.math.max(0.001, 0.5.pow(ageHours / Constants.TimeDecay.HALF_LIFE_HOURS))
             }
 
             ScoredPost(

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import io.nurunuru.app.data.Constants
 import io.nurunuru.app.data.models.UserProfile
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -42,6 +43,7 @@ class LRUCache<K, V>(private val maxSize: Int) {
     fun keys(): Set<K> = cache.keys.toSet()
 }
 
+@Serializable
 private data class CacheEntry(val data: String, val expiry: Long)
 
 class NostrCache(context: Context) {
@@ -58,7 +60,7 @@ class NostrCache(context: Context) {
     private fun getRaw(key: String): String? {
         val raw = prefs.getString(prefix + key, null) ?: return null
         return try {
-            val entry = json.decodeFromString<CacheEntry>(CacheEntry.serializer(), raw)
+            val entry = json.decodeFromString<CacheEntry>(raw)
             if (System.currentTimeMillis() > entry.expiry) {
                 prefs.edit().remove(prefix + key).apply()
                 null
@@ -71,7 +73,7 @@ class NostrCache(context: Context) {
 
     private fun setRaw(key: String, data: String, durationMs: Long) {
         val entry = CacheEntry(data, System.currentTimeMillis() + durationMs)
-        prefs.edit().putString(prefix + key, json.encodeToString(CacheEntry.serializer(), entry)).apply()
+        prefs.edit().putString(prefix + key, json.encodeToString(entry)).apply()
     }
 
     private fun removeRaw(key: String) {
@@ -168,7 +170,7 @@ class NostrCache(context: Context) {
                 val raw = prefs.getString(key, null)
                 if (raw != null) {
                     try {
-                        val entry = json.decodeFromString<CacheEntry>(CacheEntry.serializer(), raw)
+                        val entry = json.decodeFromString<CacheEntry>(raw)
                         if (now > entry.expiry) keysToRemove.add(key)
                     } catch (_: Exception) {
                         keysToRemove.add(key)
