@@ -3,15 +3,13 @@ package io.nurunuru.app.viewmodel
 import android.app.Application
 import android.content.Context
 import androidx.credentials.CreatePublicKeyCredentialRequest
-import androidx.credentials.CreatePublicKeyCredentialResponse
 import androidx.credentials.CredentialManager
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.nurunuru.app.data.NostrClient
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.NostrRepository
+import io.nurunuru.app.data.SecureKeyManager
 import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlinx.coroutines.*
@@ -22,13 +20,19 @@ import kotlinx.coroutines.flow.asStateFlow
 sealed class AuthState {
     object Checking : AuthState()
     object LoggedOut : AuthState()
-    data class LoggedIn(val pubkeyHex: String, val privateKeyHex: String?, val isExternal: Boolean = false) : AuthState()
+    /** 秘密鍵は AuthState に含めない — SecureKeyManager 経由でのみアクセス */
+    data class LoggedIn(
+        val pubkeyHex: String,
+        val isExternal: Boolean = false,
+        val hasInternalKey: Boolean = false
+    ) : AuthState()
+    /** 生体認証が必要な状態 */
+    object BiometricRequired : AuthState()
     data class Error(val message: String) : AuthState()
     object ExternalSignerWaiting : AuthState()
 }
 
 data class GeneratedAccount(
-    val privateKeyHex: String,
     val pubkeyHex: String,
     val nsec: String,
     val npub: String
@@ -36,29 +40,85 @@ data class GeneratedAccount(
 
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val prefs = AppPreferences(application)
+    val prefs = AppPreferences(application)
+    val keyManager = SecureKeyManager(application)
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Checking)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
     init {
-        checkStoredLogin()
+        migrateAndCheckLogin()
+    }
+
+    /**
+     * 旧形式からのマイグレーション + ログイン状態チェック。
+     */
+    private fun migrateAndCheckLogin() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // 旧 EncryptedSharedPreferences からの移行
+            @Suppress("DEPRECATION")
+            if (prefs.privateKeyHex != null && !keyManager.hasStoredKey()) {
+                keyManager.migrateFromLegacy(prefs)
+            }
+
+            checkStoredLogin()
+        }
     }
 
     private fun checkStoredLogin() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val privKey = prefs.privateKeyHex
-            val pubKey = prefs.publicKeyHex
-            val isExternal = prefs.isExternalSigner
-            if (pubKey != null && (privKey != null || isExternal)) {
-                if (isExternal) {
-                    io.nurunuru.app.data.ExternalSigner.setCurrentUser(pubKey)
+        val pubKey = prefs.publicKeyHex
+        val isExternal = prefs.isExternalSigner
+        val hasSecureKey = keyManager.hasStoredKey()
+
+        if (pubKey != null && (hasSecureKey || isExternal)) {
+            if (isExternal) {
+                io.nurunuru.app.data.ExternalSigner.setCurrentUser(pubKey)
+                _authState.value = AuthState.LoggedIn(pubKey, isExternal = true)
+            } else if (hasSecureKey) {
+                if (keyManager.isBiometricBound()) {
+                    // 生体認証が必要 → BiometricRequired 状態にして UI に委譲
+                    _authState.value = AuthState.BiometricRequired
+                } else {
+                    // 生体認証不要 → 直接復号
+                    if (keyManager.unlockKeyDirect()) {
+                        _authState.value = AuthState.LoggedIn(
+                            pubKey,
+                            isExternal = false,
+                            hasInternalKey = true
+                        )
+                    } else {
+                        _authState.value = AuthState.Error("秘密鍵の復号に失敗しました")
+                    }
                 }
-                _authState.value = AuthState.LoggedIn(pubKey, privKey, isExternal)
+            }
+        } else {
+            _authState.value = AuthState.LoggedOut
+        }
+    }
+
+    /**
+     * 生体認証成功時に呼ばれる。
+     */
+    fun onBiometricSuccess(cipher: javax.crypto.Cipher) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val pubKey = prefs.publicKeyHex
+            if (pubKey != null && keyManager.unlockKey(cipher)) {
+                _authState.value = AuthState.LoggedIn(
+                    pubKey,
+                    isExternal = false,
+                    hasInternalKey = true
+                )
             } else {
-                _authState.value = AuthState.LoggedOut
+                _authState.value = AuthState.Error("秘密鍵のアンロックに失敗しました")
             }
         }
+    }
+
+    /**
+     * 生体認証失敗/キャンセル時。
+     */
+    fun onBiometricFailure() {
+        _authState.value = AuthState.LoggedOut
     }
 
     fun generateNewAccount(): GeneratedAccount? {
@@ -66,11 +126,21 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             val keys = NostrKeyUtils.generateKeys()
             val privHex = keys.secretKey().toHex()
             val pubHex = keys.publicKey().toHex()
+            val nsec = NostrKeyUtils.encodeNsec(privHex) ?: ""
+            val npub = NostrKeyUtils.encodeNpub(pubHex) ?: ""
+
+            // 秘密鍵を SecureKeyManager に安全に保存
+            val keyBytes = hexToBytes(privHex)
+            if (keyBytes != null) {
+                keyManager.generateKeystoreKey(requireBiometric = false)
+                keyManager.storeKey(keyBytes, pubHex)
+                keyBytes.fill(0)
+            }
+
             GeneratedAccount(
-                privateKeyHex = privHex,
                 pubkeyHex = pubHex,
-                nsec = NostrKeyUtils.encodeNsec(privHex) ?: "",
-                npub = NostrKeyUtils.encodeNpub(pubHex) ?: ""
+                nsec = nsec,
+                npub = npub
             )
         } catch (e: Exception) {
             null
@@ -90,7 +160,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         relays: List<Triple<String, Boolean, Boolean>>? = null
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            // 1. Setup temporary client with default JP relays or provided relays
             val targetRelays = relays?.map { it.first } ?: listOf("wss://yabu.me", "wss://relay.nostr.wirednet.jp", "wss://r.kojira.io")
             val client = NostrClient(
                 context = getApplication(),
@@ -99,12 +168,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             )
             client.connect()
 
-            // Give it a moment to connect
             delay(1500)
 
             val repository = NostrRepository(client, prefs)
 
-            // 2. Publish Kind 0 (Metadata)
             val profile = UserProfile(
                 pubkey = signer.getPublicKeyHex(),
                 name = name,
@@ -119,12 +186,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             )
             repository.updateProfile(profile)
 
-            // 3. Publish Kind 10002 (Relay List)
             val relayList = relays ?: targetRelays.map { Triple(it, true, true) }
             repository.updateRelayList(relayList)
 
-            // 4. Disconnect
-            delay(1000) // Wait for sends to finish
+            delay(1000)
             client.disconnect()
             true
         } catch (e: Exception) {
@@ -132,22 +197,21 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun completeRegistration(privKeyHex: String, pubKeyHex: String) {
+    fun completeRegistration(pubKeyHex: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            prefs.privateKeyHex = privKeyHex
+            // 秘密鍵は既に SecureKeyManager に保存済み
             prefs.publicKeyHex = pubKeyHex
             prefs.isExternalSigner = false
-            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex, false)
+            _authState.value = AuthState.LoggedIn(pubKeyHex, isExternal = false, hasInternalKey = true)
         }
     }
 
     fun loginWithAmber(pubkey: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            prefs.privateKeyHex = null
             prefs.publicKeyHex = pubkey
             prefs.isExternalSigner = true
             io.nurunuru.app.data.ExternalSigner.setCurrentUser(pubkey)
-            _authState.value = AuthState.LoggedIn(pubkey, null, true)
+            _authState.value = AuthState.LoggedIn(pubkey, isExternal = true)
         }
     }
 
@@ -167,10 +231,26 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            prefs.privateKeyHex = privKeyHex
-            prefs.publicKeyHex = pubKeyHex
-            prefs.isExternalSigner = false
-            _authState.value = AuthState.LoggedIn(pubKeyHex, privKeyHex, false)
+            try {
+                // hex → ByteArray → SecureKeyManager で暗号化保存
+                val keyBytes = hexToBytes(privKeyHex)
+                if (keyBytes == null || keyBytes.size != 32) {
+                    _authState.value = AuthState.Error("秘密鍵のバイト変換に失敗しました")
+                    return@launch
+                }
+
+                keyManager.generateKeystoreKey(requireBiometric = false)
+                keyManager.storeKey(keyBytes, pubKeyHex)
+                keyBytes.fill(0)
+
+                prefs.publicKeyHex = pubKeyHex
+                prefs.isExternalSigner = false
+                prefs.clearPrivateKey()
+
+                _authState.value = AuthState.LoggedIn(pubKeyHex, isExternal = false, hasInternalKey = true)
+            } catch (e: Exception) {
+                _authState.value = AuthState.Error("鍵の保存に失敗しました: ${e.message}")
+            }
         }
     }
 
@@ -179,7 +259,6 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun loginWithPasskey(context: Context) {
         try {
-            // Using a unique parameter to bypass cache and force a fresh check
             val nonce = System.currentTimeMillis()
             val redirectUri = android.net.Uri.encode("io.nurunuru.app://login")
             val url = "https://www.nullnull.app/?redirect_uri=$redirectUri&nonce=$nonce"
@@ -189,11 +268,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 .setShareState(androidx.browser.customtabs.CustomTabsIntent.SHARE_STATE_OFF)
                 .build()
 
-            // Try to force Chrome if available to ensure session/passkey sharing
             customTabsIntent.intent.setPackage("com.android.chrome")
             customTabsIntent.launchUrl(context, android.net.Uri.parse(url))
         } catch (e: Exception) {
-            // Fallback to standard browser intent
             try {
                 val intent = android.content.Intent(
                     android.content.Intent.ACTION_VIEW,
@@ -233,7 +310,29 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * 生体認証を有効化する (設定画面から呼ばれる)。
+     */
+    fun enableBiometric() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val keyBytes = keyManager.getKeyBytes() ?: return@launch
+            val pubkey = keyManager.getStoredPublicKeyHex() ?: return@launch
+
+            try {
+                keyManager.deleteAll()
+                keyManager.generateKeystoreKey(requireBiometric = true)
+                keyManager.storeKey(keyBytes, pubkey)
+                keyBytes.fill(0)
+            } catch (e: Exception) {
+                keyManager.generateKeystoreKey(requireBiometric = false)
+                keyManager.storeKey(keyBytes, pubkey)
+                keyBytes.fill(0)
+            }
+        }
+    }
+
     fun logout() {
+        keyManager.deleteAll()
         prefs.clear()
         _authState.value = AuthState.LoggedOut
     }
@@ -241,6 +340,17 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     fun clearError() {
         if (_authState.value is AuthState.Error) {
             _authState.value = AuthState.LoggedOut
+        }
+    }
+
+    private fun hexToBytes(hex: String): ByteArray? {
+        if (hex.length % 2 != 0) return null
+        return try {
+            ByteArray(hex.length / 2) { i ->
+                hex.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+            }
+        } catch (e: NumberFormatException) {
+            null
         }
     }
 }

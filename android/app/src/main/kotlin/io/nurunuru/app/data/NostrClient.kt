@@ -98,7 +98,10 @@ class NostrClient(
     }
 
     private fun privateKeyHexForSdk(): String {
-        return (signer as? InternalSigner)?.privateKeyHex ?: ""
+        return (signer as? InternalSigner)?.let {
+            // SecureKeyManager 経由で一時的に取得
+            it.getKeyHexFromManager()
+        } ?: ""
     }
 
     private suspend fun signAndSend(builder: EventBuilder, targetRelays: List<String>? = null): Event? {

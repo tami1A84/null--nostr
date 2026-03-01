@@ -144,7 +144,7 @@ fun SignUpModal(
                                         isLoading = true
                                         coroutineScope.launch {
                                             // Publish metadata and relay list
-                                            val internalSigner = io.nurunuru.app.data.InternalSigner(generatedAccount!!.privateKeyHex)
+                                            val internalSigner = io.nurunuru.app.data.InternalSigner(viewModel.keyManager)
                                             val relayTriples: List<Triple<String, Boolean, Boolean>>? = selectedRelays?.map { Triple(it.url, it.read, it.write) }
                                             viewModel.publishInitialMetadata(
                                                 signer = internalSigner,
@@ -159,8 +159,8 @@ fun SignUpModal(
                                                 relays = relayTriples
                                             )
                                             // Complete registration locally
+                                            // 秘密鍵は generateNewAccount() で既に SecureKeyManager に保存済み
                                             viewModel.completeRegistration(
-                                                generatedAccount!!.privateKeyHex,
                                                 generatedAccount!!.pubkeyHex
                                             )
                                             step = "success"

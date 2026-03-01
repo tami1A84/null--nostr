@@ -524,7 +524,7 @@ private fun PasskeySettingsSection(prefs: AppPreferences, pubkeyHex: String) {
                     }
 
                     if (showNsec) {
-                        val nsec = remember(pubkeyHex) { prefs.privateKeyHex?.let { NostrKeyUtils.encodeNsec(it) } ?: "取得できません" }
+                        val nsec = remember(pubkeyHex) { authViewModel.keyManager.getKeyHexTemporary()?.let { NostrKeyUtils.encodeNsec(it) } ?: "取得できません" }
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Surface(
                                 color = Color.Red.copy(alpha = 0.1f),
