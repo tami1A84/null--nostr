@@ -80,13 +80,24 @@ object NostrKeyUtils {
         return npub.take(chars + 5) // npub1 prefix + chars
     }
 
-    /** Parse nostr link (note1, npub1, etc.) */
+    /** Parse nostr link (note1, npub1, nevent1, nprofile1, naddr1) */
     fun parseNostrLink(input: String): NostrLink? {
         return try {
             when {
                 input.startsWith("npub1") -> NostrLink("npub", PublicKey.parse(input).toHex())
                 input.startsWith("note1") -> NostrLink("note", EventId.parse(input).toHex())
-                // Basic support for now, complex NIP-19 parsing skipped to ensure build stability
+                input.startsWith("nevent1") -> {
+                    val nip19 = Nip19Event.fromBech32(input)
+                    NostrLink("nevent", nip19.eventId().toHex())
+                }
+                input.startsWith("nprofile1") -> {
+                    val nip19 = Nip19Profile.fromBech32(input)
+                    NostrLink("nprofile", nip19.publicKey().toHex())
+                }
+                input.startsWith("naddr1") -> {
+                    val coord = Coordinate.parse(input)
+                    NostrLink("naddr", coord.identifier())
+                }
                 else -> null
             }
         } catch (e: Exception) {

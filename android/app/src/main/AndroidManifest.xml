@@ -9,6 +9,8 @@
 
     <queries>
         <package android:name="com.greenart7c3.nostrsigner" />
+        <provider android:authorities="com.greenart7c3.nostrsigner" />
+        <provider android:authorities="com.nostr.signer" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />

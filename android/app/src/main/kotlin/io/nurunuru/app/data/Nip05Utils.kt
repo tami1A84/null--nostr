@@ -47,12 +47,18 @@ object Nip05Utils {
                 val body = response.body?.string() ?: return@withContext false
                 val root = json.parseToJsonElement(body).jsonObject
                 val names = root["names"]?.jsonObject ?: return@withContext false
-                val foundPubkey = names[name]?.jsonPrimitive?.content ?: return@withContext false
+                val foundPubkey = names[name]?.jsonPrimitive?.content ?: run {
+                    cache[cacheKey] = false
+                    return@withContext false
+                }
 
-                return@withContext foundPubkey.lowercase() == pubkeyHex.lowercase()
+                val result = foundPubkey.lowercase() == pubkeyHex.lowercase()
+                cache[cacheKey] = result
+                return@withContext result
             }
         } catch (e: Exception) {
             Log.w("Nip05Utils", "Verification failed for $nip05: ${e.message}")
+            cache[cacheKey] = false
             false
         }
     }

@@ -61,20 +61,14 @@ fun NotificationModal(
     LaunchedEffect(Unit) {
         scope.launch {
             try {
-                // Simplified fetching logic mirroring web
-                // 1. Fetch reactions and zaps targeting me
-                // This is a bit complex for a Composable, but let's do a basic version
-                // We'd ideally want to query by #p tag. NostrRepository doesn't have a direct method for this yet that returns everything.
-                // For now, let's assume we can fetch them.
-
-                // (Stubbed implementation as NostrRepository would need new methods for efficient notification fetching)
-                // In a real scenario, I'd add fetchNotifications to NostrRepository.
-
-                // For the purpose of this task (syncing UI), I'll focus on the layout.
-                loading = false
+                val result = repository.fetchNotifications(myPubkey)
+                notifications = result.items
+                profiles = result.profiles
+                originalPosts = result.originalPosts
             } catch (e: Exception) {
-                loading = false
+                android.util.Log.w("NotificationModal", "Failed to fetch notifications: ${e.message}")
             }
+            loading = false
         }
     }
 

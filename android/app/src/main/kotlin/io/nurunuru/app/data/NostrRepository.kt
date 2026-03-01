@@ -74,15 +74,152 @@ class NostrRepository(
         return enrichPosts(events)
     }
 
-    /** Search for notes by text (NIP-50). */
+    /** Search for notes by text (NIP-50) using dedicated search relay. */
     suspend fun searchNotes(query: String, limit: Int = 30): List<ScoredPost> {
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
             search = query,
             limit = limit
         )
-        val events = client.fetchEvents(filter, timeoutMs = 6_000)
+        val events = client.fetchEventsFrom(
+            listOf(NostrClient.SEARCH_RELAY), filter, timeoutMs = 6_000
+        )
         return enrichPosts(events)
+    }
+
+    // ─── Notifications ─────────────────────────────────────────────────────────
+
+    data class NotificationResult(
+        val items: List<io.nurunuru.app.ui.components.NotificationItem>,
+        val profiles: Map<String, UserProfile>,
+        val originalPosts: Map<String, NostrEvent>
+    )
+
+    /** Fetch notifications (reactions + zaps targeting the user). */
+    suspend fun fetchNotifications(pubkeyHex: String, limit: Int = 50): NotificationResult {
+        val now = System.currentTimeMillis() / 1000
+
+        // 1. Fetch reactions (#p tag targeting me)
+        val reactionFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.REACTION),
+            tags = mapOf("p" to listOf(pubkeyHex)),
+            since = now - 86400 * 7, // last 7 days
+            limit = limit
+        )
+
+        // 2. Fetch zaps (#p tag targeting me)
+        val zapFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.ZAP_RECEIPT),
+            tags = mapOf("p" to listOf(pubkeyHex)),
+            since = now - 86400 * 7,
+            limit = limit
+        )
+
+        val reactions = client.fetchEvents(reactionFilter, timeoutMs = 5_000)
+        val zaps = client.fetchEvents(zapFilter, timeoutMs = 5_000)
+
+        // 3. Build notification items
+        val notificationItems = mutableListOf<io.nurunuru.app.ui.components.NotificationItem>()
+        val targetEventIds = mutableSetOf<String>()
+        val notifierPubkeys = mutableSetOf<String>()
+
+        for (event in reactions) {
+            if (event.pubkey == pubkeyHex) continue // Skip self-reactions
+            val targetEvent = event.getTagValue("e")
+            targetEvent?.let { targetEventIds.add(it) }
+            notifierPubkeys.add(event.pubkey)
+
+            // Check for custom emoji
+            val emojiTag = event.tags.firstOrNull { it.getOrNull(0) == "emoji" }
+            val emojiUrl = emojiTag?.getOrNull(2)
+
+            notificationItems.add(
+                io.nurunuru.app.ui.components.NotificationItem(
+                    id = event.id,
+                    pubkey = event.pubkey,
+                    type = "reaction",
+                    createdAt = event.createdAt,
+                    targetEventId = targetEvent,
+                    comment = event.content.takeIf { it != "+" },
+                    emojiUrl = emojiUrl
+                )
+            )
+        }
+
+        for (event in zaps) {
+            val targetEvent = event.getTagValue("e")
+            targetEvent?.let { targetEventIds.add(it) }
+
+            // Parse zap amount from bolt11 tag
+            val bolt11 = event.getTagValue("bolt11") ?: ""
+            val amount = parseBolt11Amount(bolt11)
+
+            // Parse sender from description tag (zap request)
+            val descTag = event.getTagValue("description")
+            val senderPubkey = if (descTag != null) {
+                try {
+                    val descObj = json.parseToJsonElement(descTag).jsonObject
+                    descObj["pubkey"]?.jsonPrimitive?.content
+                } catch (e: Exception) { null }
+            } else null
+
+            val zapPubkey = senderPubkey ?: event.pubkey
+            if (zapPubkey == pubkeyHex) continue
+            notifierPubkeys.add(zapPubkey)
+
+            val comment = if (descTag != null) {
+                try {
+                    json.parseToJsonElement(descTag).jsonObject["content"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                } catch (e: Exception) { null }
+            } else null
+
+            notificationItems.add(
+                io.nurunuru.app.ui.components.NotificationItem(
+                    id = event.id,
+                    pubkey = zapPubkey,
+                    type = "zap",
+                    createdAt = event.createdAt,
+                    amount = amount,
+                    comment = comment,
+                    targetEventId = targetEvent
+                )
+            )
+        }
+
+        // 4. Fetch original posts
+        val originalPosts = mutableMapOf<String, NostrEvent>()
+        if (targetEventIds.isNotEmpty()) {
+            val postsFilter = NostrClient.Filter(
+                ids = targetEventIds.take(50).toList()
+            )
+            val posts = client.fetchEvents(postsFilter, timeoutMs = 4_000)
+            posts.forEach { originalPosts[it.id] = it }
+        }
+
+        // 5. Fetch notifier profiles
+        val profiles = fetchProfiles(notifierPubkeys.toList())
+
+        // 6. Sort by time descending
+        val sorted = notificationItems.sortedByDescending { it.createdAt }
+
+        return NotificationResult(sorted, profiles, originalPosts)
+    }
+
+    private fun parseBolt11Amount(bolt11: String): Long {
+        if (bolt11.isBlank()) return 0
+        // bolt11 format: lnbc<amount><multiplier>...
+        val regex = Regex("lnbc(\\d+)([munp]?)")
+        val match = regex.find(bolt11.lowercase()) ?: return 0
+        val num = match.groupValues[1].toLongOrNull() ?: return 0
+        val multiplier = match.groupValues[2]
+        return when (multiplier) {
+            "m" -> num * 100_000 // milli-BTC to sats
+            "u" -> num * 100     // micro-BTC to sats
+            "n" -> num / 10      // nano-BTC to sats
+            "p" -> num / 10_000  // pico-BTC to sats
+            "" -> num * 100_000_000 // BTC to sats
+            else -> num
+        }
     }
 
     /** Fetch a specific event by ID. */

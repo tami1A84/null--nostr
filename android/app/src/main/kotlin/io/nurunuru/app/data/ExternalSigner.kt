@@ -34,7 +34,12 @@ object ExternalSigner : AppSigner {
     private const val ACTION_GET_PUBLIC_KEY_LEGACY = "com.greenart7c3.nostr.signer.GET_PUBLIC_KEY"
     private const val ACTION_SIGN_EVENT_LEGACY = "com.greenart7c3.nostr.signer.SIGN_EVENT"
 
-    private const val CONTENT_URI = "content://com.nostr.signer"
+    // NIP-55 Content Provider URIs (try multiple authorities for compatibility)
+    private val CONTENT_URIS = listOf(
+        "content://com.greenart7c3.nostrsigner",
+        "content://com.nostr.signer"
+    )
+    @Volatile private var workingContentUri: String? = null
 
     private var pendingRequest: CompletableDeferred<Intent>? = null
     private val mutex = kotlinx.coroutines.sync.Mutex()
@@ -188,15 +193,27 @@ object ExternalSigner : AppSigner {
 
     private fun tryContentResolver(context: Context, intent: Intent): Intent? {
         val type = intent.getStringExtra("type") ?: return null
-        val data = if (type == "sign_event") {
-            intent.data?.toString()?.removePrefix("nostrsigner:") ?: ""
-        } else {
-            intent.data?.toString()?.removePrefix("nostrsigner:") ?: ""
-        }
+        val data = intent.data?.toString()?.removePrefix("nostrsigner:") ?: ""
         val currentUser = intent.getStringExtra("current_user") ?: ""
         val pubKey = intent.getStringExtra("pubkey") ?: ""
 
-        return queryProvider(context, CONTENT_URI, type, data, currentUser, pubKey)
+        // Try previously working URI first
+        workingContentUri?.let { uri ->
+            val result = queryProvider(context, uri, type, data, currentUser, pubKey)
+            if (result != null) return result
+        }
+
+        // Try all known Content Provider URIs
+        for (uri in CONTENT_URIS) {
+            if (uri == workingContentUri) continue
+            val result = queryProvider(context, uri, type, data, currentUser, pubKey)
+            if (result != null) {
+                workingContentUri = uri
+                Log.d("ExternalSigner", "Found working Content Provider URI: $uri")
+                return result
+            }
+        }
+        return null
     }
 
     private fun queryProvider(
@@ -222,6 +239,10 @@ object ExternalSigner : AppSigner {
 
             context.contentResolver.query(uri, null, data, selectionArgs, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
+                    // Log all available columns for debugging
+                    val columnNames = cursor.columnNames
+                    Log.d("ExternalSigner", "Provider columns: ${columnNames.joinToString()}")
+
                     val signatureIndex = cursor.getColumnIndex("signature")
                     val eventIndex = cursor.getColumnIndex("event")
                     val resultIndex = cursor.getColumnIndex("result")
@@ -230,9 +251,17 @@ object ExternalSigner : AppSigner {
                     val event = if (eventIndex != -1) cursor.getString(eventIndex) else null
                     val result = if (resultIndex != -1) cursor.getString(resultIndex) else null
 
-                    Log.d("ExternalSigner", "Provider result: sig=${signature?.take(10)}..., event=${event?.take(10)}..., res=${result?.take(10)}...")
+                    Log.d("ExternalSigner", "Provider result: sig=${signature?.take(20)}..., event=${event?.take(20)}..., res=${result?.take(20)}...")
 
                     if (signature == null && event == null && result == null) {
+                        // Try reading any non-null column as fallback
+                        for (i in 0 until cursor.columnCount) {
+                            val value = cursor.getString(i)
+                            if (!value.isNullOrBlank()) {
+                                Log.d("ExternalSigner", "Fallback column[${columnNames[i]}] = ${value.take(20)}...")
+                                return Intent().apply { putExtra("signature", value) }
+                            }
+                        }
                         Log.w("ExternalSigner", "Provider returned empty columns")
                         return null
                     }
