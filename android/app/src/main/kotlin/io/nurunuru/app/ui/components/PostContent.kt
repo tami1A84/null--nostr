@@ -353,10 +353,19 @@ fun EmbeddedNostrContent(
     var note by remember { mutableStateOf<ScoredPost?>(null) }
     var isLoading by remember { mutableStateOf(true) }
 
+    var profilePubkey by remember { mutableStateOf<String?>(null) }
+    var profileData by remember { mutableStateOf<io.nurunuru.app.data.models.UserProfile?>(null) }
+
     LaunchedEffect(link) {
         val parsed = io.nurunuru.app.data.NostrKeyUtils.parseNostrLink(bech32)
-        if (parsed != null && (parsed.type == "note" || parsed.type == "nevent")) {
-            note = repository.fetchEvent(parsed.id)
+        if (parsed != null) {
+            when (parsed.type) {
+                "note", "nevent" -> note = repository.fetchEvent(parsed.id)
+                "npub", "nprofile" -> {
+                    profilePubkey = parsed.id
+                    profileData = repository.fetchProfile(parsed.id)
+                }
+            }
         }
         isLoading = false
     }
@@ -384,6 +393,40 @@ fun EmbeddedNostrContent(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(text = note!!.event.content, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    } else if (profilePubkey != null) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { onProfileClick(profilePubkey!!) },
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+            border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                UserAvatar(pictureUrl = profileData?.picture, displayName = profileData?.displayedName ?: "", size = 32.dp)
+                Column {
+                    Text(
+                        text = profileData?.displayedName ?: NostrKeyUtils.shortenPubkey(profilePubkey!!),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (!profileData?.about.isNullOrBlank()) {
+                        Text(
+                            text = profileData!!.about!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = LocalNuruColors.current.textSecondary
+                        )
+                    }
+                }
             }
         }
     } else {

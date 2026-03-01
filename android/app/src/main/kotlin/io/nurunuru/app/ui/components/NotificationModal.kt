@@ -25,22 +25,11 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.NostrEvent
-import io.nurunuru.app.data.models.NostrKind
+import io.nurunuru.app.data.models.NotificationItem
 import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import kotlinx.coroutines.launch
-
-data class NotificationItem(
-    val id: String,
-    val pubkey: String,
-    val type: String, // "reaction", "zap", "birthday"
-    val createdAt: Long,
-    val amount: Long? = null,
-    val comment: String? = null,
-    val targetEventId: String? = null,
-    val emojiUrl: String? = null
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,20 +50,14 @@ fun NotificationModal(
     LaunchedEffect(Unit) {
         scope.launch {
             try {
-                // Simplified fetching logic mirroring web
-                // 1. Fetch reactions and zaps targeting me
-                // This is a bit complex for a Composable, but let's do a basic version
-                // We'd ideally want to query by #p tag. NostrRepository doesn't have a direct method for this yet that returns everything.
-                // For now, let's assume we can fetch them.
-
-                // (Stubbed implementation as NostrRepository would need new methods for efficient notification fetching)
-                // In a real scenario, I'd add fetchNotifications to NostrRepository.
-
-                // For the purpose of this task (syncing UI), I'll focus on the layout.
-                loading = false
+                val result = repository.fetchNotifications(myPubkey)
+                notifications = result.items
+                profiles = result.profiles
+                originalPosts = result.originalPosts
             } catch (e: Exception) {
-                loading = false
+                android.util.Log.w("NotificationModal", "Failed to fetch notifications: ${e.message}")
             }
+            loading = false
         }
     }
 

@@ -54,7 +54,7 @@ class HomeViewModel(
 
     fun loadProfile(pubkeyHex: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null, viewingPubkey = pubkeyHex.takeIf { it != myPubkeyHex }) }
+            _uiState.update { it.copy(isLoading = true, error = null, isNip05Verified = false, viewingPubkey = pubkeyHex.takeIf { it != myPubkeyHex }) }
             try {
                 val profile = repository.fetchProfile(pubkeyHex)
                 val posts = repository.fetchUserNotes(pubkeyHex, 50)

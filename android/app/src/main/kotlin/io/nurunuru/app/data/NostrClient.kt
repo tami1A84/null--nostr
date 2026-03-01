@@ -20,6 +20,11 @@ class NostrClient(
     private val relays: List<String>,
     private val signer: AppSigner
 ) {
+    companion object {
+        /** NIP-50 search relay (synced with web: lib/nostr.js SEARCH_RELAY) */
+        const val SEARCH_RELAY = "wss://search.nos.today"
+    }
+
     private var sdkClient: Client? = null
     private val _isReady = kotlinx.coroutines.flow.MutableStateFlow(false)
     val isReady = _isReady.asStateFlow()
@@ -67,6 +72,14 @@ class NostrClient(
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed to add relay $mappedUrl: ${e.message}")
                     }
+                }
+
+                // 5. Add NIP-50 search relay (separate from default relays)
+                try {
+                    client.addRelay(RelayUrl.parse(SEARCH_RELAY))
+                    Log.d(TAG, "Added NIP-50 search relay: $SEARCH_RELAY")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to add search relay: ${e.message}")
                 }
 
                 sdkClient = client
@@ -245,6 +258,31 @@ class NostrClient(
                 eventsWrapper.toVec().map { mapSdkEvent(it) }
             } catch (e: Exception) {
                 Log.w(TAG, "Fetch events failed: ${e.message}")
+                emptyList()
+            }
+        }
+    }
+
+    /** Fetch events from specific relays only (e.g. NIP-50 search relay). */
+    suspend fun fetchEventsFrom(
+        relayUrls: List<String>,
+        filter: Filter,
+        timeoutMs: Long = 5_000
+    ): List<NostrEvent> {
+        return withContext(Dispatchers.IO) {
+            val client = ensureClient() ?: return@withContext emptyList()
+            try {
+                val sdkFilter = mapFilter(filter)
+                val urls = relayUrls.mapNotNull {
+                    try { RelayUrl.parse(it) } catch (e: Exception) { null }
+                }
+                if (urls.isEmpty()) return@withContext emptyList()
+                val eventsWrapper = client.fetchEventsFrom(
+                    urls, sdkFilter, java.time.Duration.ofMillis(timeoutMs)
+                )
+                eventsWrapper.toVec().map { mapSdkEvent(it) }
+            } catch (e: Exception) {
+                Log.w(TAG, "Fetch events from ${relayUrls.joinToString()} failed: ${e.message}")
                 emptyList()
             }
         }

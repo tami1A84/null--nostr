@@ -9,11 +9,19 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 object Nip05Utils {
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .writeTimeout(5, TimeUnit.SECONDS)
+        .build()
     private val json = Json { ignoreUnknownKeys = true }
-    private val cache = ConcurrentHashMap<String, Boolean>()
+
+    private data class CacheEntry(val verified: Boolean, val timestamp: Long)
+    private val cache = ConcurrentHashMap<String, CacheEntry>()
+    private const val CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
 
     suspend fun verifyNip05(nip05: String, pubkeyHex: String): Boolean = withContext(Dispatchers.IO) {
         // Normalize NIP-05 format (handle domain-only format)
@@ -24,7 +32,12 @@ object Nip05Utils {
         }
 
         val cacheKey = "$normalizedNip05:$pubkeyHex"
-        cache[cacheKey]?.let { return@withContext it }
+        cache[cacheKey]?.let { entry ->
+            if (System.currentTimeMillis() - entry.timestamp < CACHE_TTL_MS) {
+                return@withContext entry.verified
+            }
+            cache.remove(cacheKey)
+        }
 
         val parts = normalizedNip05.split("@")
         if (parts.size != 2) return@withContext false
@@ -47,12 +60,18 @@ object Nip05Utils {
                 val body = response.body?.string() ?: return@withContext false
                 val root = json.parseToJsonElement(body).jsonObject
                 val names = root["names"]?.jsonObject ?: return@withContext false
-                val foundPubkey = names[name]?.jsonPrimitive?.content ?: return@withContext false
+                val foundPubkey = names[name]?.jsonPrimitive?.content ?: run {
+                    cache[cacheKey] = CacheEntry(false, System.currentTimeMillis())
+                    return@withContext false
+                }
 
-                return@withContext foundPubkey.lowercase() == pubkeyHex.lowercase()
+                val result = foundPubkey.lowercase() == pubkeyHex.lowercase()
+                cache[cacheKey] = CacheEntry(result, System.currentTimeMillis())
+                return@withContext result
             }
         } catch (e: Exception) {
             Log.w("Nip05Utils", "Verification failed for $nip05: ${e.message}")
+            cache[cacheKey] = CacheEntry(false, System.currentTimeMillis())
             false
         }
     }
