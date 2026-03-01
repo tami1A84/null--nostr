@@ -1091,11 +1091,20 @@ class NostrRepository(
             val repostCount = repostCounts[event.id] ?: 0
             val zapAmount = zaps[event.id] ?: 0L
 
-            // Scoring matching web weights: Zap (100), Repost (25), Like (5)
-            val engagementScore = (zapAmount / 1000.0) * 100.0 + likeCount * 5.0 + repostCount * 25.0
+            // Scoring matching web weights (lib/recommendation.js):
+            // Zap=100, custom_reaction=60, quote=35, reply=30, Repost=25, bookmark=15, Like=5
+            val engagementScore = (zapAmount / 1000.0) * Constants.Engagement.WEIGHT_ZAP +
+                likeCount * Constants.Engagement.WEIGHT_LIKE +
+                repostCount * Constants.Engagement.WEIGHT_REPOST +
+                1.0 // base score
 
+            // Time decay: exponential with half-life of 6 hours (matching web)
             val ageHours = (System.currentTimeMillis() / 1000 - event.createdAt) / 3600.0
-            val timeMultiplier = (24.0 - ageHours.coerceIn(0.0, 24.0)) / 24.0
+            val timeMultiplier = if (ageHours < 1.0) {
+                Constants.TimeDecay.FRESHNESS_BOOST // 1.5x boost for <1 hour
+            } else {
+                kotlin.math.max(0.001, kotlin.math.pow(0.5, ageHours / Constants.TimeDecay.HALF_LIFE_HOURS))
+            }
 
             ScoredPost(
                 event = event,
@@ -1110,5 +1119,65 @@ class NostrRepository(
                 repostTime = repost?.createdAt
             )
         }.sortedByDescending { it.repostTime ?: it.event.createdAt }
+    }
+
+    // ─── Convenience helpers for miniapps ─────────────────────────────────────
+
+    /** Fetch events with simplified parameters for miniapps */
+    suspend fun fetchEvents(
+        kinds: List<Int>,
+        authors: List<String>? = null,
+        limit: Int = 10,
+        dTags: List<String>? = null,
+        since: Long? = null
+    ): List<NostrEvent> {
+        val tags = mutableMapOf<String, List<String>>()
+        dTags?.let { tags["d"] = it }
+
+        return client.fetchEvents(
+            NostrClient.Filter(
+                kinds = kinds,
+                authors = authors,
+                limit = limit,
+                tags = tags.ifEmpty { null },
+                since = since
+            ),
+            timeoutMs = 5_000
+        )
+    }
+
+    /** Publish a generic event (used by SchedulerApp, etc.) */
+    suspend fun publishEvent(
+        kind: Int,
+        content: String,
+        tags: List<List<String>> = emptyList()
+    ): NostrEvent? {
+        val allTags = tags.toMutableList()
+        if (allTags.none { it.getOrNull(0) == "client" }) {
+            allTags.add(listOf("client", "nullnull"))
+        }
+        return client.publish(kind, content, allTags)
+    }
+
+    /** Fetch follow lists for multiple pubkeys (for 2nd-degree network) */
+    suspend fun fetchFollowListsBatch(pubkeys: List<String>): Map<String, List<String>> {
+        val filter = NostrClient.Filter(
+            kinds = listOf(NostrKind.CONTACT_LIST),
+            authors = pubkeys.take(50),
+            limit = pubkeys.size
+        )
+        val events = client.fetchEvents(filter, timeoutMs = 15_000)
+
+        val latestByAuthor = mutableMapOf<String, NostrEvent>()
+        for (event in events) {
+            val existing = latestByAuthor[event.pubkey]
+            if (existing == null || event.createdAt > existing.createdAt) {
+                latestByAuthor[event.pubkey] = event
+            }
+        }
+
+        return latestByAuthor.mapValues { (_, event) ->
+            event.tags.filter { it.firstOrNull() == "p" }.mapNotNull { it.getOrNull(1) }
+        }
     }
 }

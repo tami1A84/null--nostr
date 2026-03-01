@@ -263,6 +263,12 @@ class TimelineViewModel(
             val success = repository.likePost(eventId, emoji, customTags)
             if (success) {
                 updatePostInteraction(eventId, isLike = true)
+                // Record engagement for recommendation engine (synced with web)
+                val authorPubkey = (_uiState.value.globalPosts + _uiState.value.followingPosts)
+                    .firstOrNull { it.event.id == eventId }?.event?.pubkey
+                if (authorPubkey != null) {
+                    recommendationEngine?.recordEngagement("like", authorPubkey)
+                }
             }
         }
     }
@@ -272,6 +278,12 @@ class TimelineViewModel(
             val success = repository.repostPost(eventId)
             if (success) {
                 updatePostInteraction(eventId, isLike = false)
+                // Record engagement for recommendation engine (synced with web)
+                val authorPubkey = (_uiState.value.globalPosts + _uiState.value.followingPosts)
+                    .firstOrNull { it.event.id == eventId }?.event?.pubkey
+                if (authorPubkey != null) {
+                    recommendationEngine?.recordEngagement("repost", authorPubkey)
+                }
             }
         }
     }
@@ -334,12 +346,31 @@ class TimelineViewModel(
     }
 
     fun setNotInterested(eventId: String) {
+        // Get the author pubkey before filtering
+        val authorPubkey = (_uiState.value.globalPosts + _uiState.value.followingPosts)
+            .firstOrNull { it.event.id == eventId }?.event?.pubkey
+
         _uiState.update { state ->
             state.copy(
                 globalPosts = state.globalPosts.filter { it.event.id != eventId },
                 followingPosts = state.followingPosts.filter { it.event.id != eventId }
             )
         }
+
+        // Persist to engagement tracker (synced with web lib/recommendation.js markNotInterested)
+        if (authorPubkey != null) {
+            viewModelScope.launch {
+                try {
+                    recommendationEngine?.markNotInterested(eventId, authorPubkey)
+                } catch (_: Exception) { }
+            }
+        }
+    }
+
+    private var recommendationEngine: io.nurunuru.app.data.RecommendationEngine? = null
+
+    fun setRecommendationEngine(engine: io.nurunuru.app.data.RecommendationEngine) {
+        recommendationEngine = engine
     }
 
     class Factory(
