@@ -51,6 +51,7 @@ import io.nurunuru.app.ui.miniapps.EmojiSettings
 import io.nurunuru.app.ui.miniapps.EventBackupSettings
 import io.nurunuru.app.ui.miniapps.MuteList
 import io.nurunuru.app.ui.miniapps.ZapSettings
+import io.nurunuru.app.ui.miniapps.SchedulerApp
 import io.nurunuru.app.ui.miniapps.VanishRequest
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -668,6 +669,7 @@ private fun MiniAppDetailView(
                 "elevenlabs" -> ElevenLabsSettings(prefs = prefs)
                 "backup" -> EventBackupSettings(pubkey = pubkeyHex, repository = repository)
                 "vanish" -> VanishRequest(pubkey = pubkeyHex, repository = repository)
+                "scheduler" -> SchedulerApp(pubkey = pubkeyHex, repository = repository)
                 else -> {
                     Column(
                         modifier = Modifier.fillMaxSize(),

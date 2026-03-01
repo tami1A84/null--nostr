@@ -127,7 +127,7 @@ val DEFAULT_RELAYS = listOf(
     "wss://relay.damus.io"
 )
 
-// Nostr event kinds
+// Nostr event kinds - synced with web version lib/constants.js NOSTR_KINDS
 object NostrKind {
     const val METADATA = 0
     const val TEXT_NOTE = 1
@@ -137,18 +137,46 @@ object NostrKind {
     const val DELETION = 5
     const val REPOST = 6
     const val REACTION = 7
-    const val ZAP_RECEIPT = 9735
-    const val LONG_FORM = 30023
-    const val SEALED_DM = 13
-    const val DM_GIFT_WRAP = 1059
-    const val VIDEO_LOOP = 34236
-    const val LABEL = 1985 // Birdwatch
-    const val BADGE_DEFINITION = 30009
     const val BADGE_AWARD = 8
-    const val PROFILE_BADGES = 30008
-    const val EMOJI_LIST = 10030
-    const val EMOJI_SET = 30030
+    const val SEALED_DM = 13
+    const val DIRECT_MESSAGE = 14       // NIP-17 chat message
+    const val FILE_MESSAGE = 15         // NIP-17 file message
+    const val GENERIC_REPOST = 16
+    const val CHANNEL_CREATE = 40
+    const val CHANNEL_META = 41
+    const val CHANNEL_MESSAGE = 42
+    const val CHANNEL_HIDE = 43
+    const val CHANNEL_MUTE = 44
+    const val VANISH_REQUEST = 62       // NIP-62 request to vanish
+    const val DM_GIFT_WRAP = 1059
+    const val REPORT = 1984
+    const val LABEL = 1985              // Birdwatch
+    const val NIP98_AUTH = 27235
+    const val BLOSSOM_AUTH = 24242
+    const val CLIENT_AUTH = 22242       // NIP-42 relay authentication
+    const val ZAP_REQUEST = 9734
+    const val ZAP_RECEIPT = 9735
     const val MUTE_LIST = 10000
+    const val PIN_LIST = 10001
     const val RELAY_LIST = 10002
-    const val VANISH_REQUEST = 62
+    const val BOOKMARKS = 10003
+    const val COMMUNITIES = 10004
+    const val PUBLIC_CHATS = 10005
+    const val BLOCKED_RELAYS = 10006
+    const val SEARCH_RELAYS = 10007
+    const val USER_GROUPS = 10009
+    const val INTERESTS = 10015
+    const val EMOJI_LIST = 10030
+    const val DM_RELAY_LIST = 10050     // NIP-17 DM receiving relay list
+    const val LONG_FORM = 30023
+    const val DRAFT_LONG_FORM = 30024
+    const val EMOJI_SET = 30030
+    const val BADGE_DEFINITION = 30009
+    const val PROFILE_BADGES = 30008
+    const val VIDEO_LOOP = 34236
+    // Chronostr (calendar/scheduler)
+    const val CALENDAR_RSVP = 31925
+    const val DATE_CANDIDATE = 31926
+    const val TIME_BASED_EVENT = 31927
+    const val CHRONOSTR_EVENT = 31928
 }
