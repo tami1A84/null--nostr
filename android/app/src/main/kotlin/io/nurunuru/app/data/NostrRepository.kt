@@ -89,12 +89,6 @@ class NostrRepository(
 
     // ─── Notifications ─────────────────────────────────────────────────────────
 
-    data class NotificationResult(
-        val items: List<io.nurunuru.app.ui.components.NotificationItem>,
-        val profiles: Map<String, UserProfile>,
-        val originalPosts: Map<String, NostrEvent>
-    )
-
     /** Fetch notifications (reactions + zaps targeting the user). */
     suspend fun fetchNotifications(pubkeyHex: String, limit: Int = 50): NotificationResult {
         val now = System.currentTimeMillis() / 1000
@@ -119,7 +113,7 @@ class NostrRepository(
         val zaps = client.fetchEvents(zapFilter, timeoutMs = 5_000)
 
         // 3. Build notification items
-        val notificationItems = mutableListOf<io.nurunuru.app.ui.components.NotificationItem>()
+        val notificationItems = mutableListOf<NotificationItem>()
         val targetEventIds = mutableSetOf<String>()
         val notifierPubkeys = mutableSetOf<String>()
 
@@ -134,7 +128,7 @@ class NostrRepository(
             val emojiUrl = emojiTag?.getOrNull(2)
 
             notificationItems.add(
-                io.nurunuru.app.ui.components.NotificationItem(
+                NotificationItem(
                     id = event.id,
                     pubkey = event.pubkey,
                     type = "reaction",
@@ -174,7 +168,7 @@ class NostrRepository(
             } else null
 
             notificationItems.add(
-                io.nurunuru.app.ui.components.NotificationItem(
+                NotificationItem(
                     id = event.id,
                     pubkey = zapPubkey,
                     type = "zap",
@@ -205,20 +199,25 @@ class NostrRepository(
         return NotificationResult(sorted, profiles, originalPosts)
     }
 
-    private fun parseBolt11Amount(bolt11: String): Long {
-        if (bolt11.isBlank()) return 0
-        // bolt11 format: lnbc<amount><multiplier>...
-        val regex = Regex("lnbc(\\d+)([munp]?)")
-        val match = regex.find(bolt11.lowercase()) ?: return 0
-        val num = match.groupValues[1].toLongOrNull() ?: return 0
-        val multiplier = match.groupValues[2]
-        return when (multiplier) {
-            "m" -> num * 100_000 // milli-BTC to sats
-            "u" -> num * 100     // micro-BTC to sats
-            "n" -> num / 10      // nano-BTC to sats
-            "p" -> num / 10_000  // pico-BTC to sats
-            "" -> num * 100_000_000 // BTC to sats
-            else -> num
+    companion object {
+        /**
+         * Parse sats amount from a bolt11 invoice string.
+         * bolt11 format: lnbc<amount><multiplier>1...
+         */
+        fun parseBolt11Amount(bolt11: String): Long {
+            if (bolt11.isBlank()) return 0
+            val regex = Regex("lnbc(\\d+)([munp]?)")
+            val match = regex.find(bolt11.lowercase()) ?: return 0
+            val num = match.groupValues[1].toLongOrNull() ?: return 0
+            val multiplier = match.groupValues[2]
+            return when (multiplier) {
+                "m" -> num * 100_000   // milli-BTC to sats
+                "u" -> num * 100       // micro-BTC to sats
+                "n" -> num / 10        // nano-BTC to sats
+                "p" -> num / 10_000    // pico-BTC to sats
+                "" -> num * 100_000_000 // BTC to sats
+                else -> num
+            }
         }
     }
 

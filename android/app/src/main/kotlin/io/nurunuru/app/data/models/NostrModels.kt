@@ -96,6 +96,23 @@ data class ImportResult(
     val skipped: Int
 )
 
+data class NotificationItem(
+    val id: String,
+    val pubkey: String,
+    val type: String, // "reaction", "zap", "birthday"
+    val createdAt: Long,
+    val amount: Long? = null,
+    val comment: String? = null,
+    val targetEventId: String? = null,
+    val emojiUrl: String? = null
+)
+
+data class NotificationResult(
+    val items: List<NotificationItem>,
+    val profiles: Map<String, UserProfile>,
+    val originalPosts: Map<String, NostrEvent>
+)
+
 @Serializable
 data class EmojiInfo(
     val shortcode: String,

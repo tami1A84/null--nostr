@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 object ExternalSigner : AppSigner {
+    private const val TAG = "ExternalSigner"
     private var currentUserPubkey: String = ""
 
     fun setCurrentUser(pubkey: String) {
@@ -90,37 +91,29 @@ object ExternalSigner : AppSigner {
     }
 
     suspend fun signEvent(context: Context?, eventJson: String, pubkey: String): String? {
-        Log.d("ExternalSigner", "Requesting signature for event: $eventJson (pubkey: $pubkey)")
+        Log.d(TAG, "Requesting signature (pubkey: ${pubkey.take(12)}...)")
         val intent = createSignEventIntent(context, eventJson, pubkey)
         val result = request(context, intent) ?: run {
-            Log.e("ExternalSigner", "Request failed or cancelled")
+            Log.w(TAG, "Signing request failed or cancelled")
             return null
-        }
-
-        // Log all extras for debugging
-        result.extras?.keySet()?.forEach { key ->
-            Log.d("ExternalSigner", "Result extra: $key = ${result.extras?.get(key)}")
         }
 
         val signedEvent = result.getStringExtra("event")
         if (signedEvent != null && signedEvent.isNotBlank()) {
-            Log.d("ExternalSigner", "Received full signed event: $signedEvent")
             return signedEvent
         }
 
         val signature = result.getStringExtra("signature") ?: result.getStringExtra("sig") ?: result.getStringExtra("result") ?: result.data?.toString()?.removePrefix("nostrsigner:")
         if (signature != null && signature.isNotBlank()) {
-            Log.d("ExternalSigner", "Received signature/result: $signature. Reconstructing event...")
 
             // Check if it's already a full signed event JSON
             if (signature.trim().startsWith("{")) {
                 try {
                     val jsonObj = Json.parseToJsonElement(signature).jsonObject
                     if (jsonObj.containsKey("sig") || jsonObj.containsKey("signature")) {
-                        Log.d("ExternalSigner", "Result is already a signed event JSON")
                         return signature
                     }
-                } catch (e: Exception) {}
+                } catch (_: Exception) {}
             }
 
             // Reconstruct event if only signature is returned
@@ -141,15 +134,13 @@ object ExternalSigner : AppSigner {
                     } catch (e: Exception) {}
                 }
 
-                val reconstructed = Json.encodeToString(JsonObject(map))
-                Log.d("ExternalSigner", "Reconstructed event: $reconstructed")
-                reconstructed
+                Json.encodeToString(JsonObject(map))
             } catch (e: Exception) {
-                Log.e("ExternalSigner", "Failed to reconstruct event", e)
+                Log.e(TAG, "Failed to reconstruct event", e)
                 null
             }
         }
-        Log.e("ExternalSigner", "No event or signature found in result")
+        Log.w(TAG, "No event or signature found in signer result")
         return null
     }
 
@@ -209,7 +200,7 @@ object ExternalSigner : AppSigner {
             val result = queryProvider(context, uri, type, data, currentUser, pubKey)
             if (result != null) {
                 workingContentUri = uri
-                Log.d("ExternalSigner", "Found working Content Provider URI: $uri")
+                Log.d(TAG, "Found working Content Provider URI: $uri")
                 return result
             }
         }
@@ -225,7 +216,7 @@ object ExternalSigner : AppSigner {
         pubKey: String
     ): Intent? {
         try {
-            Log.d("ExternalSigner", "Querying provider: $baseUri/$type with currentUser: $currentUser")
+            Log.d(TAG, "Querying provider: $baseUri/$type")
             val uri = Uri.parse("$baseUri/$type")
 
             // NIP-55 Content Provider query:
@@ -239,10 +230,7 @@ object ExternalSigner : AppSigner {
 
             context.contentResolver.query(uri, null, data, selectionArgs, null)?.use { cursor ->
                 if (cursor.moveToFirst()) {
-                    // Log all available columns for debugging
                     val columnNames = cursor.columnNames
-                    Log.d("ExternalSigner", "Provider columns: ${columnNames.joinToString()}")
-
                     val signatureIndex = cursor.getColumnIndex("signature")
                     val eventIndex = cursor.getColumnIndex("event")
                     val resultIndex = cursor.getColumnIndex("result")
@@ -251,18 +239,15 @@ object ExternalSigner : AppSigner {
                     val event = if (eventIndex != -1) cursor.getString(eventIndex) else null
                     val result = if (resultIndex != -1) cursor.getString(resultIndex) else null
 
-                    Log.d("ExternalSigner", "Provider result: sig=${signature?.take(20)}..., event=${event?.take(20)}..., res=${result?.take(20)}...")
-
                     if (signature == null && event == null && result == null) {
                         // Try reading any non-null column as fallback
                         for (i in 0 until cursor.columnCount) {
                             val value = cursor.getString(i)
                             if (!value.isNullOrBlank()) {
-                                Log.d("ExternalSigner", "Fallback column[${columnNames[i]}] = ${value.take(20)}...")
                                 return Intent().apply { putExtra("signature", value) }
                             }
                         }
-                        Log.w("ExternalSigner", "Provider returned empty columns")
+                        Log.w(TAG, "Provider returned empty columns")
                         return null
                     }
 
@@ -274,7 +259,7 @@ object ExternalSigner : AppSigner {
                 }
             }
         } catch (e: Exception) {
-            Log.w("ExternalSigner", "ContentResolver query failed for $baseUri: ${e.message}")
+            Log.w(TAG, "ContentResolver query failed for $baseUri: ${e.message}")
         }
         return null
     }
@@ -286,8 +271,6 @@ object ExternalSigner : AppSigner {
     override suspend fun signEvent(eventJson: String): String? {
         return signEvent(null, eventJson, getPublicKeyHex())
     }
-
-    private fun jsonPrimitive(value: String) = kotlinx.serialization.json.JsonPrimitive(value)
 
     override suspend fun nip04Encrypt(receiverPubkeyHex: String, content: String): String? {
         return encrypt(null, content, receiverPubkeyHex, getPublicKeyHex(), false)

@@ -25,22 +25,11 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.NostrEvent
-import io.nurunuru.app.data.models.NostrKind
+import io.nurunuru.app.data.models.NotificationItem
 import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import kotlinx.coroutines.launch
-
-data class NotificationItem(
-    val id: String,
-    val pubkey: String,
-    val type: String, // "reaction", "zap", "birthday"
-    val createdAt: Long,
-    val amount: Long? = null,
-    val comment: String? = null,
-    val targetEventId: String? = null,
-    val emojiUrl: String? = null
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
