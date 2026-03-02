@@ -2,6 +2,7 @@ package io.nurunuru.app.data
 
 import android.content.Context
 import android.util.Log
+import io.nurunuru.app.data.cache.NostrDb
 import io.nurunuru.app.data.models.NostrEvent
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -170,6 +171,8 @@ class NostrClient(
             // SDK 0.44.x: HandleNotification methods are suspend fun
             client.handleNotifications(object : HandleNotification {
                 override suspend fun handle(relayUrl: RelayUrl, subscriptionId: String, event: Event) {
+                    val eventJson = event.asJson()
+                    NostrDb.processEvent(eventJson)
                     val nostrEvent = mapSdkEvent(event)
                     _events.emit(nostrEvent)
                     subscriptionCallbacks[subscriptionId]?.invoke(nostrEvent)

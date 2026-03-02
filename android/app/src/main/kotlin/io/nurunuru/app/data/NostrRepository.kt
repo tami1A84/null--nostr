@@ -1,5 +1,6 @@
 package io.nurunuru.app.data
 
+import io.nurunuru.app.data.cache.NostrDb
 import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlin.math.pow
@@ -74,17 +75,29 @@ class NostrRepository(
         return enrichPosts(events)
     }
 
-    /** Search for notes by text (NIP-50) using dedicated search relay. */
+    /** Search for notes by text (NIP-50). Local search via nostrdb followed by relay search. */
     suspend fun searchNotes(query: String, limit: Int = 30): List<ScoredPost> {
         val filter = NostrClient.Filter(
-            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
+            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
             search = query,
             limit = limit
         )
-        val events = client.fetchEventsFrom(
-            listOf(NostrClient.SEARCH_RELAY), filter, timeoutMs = 6_000
+
+        // 1. Try local search via nostrdb
+        val localEventsJson = NostrDb.query(json.encodeToString(filter))
+        val localEvents = localEventsJson.mapNotNull {
+            try { json.decodeFromString<NostrEvent>(it) } catch (e: Exception) { null }
+        }
+
+        // 2. Fallback/Augment with relay search
+        val relayEvents = client.fetchEventsFrom(
+            listOf(NostrClient.SEARCH_RELAY), filter, timeoutMs = 4_000
         )
-        return enrichPosts(events)
+
+        // Combine and distinct
+        val allEvents = (localEvents + relayEvents).distinctBy { it.id }
+
+        return enrichPosts(allEvents)
     }
 
     // ─── Notifications ─────────────────────────────────────────────────────────
