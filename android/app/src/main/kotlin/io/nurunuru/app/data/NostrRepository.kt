@@ -20,6 +20,8 @@ class NostrRepository(
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
+    private fun getOneHourAgo(): Long = System.currentTimeMillis() / 1000 - Constants.Time.HOUR_SECS
+
     // ─── Timeline ─────────────────────────────────────────────────────────────
 
     /** Fetch global timeline (recent text notes). */
@@ -29,8 +31,7 @@ class NostrRepository(
     }
 
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
-        val now = System.currentTimeMillis() / 1000
-        val oneHourAgo = now - Constants.Time.HOUR_SECS
+        val oneHourAgo = getOneHourAgo()
 
         // 1. Fetch viral candidates (high engagement candidates from last 1 hour)
         val viralFilter = NostrClient.Filter(
@@ -70,7 +71,7 @@ class NostrRepository(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
             authors = followList.take(500),
             limit = limit,
-            since = System.currentTimeMillis() / 1000 - Constants.Time.HOUR_SECS
+            since = getOneHourAgo()
         )
         val events = client.fetchEvents(filter, timeoutMs = 6_000)
         return enrichPosts(events)
@@ -82,7 +83,7 @@ class NostrRepository(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
             search = query,
             limit = limit,
-            since = System.currentTimeMillis() / 1000 - Constants.Time.HOUR_SECS
+            since = getOneHourAgo()
         )
         val events = client.fetchEventsFrom(
             listOf(NostrClient.SEARCH_RELAY), filter, timeoutMs = 6_000
@@ -94,8 +95,7 @@ class NostrRepository(
 
     /** Fetch notifications (reactions + zaps targeting the user). */
     suspend fun fetchNotifications(pubkeyHex: String, limit: Int = 50): NotificationResult {
-        val now = System.currentTimeMillis() / 1000
-        val oneHourAgo = now - Constants.Time.HOUR_SECS
+        val oneHourAgo = getOneHourAgo()
 
         // 1. Fetch reactions (#p tag targeting me)
         val reactionFilter = NostrClient.Filter(
@@ -335,15 +335,14 @@ class NostrRepository(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.LONG_FORM, NostrKind.VIDEO_LOOP, NostrKind.REPOST),
             authors = listOf(pubkeyHex),
             limit = limit,
-            since = System.currentTimeMillis() / 1000 - Constants.Time.HOUR_SECS
+            since = getOneHourAgo()
         )
         val events = client.fetchEvents(filter, timeoutMs = 5_000)
         return enrichPosts(events)
     }
 
     suspend fun fetchUserLikes(pubkeyHex: String, limit: Int = 30): List<ScoredPost> {
-        val now = System.currentTimeMillis() / 1000
-        val oneHourAgo = now - Constants.Time.HOUR_SECS
+        val oneHourAgo = getOneHourAgo()
         val reactionFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.REACTION),
             authors = listOf(pubkeyHex),
@@ -529,7 +528,7 @@ class NostrRepository(
         val events = client.fetchEvents(filter, timeoutMs = 4_000)
         val event = events.maxByOrNull { it.createdAt }
         if (event != null) {
-            cache.setCachedEmoji(pubkeyHex, json.encodeToString(event))
+            cache.setCachedEmoji(pubkeyHex, json.encodeToString(NostrEvent.serializer(), event))
             return event
         }
         return getCachedEmojiList(pubkeyHex)
@@ -723,8 +722,7 @@ class NostrRepository(
     // ─── DMs ─────────────────────────────────────────────────────────────────
 
     suspend fun fetchDmConversations(pubkeyHex: String): List<DmConversation> {
-        val now = System.currentTimeMillis() / 1000
-        val oneHourAgo = now - Constants.Time.HOUR_SECS
+        val oneHourAgo = getOneHourAgo()
         // Fetch received DMs (Kind 4 and Kind 1059)
         val receivedFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.ENCRYPTED_DM, NostrKind.DM_GIFT_WRAP),
@@ -781,7 +779,8 @@ class NostrRepository(
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.ENCRYPTED_DM, NostrKind.DM_GIFT_WRAP),
             tags = mapOf("p" to listOf(myPubkeyHex)),
-            limit = 200
+            limit = 200,
+            since = getOneHourAgo()
         )
         val events = client.fetchEvents(filter, 5_000)
 
@@ -917,7 +916,7 @@ class NostrRepository(
         val event = events.maxByOrNull { it.createdAt }
 
         if (event != null) {
-            cache.setCachedMuteList(pubkeyHex, json.encodeToString(event))
+            cache.setCachedMuteList(pubkeyHex, json.encodeToString(NostrEvent.serializer(), event))
             return MuteListData(
                 pubkeys = event.getTagValues("p"),
                 eventIds = event.getTagValues("e"),
