@@ -340,6 +340,10 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun getNsecTemporary(): String? {
+        return keyManager.getKeyHexTemporary()?.let { NostrKeyUtils.encodeNsec(it) }
+    }
+
     fun logout() {
         keyManager.deleteAll()
         prefs.clear()

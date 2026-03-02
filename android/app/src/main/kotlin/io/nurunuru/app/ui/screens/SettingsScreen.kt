@@ -220,9 +220,9 @@ fun SettingsScreen(
                         }
                     }
 
-                    // Passkey Settings (only for internal signer)
+                    // Security Settings (only for internal signer)
                     if (!prefs.isExternalSigner) {
-                        PasskeySettingsSection(prefs = prefs, pubkeyHex = pubkeyHex)
+                        SecuritySettingsSection(authViewModel = authViewModel, prefs = prefs, pubkeyHex = pubkeyHex)
                     }
                 }
             }
@@ -454,7 +454,7 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun PasskeySettingsSection(prefs: AppPreferences, pubkeyHex: String) {
+private fun SecuritySettingsSection(authViewModel: AuthViewModel, prefs: AppPreferences, pubkeyHex: String) {
     val nuruColors = LocalNuruColors.current
     val context = LocalContext.current
     var isExpanded by remember { mutableStateOf(false) }
@@ -473,7 +473,7 @@ private fun PasskeySettingsSection(prefs: AppPreferences, pubkeyHex: String) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Icon(Icons.Outlined.Lock, null, tint = nuruColors.textSecondary, modifier = Modifier.size(20.dp))
-                Text("パスキー設定", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text("セキュリティ設定", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Icon(
                     if (isExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                     null,
@@ -524,7 +524,7 @@ private fun PasskeySettingsSection(prefs: AppPreferences, pubkeyHex: String) {
                     }
 
                     if (showNsec) {
-                        val nsec = remember(pubkeyHex) { authViewModel.keyManager.getKeyHexTemporary()?.let { NostrKeyUtils.encodeNsec(it) } ?: "取得できません" }
+                        val nsec = remember(pubkeyHex) { authViewModel.getNsecTemporary() ?: "取得できません" }
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Surface(
                                 color = Color.Red.copy(alpha = 0.1f),
@@ -551,7 +551,7 @@ private fun PasskeySettingsSection(prefs: AppPreferences, pubkeyHex: String) {
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(nsec, modifier = Modifier.weight(1f), fontSize = 12.sp, color = nuruColors.textPrimary)
+                                    Text(text = nsec, modifier = Modifier.weight(1f), fontSize = 12.sp, color = nuruColors.textPrimary)
                                     IconButton(onClick = {
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                         clipboard.setPrimaryClip(ClipData.newPlainText("nsec", nsec))
