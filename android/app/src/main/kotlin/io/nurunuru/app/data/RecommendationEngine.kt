@@ -78,24 +78,22 @@ class RecommendationEngine(context: Context) {
         val repliedCount = history.repliedAuthors[authorPubkey] ?: 0
         val totalEngagements = likedCount + repostedCount * 2 + repliedCount * 3
 
-        val engagementBoost = when {
-            totalEngagements >= 10 -> Constants.SocialBoost.HIGH_ENGAGEMENT_AUTHOR
-            totalEngagements >= 5 -> 1.5
-            else -> 1.0
-        }
+        // Personalization: prioritizing authors with high engagement history
+        val highEngagementBoost = if (totalEngagements >= 5) Constants.SocialBoost.HIGH_ENGAGEMENT_AUTHOR else 1.0
 
         return when {
+            secondDegreeFollows.contains(authorPubkey) ->
+                Constants.SocialBoost.SECOND_DEGREE * highEngagementBoost
+
             followList.contains(authorPubkey) -> {
                 if (followers.contains(authorPubkey)) {
-                    Constants.SocialBoost.MUTUAL_FOLLOW * engagementBoost
+                    Constants.SocialBoost.MUTUAL_FOLLOW * highEngagementBoost
                 } else {
-                    Constants.SocialBoost.FIRST_DEGREE * engagementBoost
+                    Constants.SocialBoost.FIRST_DEGREE * highEngagementBoost
                 }
             }
-            secondDegreeFollows.contains(authorPubkey) ->
-                Constants.SocialBoost.SECOND_DEGREE * engagementBoost
-            else ->
-                Constants.SocialBoost.UNKNOWN * engagementBoost
+
+            else -> Constants.SocialBoost.UNKNOWN * highEngagementBoost
         }
     }
 
@@ -160,10 +158,19 @@ class RecommendationEngine(context: Context) {
     }
 
     private fun calculateGeohashBoost(userGeohash: String?, profile: UserProfile?): Double {
-        if (userGeohash == null) return 1.0
-        // Profile doesn't store geohash directly in current model;
-        // this can be extended when profile geohash data is available
-        return 1.0
+        if (userGeohash.isNullOrBlank() || profile?.geohash.isNullOrBlank()) return 1.0
+
+        val userG = userGeohash!!
+        val authorG = profile!!.geohash!!
+
+        // Prefix matching for proximity (geohash length defines resolution)
+        // 4 chars ~= 20km, 3 chars ~= 150km
+        return when {
+            userG.take(4) == authorG.take(4) -> 2.0
+            userG.take(3) == authorG.take(3) -> 1.5
+            userG.take(2) == authorG.take(2) -> 1.2
+            else -> 1.0
+        }
     }
 
     // ─── Feed Mixing ─────────────────────────────────────────────────────────

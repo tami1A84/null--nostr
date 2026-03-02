@@ -34,7 +34,8 @@ data class UserProfile(
     val banner: String? = null,
     val lud16: String? = null,
     val website: String? = null,
-    val birthday: String? = null
+    val birthday: String? = null,
+    val geohash: String? = null
 ) {
     val displayedName: String
         get() = displayName?.takeIf { it.isNotBlank() }
