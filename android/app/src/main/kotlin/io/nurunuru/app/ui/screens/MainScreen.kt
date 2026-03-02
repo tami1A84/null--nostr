@@ -20,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.nurunuru.app.NuruNuruApp
 import io.nurunuru.app.data.NostrClient
 import io.nurunuru.app.data.NostrRepository
+import io.nurunuru.app.data.SecureKeyManager
 import io.nurunuru.app.data.prefs.AppPreferences
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -45,7 +46,8 @@ fun BottomTab.getIcon(isSelected: Boolean): ImageVector {
 @Composable
 fun MainScreen(
     pubkeyHex: String,
-    privateKeyHex: String?,
+    hasInternalKey: Boolean,
+    keyManager: SecureKeyManager,
     authViewModel: AuthViewModel,
     app: NuruNuruApp
 ) {
@@ -55,8 +57,8 @@ fun MainScreen(
 
     // Create shared NostrClient and Repository
     val nostrClient = remember {
-        val signer = if (privateKeyHex != null) {
-            io.nurunuru.app.data.InternalSigner(privateKeyHex)
+        val signer = if (hasInternalKey) {
+            io.nurunuru.app.data.InternalSigner(keyManager)
         } else {
             io.nurunuru.app.data.ExternalSigner.apply {
                 setCurrentUser(pubkeyHex)

@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.nurunuru.app.data.ExternalSigner
+import io.nurunuru.app.ui.screens.BiometricUnlockScreen
 import io.nurunuru.app.ui.screens.LoginScreen
 import io.nurunuru.app.ui.screens.MainScreen
 import io.nurunuru.app.ui.theme.NuruNuruTheme
@@ -80,10 +81,16 @@ class MainActivity : ComponentActivity() {
                         when (val state = authState) {
                             is AuthState.LoggedIn -> MainScreen(
                                 pubkeyHex = state.pubkeyHex,
-                                privateKeyHex = state.privateKeyHex,
+                                hasInternalKey = state.hasInternalKey,
+                                keyManager = viewModel.keyManager,
                                 authViewModel = viewModel,
                                 app = app
                             )
+
+                            is AuthState.BiometricRequired -> {
+                                // 生体認証が必要 → BiometricPrompt を表示
+                                BiometricUnlockScreen(viewModel = viewModel)
+                            }
 
                             else -> LoginScreen(viewModel = viewModel)
                         }
@@ -103,6 +110,8 @@ class MainActivity : ComponentActivity() {
         if (instance == this) instance = null
         // signerProxy?.stop()
         // signerProxy = null
+        // メモリ上の秘密鍵をゼロ化
+        authViewModel?.keyManager?.zeroize()
         super.onDestroy()
     }
 

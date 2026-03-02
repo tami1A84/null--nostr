@@ -23,12 +23,24 @@ class AppPreferences(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
+    /**
+     * @deprecated SecureKeyManager に移行済み。マイグレーション専用。
+     * 新規コードでは SecureKeyManager を使うこと。
+     */
+    @Deprecated("Use SecureKeyManager instead", level = DeprecationLevel.WARNING)
     var privateKeyHex: String?
         get() = prefs.getString(KEY_PRIVATE_KEY_HEX, null)
         set(value) {
             if (value == null) prefs.edit().remove(KEY_PRIVATE_KEY_HEX).apply()
             else prefs.edit().putString(KEY_PRIVATE_KEY_HEX, value).apply()
         }
+
+    /**
+     * マイグレーション後に旧秘密鍵データを削除する。
+     */
+    fun clearPrivateKey() {
+        prefs.edit().remove(KEY_PRIVATE_KEY_HEX).apply()
+    }
 
     var publicKeyHex: String?
         get() = prefs.getString(KEY_PUBLIC_KEY_HEX, null)
@@ -131,8 +143,15 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_ELEVENLABS_LANGUAGE, "jpn") ?: "jpn"
         set(value) = prefs.edit().putString(KEY_ELEVENLABS_LANGUAGE, value).apply()
 
-    val isLoggedIn: Boolean
-        get() = publicKeyHex != null && (privateKeyHex != null || isExternalSigner)
+    /**
+     * ログイン済みかどうか。
+     * SecureKeyManager 移行後は hasSecureKey パラメータで判定する。
+     * 旧形式 (privateKeyHex) もフォールバックとして残す。
+     */
+    fun isLoggedIn(hasSecureKey: Boolean = false): Boolean {
+        @Suppress("DEPRECATION")
+        return publicKeyHex != null && (hasSecureKey || privateKeyHex != null || isExternalSigner)
+    }
 
     fun clear() {
         prefs.edit().clear().apply()
