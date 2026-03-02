@@ -1,9 +1,17 @@
- ⚠ Port 3000 is in use, trying 3001 instead.
+
+> nostr-line-client@1.0.0 dev
+> next dev
+
   ▲ Next.js 14.2.35
-  - Local:        http://localhost:3001
+  - Local:        http://localhost:3000
 
  ✓ Starting...
- ✓ Ready in 1854ms
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+ ✓ Ready in 1775ms
  ○ Compiling / ...
  ⚠ ./app/page.js
 Attempted import error: 'getPrivateKeyHex' is not exported from '@/lib/nostr' (imported as 'getPrivateKeyHex').
@@ -28,51 +36,4 @@ Attempted import error: 'getPrivateKeyHex' is not exported from '@/lib/nostr' (i
 
 Import trace for requested module:
 ./app/page.js
- GET /?redirect_uri=io.nurunuru.app://login 200 in 12595ms
- GET /?redirect_uri=io.nurunuru.app://login 200 in 44ms
- ⚠ ./app/page.js
-Attempted import error: 'getPrivateKeyHex' is not exported from '@/lib/nostr' (imported as 'getPrivateKeyHex').
-
-Import trace for requested module:
-./app/page.js
-
-./app/page.js
-Attempted import error: 'getPrivateKeyHex' is not exported from '@/lib/nostr' (imported as 'getPrivateKeyHex').
-
-Import trace for requested module:
-./app/page.js
-
-./app/page.js
-Attempted import error: 'getPrivateKeyHex' is not exported from '@/lib/nostr' (imported as 'getPrivateKeyHex').
-
-Import trace for requested module:
-./app/page.js
-
-./app/page.js
-Attempted import error: 'getPrivateKeyHex' is not exported from '@/lib/nostr' (imported as 'getPrivateKeyHex').
-
-Import trace for requested module:
-./app/page.js
- ⚠ ./app/page.js
-Attempted import error: 'getPrivateKeyHex' is not exported from '@/lib/nostr' (imported as 'getPrivateKeyHex').
-
-Import trace for requested module:
-./app/page.js
-
-./app/page.js
-Attempted import error: 'getPrivateKeyHex' is not exported from '@/lib/nostr' (imported as 'getPrivateKeyHex').
-
-Import trace for requested module:
-./app/page.js
-
-./app/page.js
-Attempted import error: 'getPrivateKeyHex' is not exported from '@/lib/nostr' (imported as 'getPrivateKeyHex').
-
-Import trace for requested module:
-./app/page.js
-
-./app/page.js
-Attempted import error: 'getPrivateKeyHex' is not exported from '@/lib/nostr' (imported as 'getPrivateKeyHex').
-
-Import trace for requested module:
-./app/page.js
+ GET / 200 in 12475ms

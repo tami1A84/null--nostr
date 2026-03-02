@@ -173,10 +173,14 @@ class RecommendationEngine(context: Context) {
         context: ScoringContext,
         limit: Int = 50
     ): List<ScoredPost> {
-        // Filter out muted and not interested
+        // Filter out muted, not interested, and users without profile info
         val candidates = allPosts.filter { post ->
-            !tracker.isNotInterested(post.event.id) &&
-            !context.mutedPubkeys.contains(post.event.pubkey)
+            if (tracker.isNotInterested(post.event.id)) return@filter false
+            if (context.mutedPubkeys.contains(post.event.pubkey)) return@filter false
+
+            // Filter out users without icon or name (Requirement: exclude if either is missing)
+            val profile = post.profile ?: context.profiles[post.event.pubkey]
+            profile != null && !profile.picture.isNullOrBlank() && (!profile.name.isNullOrBlank() || !profile.displayName.isNullOrBlank())
         }
 
         // Categorize

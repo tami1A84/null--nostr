@@ -525,41 +525,49 @@ const TimelineTab = forwardRef(function TimelineTab({ pubkey, onStartDM, scrollC
         engagements = await fetchEngagementData(eventIds, readRelays)
       }
 
-      // Recommend
-      const followSet = new Set(followList)
-      const recommendedPosts = getRecommendedPosts(allPosts, {
-        followList: followSet,
-        secondDegreeFollows,
-        mutedPubkeys,
-        engagements,
-        profiles,
-        userGeohash: typeof window !== 'undefined' ? localStorage.getItem('user_geohash') : null
-      }, 100)
-
-      const finalPosts = recommendedPosts.length > 0 ? recommendedPosts : allPosts.sort((a, b) => {
-        const timeA = a._repostTime || a.created_at
-        const timeB = b._repostTime || b.created_at
-        return timeB - timeA
-      })
-
-      setGlobalPosts(finalPosts)
-      
-      // Notify user on mobile if in background
-      if (timelineMode !== 'global') {
-        setRecommendedReady(true)
-      }
-
-      // Fetch profiles
+      // Fetch profiles first to enable filtering by profile info in recommendation
       const authors = new Set()
       allPosts.forEach(p => {
         authors.add(p.pubkey)
         if (p._repostedBy) authors.add(p._repostedBy)
       })
       originalAuthors.forEach(a => authors.add(a))
-      
+
+      let profileMap = {}
       if (authors.size > 0) {
-        const profileMap = await fetchProfilesBatch(Array.from(authors))
+        profileMap = await fetchProfilesBatch(Array.from(authors))
         setProfiles(prev => ({ ...prev, ...profileMap }))
+      }
+
+      // Recommend
+      const followSet = new Set(followList)
+      const combinedProfiles = { ...profiles, ...profileMap }
+      const recommendedPosts = getRecommendedPosts(allPosts, {
+        followList: followSet,
+        secondDegreeFollows,
+        mutedPubkeys,
+        engagements,
+        profiles: combinedProfiles,
+        userGeohash: typeof window !== 'undefined' ? localStorage.getItem('user_geohash') : null
+      }, 100)
+
+      // Apply same profile filter to fallback
+      const finalPosts = recommendedPosts.length > 0 ? recommendedPosts : allPosts
+        .filter(post => {
+          const profile = combinedProfiles[post.pubkey]
+          return profile && profile.picture && (profile.name || profile.displayName)
+        })
+        .sort((a, b) => {
+          const timeA = a._repostTime || a.created_at
+          const timeB = b._repostTime || b.created_at
+          return timeB - timeA
+        })
+
+      setGlobalPosts(finalPosts)
+      
+      // Notify user on mobile if in background
+      if (timelineMode !== 'global') {
+        setRecommendedReady(true)
       }
 
       // Fetch interactions if logged in
