@@ -37,15 +37,8 @@ fun PostItem(
     val nuruColors = LocalNuruColors.current
     val profile = post.profile
 
-    // Internal NIP-05 verification
-    var internalVerified by remember { mutableStateOf(isVerified) }
-    LaunchedEffect(profile?.nip05, isVerified) {
-        if (!isVerified && profile?.nip05 != null) {
-            internalVerified = io.nurunuru.app.data.Nip05Utils.verifyNip05(profile.nip05, post.event.pubkey)
-        } else {
-            internalVerified = isVerified
-        }
-    }
+    // NIP-05 verification is now handled in the ViewModel/Repository
+    val internalVerified = post.isVerified || isVerified
 
     // Content Warning state
     val cwReason = post.event.getTagValue("content-warning")
@@ -53,8 +46,10 @@ fun PostItem(
 
     // Content length threshold for collapsing
     val COLLAPSE_THRESHOLD = 140
-    val textLength = getTextLengthWithoutLinks(post.event.content)
-    val shouldCollapse = textLength > COLLAPSE_THRESHOLD
+    val shouldCollapse = remember(post.event.content) {
+        val textLength = getTextLengthWithoutLinks(post.event.content)
+        textLength > COLLAPSE_THRESHOLD
+    }
     var isExpanded by remember { mutableStateOf(false) }
 
     var showReportModal by remember { mutableStateOf(false) }

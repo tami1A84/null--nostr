@@ -32,7 +32,7 @@ object Constants {
         const val MUTE_LIST = 10 * 60 * 1000L       // 10 minutes
         const val FOLLOW_LIST = 10 * 60 * 1000L     // 10 minutes
         const val EMOJI = 30 * 60 * 1000L            // 30 minutes
-        const val TIMELINE = 30 * 1000L              // 30 seconds
+        const val TIMELINE = 60 * 60 * 1000L         // 1 hour
         const val SHORT = 60 * 1000L                 // 1 minute
         const val NIP05 = 5 * 60 * 1000L             // 5 minutes
         const val RELAY_INFO = 60 * 60 * 1000L       // 1 hour

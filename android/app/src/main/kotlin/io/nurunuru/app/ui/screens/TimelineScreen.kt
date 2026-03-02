@@ -212,11 +212,6 @@ private fun TimelineContent(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(displayPosts, key = { it.event.id }) { post ->
-                        val alpha = remember { Animatable(0f) }
-                        LaunchedEffect(Unit) {
-                            alpha.animateTo(1f, animationSpec = tween(300))
-                        }
-
                         val notInterestedCallback = if (feedType == FeedType.GLOBAL) {
                             { viewModel.setNotInterested(post.event.id) }
                         } else null
@@ -238,7 +233,6 @@ private fun TimelineContent(
                             )
                         } else {
                             PostItem(
-                                modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
                                 post = post,
                                 onLike = { emoji, tags -> viewModel.likePost(post.event.id, emoji, tags) },
                                 onRepost = { viewModel.repostPost(post.event.id) },

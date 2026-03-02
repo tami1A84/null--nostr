@@ -61,6 +61,17 @@ class TimelineViewModel(
             val followListJob = launch { loadFollowList() }
             val globalJob = launch { loadGlobalTimeline() }
 
+            // Cache-first: Load following timeline from cache immediately
+            val cachedFollowing = repository.getCachedTimeline()
+            if (cachedFollowing != null) {
+                try {
+                    val posts = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromString<List<io.nurunuru.app.data.models.ScoredPost>>(cachedFollowing)
+                    if (posts.isNotEmpty()) {
+                        _uiState.update { it.copy(followingPosts = posts, isFollowingLoading = false) }
+                    }
+                } catch (e: Exception) { /* ignore */ }
+            }
+
             followListJob.join()
             // Only load following timeline after follow list is known
             loadFollowingTimeline()
@@ -139,7 +150,10 @@ class TimelineViewModel(
         followingLoadJob = viewModelScope.launch {
             _uiState.update {
                 if (isRefresh) it.copy(isFollowingRefreshing = true, followingError = null)
-                else it.copy(isFollowingLoading = true, followingError = null, followingPosts = emptyList())
+                else it.copy(
+                    isFollowingLoading = it.followingPosts.isEmpty(),
+                    followingError = null
+                )
             }
             try {
                 val posts = repository.fetchFollowTimeline(pubkeyHex, 50)
@@ -148,6 +162,12 @@ class TimelineViewModel(
                     isFollowingLoading = false,
                     isFollowingRefreshing = false
                 ) }
+                // Persist to cache
+                try {
+                    val json = kotlinx.serialization.json.Json { encodeDefaults = true }
+                    repository.setCachedTimeline(json.encodeToString(kotlinx.serialization.builtins.ListSerializer(io.nurunuru.app.data.models.ScoredPost.serializer()), posts))
+                } catch (e: Exception) { /* ignore */ }
+
                 fetchBirdwatchForPosts(posts)
             } catch (e: Exception) {
                 _uiState.update {
