@@ -55,7 +55,14 @@ data class NuruColors(
     val bgPrimary: Color,
     val bgSecondary: Color,
     val bgTertiary: Color,
-    val border: Color
+    val border: Color,
+    // Semantic colors (synced with web via tokens.json)
+    val warning: Color,
+    val info: Color,
+    val error: Color,
+    val success: Color,
+    val birdwatch: Color,
+    val encourage: Color
 )
 
 val LocalNuruColors = staticCompositionLocalOf {
@@ -68,7 +75,13 @@ val LocalNuruColors = staticCompositionLocalOf {
         bgPrimary = BgPrimary,
         bgSecondary = BgSecondary,
         bgTertiary = BgTertiary,
-        border = BorderColor
+        border = BorderColor,
+        warning = ColorWarning,
+        info = ColorInfo,
+        error = ColorError,
+        success = ColorSuccess,
+        birdwatch = ColorBirdwatch,
+        encourage = ColorEncourage
     )
 }
 
@@ -88,7 +101,13 @@ fun NuruNuruTheme(
             bgPrimary = BgPrimary,
             bgSecondary = BgSecondary,
             bgTertiary = BgTertiary,
-            border = BorderColor
+            border = BorderColor,
+            warning = ColorWarning,
+            info = ColorInfo,
+            error = ColorError,
+            success = ColorSuccess,
+            birdwatch = ColorBirdwatch,
+            encourage = ColorEncourage
         )
     } else {
         NuruColors(
@@ -100,7 +119,13 @@ fun NuruNuruTheme(
             bgPrimary = BgPrimaryLight,
             bgSecondary = BgSecondaryLight,
             bgTertiary = BgTertiaryLight,
-            border = BorderColorLight
+            border = BorderColorLight,
+            warning = ColorWarning,
+            info = ColorInfo,
+            error = ColorError,
+            success = ColorSuccess,
+            birdwatch = ColorBirdwatch,
+            encourage = ColorEncourage
         )
     }
 

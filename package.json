@@ -10,7 +10,9 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "build:rust": "cd rust-engine/nurunuru-napi && node ../../node_modules/.bin/napi build --release"
+    "build:rust": "cd rust-engine/nurunuru-napi && node ../../node_modules/.bin/napi build --release",
+    "tokens": "node design-tokens/generate.mjs",
+    "tokens:check": "node design-tokens/generate.mjs --check"
   },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.36.0",
