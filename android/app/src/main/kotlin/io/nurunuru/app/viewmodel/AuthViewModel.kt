@@ -180,7 +180,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             delay(1500)
 
             val cache = io.nurunuru.app.data.cache.NostrCache(getApplication())
-            val repository = NostrRepository(client, prefs, cache)
+            val recommendationEngine = io.nurunuru.app.data.RecommendationEngine(getApplication())
+            val repository = NostrRepository(client, prefs, cache, recommendationEngine)
 
             val profile = UserProfile(
                 pubkey = signer.getPublicKeyHex(),

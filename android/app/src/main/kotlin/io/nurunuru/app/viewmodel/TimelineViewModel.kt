@@ -82,11 +82,15 @@ class TimelineViewModel(
         } catch (e: Exception) { /* Ignore */ }
     }
 
+    private var globalLoadJob: kotlinx.coroutines.Job? = null
     fun loadGlobalTimeline(isRefresh: Boolean = false) {
-        viewModelScope.launch {
+        if (!isRefresh && globalLoadJob?.isActive == true) return
+
+        globalLoadJob?.cancel()
+        globalLoadJob = viewModelScope.launch {
             _uiState.update {
                 if (isRefresh) it.copy(isGlobalRefreshing = true, globalError = null)
-                else it.copy(isGlobalLoading = true, globalError = null)
+                else it.copy(isGlobalLoading = true, globalError = null, globalPosts = emptyList())
             }
             try {
                 val posts = repository.fetchGlobalTimeline(50)
@@ -127,11 +131,15 @@ class TimelineViewModel(
         }
     }
 
+    private var followingLoadJob: kotlinx.coroutines.Job? = null
     fun loadFollowingTimeline(isRefresh: Boolean = false) {
-        viewModelScope.launch {
+        if (!isRefresh && followingLoadJob?.isActive == true) return
+
+        followingLoadJob?.cancel()
+        followingLoadJob = viewModelScope.launch {
             _uiState.update {
                 if (isRefresh) it.copy(isFollowingRefreshing = true, followingError = null)
-                else it.copy(isFollowingLoading = true, followingError = null)
+                else it.copy(isFollowingLoading = true, followingError = null, followingPosts = emptyList())
             }
             try {
                 val posts = repository.fetchFollowTimeline(pubkeyHex, 50)

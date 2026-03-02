@@ -16,7 +16,8 @@ import okhttp3.Request
 class NostrRepository(
     private val client: NostrClient,
     private val prefs: AppPreferences,
-    private val cache: NostrCache
+    private val cache: NostrCache,
+    private val recommendationEngine: RecommendationEngine
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -31,41 +32,77 @@ class NostrRepository(
     }
 
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
+        val myPubkey = prefs.publicKeyHex ?: ""
         val oneHourAgo = getOneHourAgo()
+        val threeHoursAgo = System.currentTimeMillis() / 1000 - 10800
 
-        // 1. Fetch viral candidates (high engagement candidates from last 1 hour)
-        val viralFilter = NostrClient.Filter(
-            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
-            limit = 100,
-            since = oneHourAgo
-        )
+        // 1. Fetch candidates in parallel
+        val (allEvents, followList, secondDegreeFollows) = coroutineScope {
+            val viralJob = async {
+                client.fetchEvents(NostrClient.Filter(
+                    kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
+                    limit = 100,
+                    since = oneHourAgo
+                ), timeoutMs = 4000)
+            }
+            val recentJob = async {
+                client.fetchEvents(NostrClient.Filter(
+                    kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
+                    limit = 50,
+                    since = oneHourAgo
+                ), timeoutMs = 4000)
+            }
+            val followListJob = async { fetchFollowList(myPubkey) }
 
-        // 2. Fetch recent global content (freshness)
-        val recentFilter = NostrClient.Filter(
-            kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
-            limit = 50,
-            since = oneHourAgo
-        )
+            val viral = viralJob.await()
+            val recent = recentJob.await()
+            val follows = followListJob.await()
 
-        val allEvents = coroutineScope {
-            val viral = async { client.fetchEvents(viralFilter, timeoutMs = 4000) }
-            val recent = async { client.fetchEvents(recentFilter, timeoutMs = 4000) }
-            (viral.await() + recent.await()).distinctBy { it.id }
+            // Build 2nd-degree network (friends of friends)
+            val secondDegree = if (follows.isNotEmpty()) {
+                val sampleFollows = follows.shuffled().take(30)
+                val followsOfFollows = fetchFollowListsBatch(sampleFollows)
+                RecommendationEngine.extract2ndDegreeNetwork(follows, followsOfFollows)
+            } else emptySet()
+
+            // Fetch some posts from 2nd degree network
+            val secondDegreePosts = if (secondDegree.isNotEmpty()) {
+                client.fetchEvents(NostrClient.Filter(
+                    kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
+                    authors = secondDegree.take(50).toList(),
+                    limit = 50,
+                    since = threeHoursAgo
+                ), timeoutMs = 4000)
+            } else emptyList()
+
+            Triple(
+                (viral + recent + secondDegreePosts).distinctBy { it.id },
+                follows.toSet(),
+                secondDegree
+            )
         }
 
-        // 3. Enrich and score with detailed algorithm (synced with lib/recommendation.js)
+        // 2. Enrich candidates with profiles and engagement data
         val enriched = enrichPosts(allEvents)
 
-        // Filter out users without icon or name (Requirement: exclude if either is missing)
-        val filtered = enriched.filter { post ->
-            val profile = post.profile
-            profile != null && !profile.picture.isNullOrBlank() && (!profile.name.isNullOrBlank() || !profile.displayName.isNullOrBlank())
-        }
+        // 3. Score and mix using RecommendationEngine (synced with Web algorithm)
+        val profileMap = enriched.associate { it.event.pubkey to (it.profile ?: UserProfile(it.event.pubkey)) }
+        val engagements = enriched.associate { it.event.id to RecommendationEngine.EngagementCounts(
+            likes = it.likeCount,
+            reposts = it.repostCount,
+            zaps = (it.zapAmount / 1000).toInt() // Approximate sats
+        ) }
 
-        // Secondary sort for diversity and finalized scoring
-        return filtered
-            .sortedByDescending { it.score }
-            .take(limit)
+        val context = RecommendationEngine.ScoringContext(
+            followList = followList,
+            secondDegreeFollows = secondDegreeFollows,
+            engagements = engagements,
+            profiles = profileMap,
+            userGeohash = prefs.userGeohash,
+            mutedPubkeys = getCachedMuteList(myPubkey)?.pubkeys?.toSet() ?: emptySet()
+        )
+
+        return recommendationEngine.getRecommendedPosts(enriched, context, limit)
     }
 
     /** Fetch timeline for followed users. */
@@ -1358,7 +1395,7 @@ class NostrRepository(
             authors = pubkeys.take(50),
             limit = pubkeys.size
         )
-        val events = client.fetchEvents(filter, timeoutMs = 15_000)
+        val events = client.fetchEvents(filter, timeoutMs = 5_000)
 
         val latestByAuthor = mutableMapOf<String, NostrEvent>()
         for (event in events) {
