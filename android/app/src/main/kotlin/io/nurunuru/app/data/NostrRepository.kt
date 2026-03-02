@@ -1070,6 +1070,9 @@ class NostrRepository(
 
     fun getDefaultZapAmount(): Int = prefs.defaultZapAmount
 
+    fun getCachedTimeline(): String? = cache.getCachedTimeline()
+    fun setCachedTimeline(eventsJson: String) = cache.setCachedTimeline(eventsJson)
+
     fun getRecentSearches(): List<String> = prefs.recentSearches
     fun saveRecentSearch(query: String) {
         val current = prefs.recentSearches
@@ -1268,8 +1271,8 @@ class NostrRepository(
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> {
-        if (events.isEmpty()) return emptyList()
+    private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> = coroutineScope {
+        if (events.isEmpty()) return@coroutineScope emptyList()
 
         val myPubkey = prefs.publicKeyHex
         val processedItems = mutableListOf<Pair<NostrEvent, NostrEvent?>>() // Original, Repost(optional)
@@ -1291,47 +1294,55 @@ class NostrRepository(
             }
         }
 
-        if (processedItems.isEmpty()) return emptyList()
+        if (processedItems.isEmpty()) return@coroutineScope emptyList()
 
-        val profiles = fetchProfiles(pubkeysToFetch.toList())
         val ids = processedItems.map { it.first.id }
 
-        // Fetch reactions and check if I liked
-        val reactionsFilter = NostrClient.Filter(
-            kinds = listOf(NostrKind.REACTION),
-            tags = mapOf("e" to ids),
-            limit = 500
-        )
-        val reactionEvents = client.fetchEvents(reactionsFilter, 3000)
+        // Fetch everything in parallel
+        val profilesDeferred = async { fetchProfiles(pubkeysToFetch.toList()) }
+        val reactionsDeferred = async {
+            val filter = NostrClient.Filter(kinds = listOf(NostrKind.REACTION), tags = mapOf("e" to ids), limit = 500)
+            client.fetchEvents(filter, 3000)
+        }
+        val repostsDeferred = async {
+            val filter = NostrClient.Filter(kinds = listOf(NostrKind.REPOST), tags = mapOf("e" to ids), limit = 500)
+            client.fetchEvents(filter, 3000)
+        }
+        val repliesDeferred = async {
+            val filter = NostrClient.Filter(kinds = listOf(NostrKind.TEXT_NOTE), tags = mapOf("e" to ids), limit = 500)
+            client.fetchEvents(filter, 3000)
+        }
+        val zapsDeferred = async { fetchZaps(ids) }
+
+        val profiles = profilesDeferred.await()
+        val reactionEvents = reactionsDeferred.await()
+        val repostEvents = repostsDeferred.await()
+        val replyEvents = repliesDeferred.await()
+        val zaps = zapsDeferred.await()
+
         val reactionCounts = reactionEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
         val myLikes = if (myPubkey != null) reactionEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
 
-        // Fetch reposts and check if I reposted
-        val repostsFilter = NostrClient.Filter(
-            kinds = listOf(NostrKind.REPOST),
-            tags = mapOf("e" to ids),
-            limit = 500
-        )
-        val repostEvents = client.fetchEvents(repostsFilter, 3000)
         val repostCounts = repostEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
         val myReposts = if (myPubkey != null) repostEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
 
-        // Fetch replies to count them
-        val repliesFilter = NostrClient.Filter(
-            kinds = listOf(NostrKind.TEXT_NOTE),
-            tags = mapOf("e" to ids),
-            limit = 500
-        )
-        val replyEvents = client.fetchEvents(repliesFilter, 3000)
         val replyCounts = replyEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
 
-        val zaps = fetchZaps(ids)
+        // Parallel NIP-05 verification
+        val verificationDeferred = profiles.values.filter { it.nip05 != null }.map { profile ->
+            async {
+                val isVerified = Nip05Utils.verifyNip05(profile.nip05!!, profile.pubkey)
+                profile.pubkey to isVerified
+            }
+        }
+        val verificationResults = verificationDeferred.awaitAll().toMap()
 
-        return processedItems.map { (event, repost) ->
+        processedItems.map { (event, repost) ->
             val likeCount = reactionCounts[event.id] ?: 0
             val repostCount = repostCounts[event.id] ?: 0
             val replyCount = replyCounts[event.id] ?: 0
             val zapAmount = zaps[event.id] ?: 0L
+            val isVerified = verificationResults[event.pubkey] ?: false
 
             // Scoring matching web weights (lib/recommendation.js):
             // Zap=100, custom_reaction=60, quote=35, reply=30, Repost=25, bookmark=15, Like=5
@@ -1358,6 +1369,7 @@ class NostrRepository(
                 score = engagementScore * timeMultiplier,
                 isLiked = myLikes.contains(event.id),
                 isReposted = myReposts.contains(event.id),
+                isVerified = isVerified,
                 repostedBy = if (repost != null) profiles[repost.pubkey] else null,
                 repostTime = repost?.createdAt
             )

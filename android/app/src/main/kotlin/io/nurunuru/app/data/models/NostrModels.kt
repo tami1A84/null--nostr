@@ -43,6 +43,7 @@ data class UserProfile(
             ?: pubkey.take(12) + "..."
 }
 
+@Serializable
 data class ScoredPost(
     val event: NostrEvent,
     val score: Double = 0.0,
@@ -53,8 +54,10 @@ data class ScoredPost(
     val replyCount: Int = 0,
     val isLiked: Boolean = false,
     val isReposted: Boolean = false,
+    val isVerified: Boolean = false,
     val badges: List<String> = emptyList(),
-    val quotedPost: ScoredPost? = null,
+    // QuotedPost is omitted from serialization to avoid deep recursion in cache
+    @kotlinx.serialization.Transient val quotedPost: ScoredPost? = null,
     val repostedBy: UserProfile? = null,
     val repostTime: Long? = null
 )
