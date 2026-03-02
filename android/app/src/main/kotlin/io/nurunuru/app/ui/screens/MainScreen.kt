@@ -56,6 +56,7 @@ fun MainScreen(
     var activeTab by remember { mutableStateOf(BottomTab.TIMELINE) }
 
     // Create shared NostrClient and Repository
+    val recommendationEngine = remember { io.nurunuru.app.data.RecommendationEngine(context) }
     val nostrClient = remember {
         val signer = if (hasInternalKey) {
             io.nurunuru.app.data.InternalSigner(keyManager)
@@ -72,16 +73,19 @@ fun MainScreen(
         ).also { it.connect() }
     }
     val nostrCache = remember { io.nurunuru.app.data.cache.NostrCache(context) }
-    val repository = remember { NostrRepository(nostrClient, app.prefs, nostrCache) }
+    val repository = remember { NostrRepository(nostrClient, app.prefs, nostrCache, recommendationEngine) }
 
     // ViewModels
     val timelineVM: TimelineViewModel = viewModel(
+        TimelineViewModel::class.java,
         factory = TimelineViewModel.Factory(repository, pubkeyHex)
-    )
+    ).also { it.setRecommendationEngine(recommendationEngine) }
     val talkVM: TalkViewModel = viewModel(
+        TalkViewModel::class.java,
         factory = TalkViewModel.Factory(repository, nostrClient, pubkeyHex)
     )
     val homeVM: HomeViewModel = viewModel(
+        HomeViewModel::class.java,
         factory = HomeViewModel.Factory(repository, pubkeyHex)
     )
 
