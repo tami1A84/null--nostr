@@ -48,13 +48,10 @@ fun TimelineScreen(
     var showNotificationsModal by remember { mutableStateOf(false) }
     var viewingPubkey by remember { mutableStateOf<String?>(null) }
 
-    // Pager state for Recommended (0) and Following (1)
-    // Default to Following (index 1)
     val pagerState = rememberPagerState(
         initialPage = 1
     ) { 2 }
 
-    // Sync Pager -> ViewModel
     LaunchedEffect(pagerState.currentPage) {
         val targetFeed = if (pagerState.currentPage == 0) FeedType.GLOBAL else FeedType.FOLLOWING
         if (uiState.feedType != targetFeed) {
@@ -62,7 +59,6 @@ fun TimelineScreen(
         }
     }
 
-    // Sync ViewModel -> Pager
     LaunchedEffect(uiState.feedType) {
         val targetPage = if (uiState.feedType == FeedType.GLOBAL) 0 else 1
         if (pagerState.currentPage != targetPage) {
@@ -70,44 +66,58 @@ fun TimelineScreen(
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TimelineHeader(
-                feedType = uiState.feedType,
-                onFeedTypeChange = { viewModel.switchFeed(it) },
-                showRecommendedDot = uiState.hasNewRecommendations,
-                onSearchClick = { showSearchModal = true },
-                onNotificationsClick = { showNotificationsModal = true }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showPostModal = true },
-                containerColor = LineGreen,
-                contentColor = Color.White,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "投稿する")
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {
+                TimelineHeader(
+                    feedType = uiState.feedType,
+                    onFeedTypeChange = { viewModel.switchFeed(it) },
+                    showRecommendedDot = uiState.hasNewRecommendations,
+                    onSearchClick = { showSearchModal = true },
+                    onNotificationsClick = { showNotificationsModal = true }
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = { showPostModal = true },
+                    containerColor = LineGreen,
+                    contentColor = Color.White,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "投稿する")
+                }
+            },
+            containerColor = nuruColors.bgPrimary
+        ) { padding ->
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                verticalAlignment = Alignment.Top
+            ) { page ->
+                TimelineContent(
+                    viewModel = viewModel,
+                    repository = repository,
+                    feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING,
+                    onProfileClick = { viewingPubkey = it },
+                    myPubkey = myPubkey
+                )
             }
-        },
-        containerColor = nuruColors.bgPrimary
-    ) { padding ->
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            verticalAlignment = Alignment.Top
-        ) { page ->
-            // Note: Each page has its own refresh state and list state
-            // But we simplify by using common logic for now
-            TimelineContent(
-                viewModel = viewModel,
+        }
+
+        if (showPostModal) {
+            PostModal(
+                myPubkey = myPubkey,
+                pictureUrl = myPictureUrl,
+                displayName = myDisplayName,
                 repository = repository,
-                feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING,
-                onProfileClick = { viewingPubkey = it },
-                myPubkey = myPubkey
+                onDismiss = { showPostModal = false },
+                onSuccess = {
+                    showPostModal = false
+                    viewModel.refresh()
+                }
             )
         }
     }
@@ -123,21 +133,6 @@ fun TimelineScreen(
             repository = repository,
             onDismiss = { viewingPubkey = null },
             onStartDM = { /* TODO */ }
-        )
-    }
-
-    // Post composition modal
-    if (showPostModal) {
-        PostModal(
-            myPubkey = myPubkey,
-            pictureUrl = myPictureUrl,
-            displayName = myDisplayName,
-            repository = repository,
-            onDismiss = { showPostModal = false },
-            onSuccess = {
-                showPostModal = false
-                viewModel.refresh()
-            }
         )
     }
 
