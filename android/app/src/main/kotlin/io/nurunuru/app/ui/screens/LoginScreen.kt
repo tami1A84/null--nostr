@@ -46,6 +46,7 @@ fun LoginScreen(
     var showKey by remember { mutableStateOf(false) }
     var showSignUp by remember { mutableStateOf(false) }
     var showNsecLogin by remember { mutableStateOf(false) }
+    var showOtherMethods by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     val amberLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -190,67 +191,9 @@ fun LoginScreen(
                         }
                     }
                 } else {
-                    // Login options: Passkey or nsec
+                    // Login options: nsec (primary) and others (collapsible)
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        // Passkey Login Button
-                        Button(
-                            onClick = { viewModel.loginWithPasskey(context) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = LineGreen.copy(alpha = 0.1f)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, LineGreen),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Icon(
-                                    imageVector = Icons.Default.Fingerprint,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = LineGreen
-                                )
-                                Text("パスキーでログイン", fontSize = 16.sp, color = LineGreen, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
-                            HorizontalDivider(modifier = Modifier.weight(1f), color = nuruColors.bgTertiary)
-                            Text("または", modifier = Modifier.padding(horizontal = 16.dp), fontSize = 12.sp, color = nuruColors.textTertiary)
-                            HorizontalDivider(modifier = Modifier.weight(1f), color = nuruColors.bgTertiary)
-                        }
-
-                    // External Signer Button (NIP-55)
-                    Button(
-                        onClick = {
-                            try {
-                                amberLauncher.launch(ExternalSigner.createGetPublicKeyIntent(context))
-                            } catch (e: Exception) {
-                                android.widget.Toast.makeText(context, "外部署名アプリが見つかりません", android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = nuruColors.bgSecondary),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.AppShortcut,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = nuruColors.textPrimary
-                            )
-                            Text("外部アプリでログイン (Amber等)", fontSize = 16.sp, color = nuruColors.textPrimary)
-                        }
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
-                        HorizontalDivider(modifier = Modifier.weight(1f), color = nuruColors.bgTertiary)
-                        Text("または秘密鍵を入力", modifier = Modifier.padding(horizontal = 16.dp), fontSize = 12.sp, color = nuruColors.textTertiary)
-                        HorizontalDivider(modifier = Modifier.weight(1f), color = nuruColors.bgTertiary)
-                    }
-
+                        // 1. Primary: Secret Key (nsec)
                         OutlinedTextField(
                             value = nsecInput,
                             onValueChange = {
@@ -317,8 +260,99 @@ fun LoginScreen(
                             }
                         }
 
+                        // 2. Collapsible: Other Login Methods
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            TextButton(
+                                onClick = { showOtherMethods = !showOtherMethods },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        "その他のログイン方法",
+                                        color = nuruColors.textTertiary,
+                                        fontSize = 14.sp
+                                    )
+                                    Icon(
+                                        imageVector = if (showOtherMethods) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = null,
+                                        tint = nuruColors.textTertiary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+
+                            AnimatedVisibility(
+                                visible = showOtherMethods,
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(top = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    /*
+                                    // Passkey Login Button (Commented out as it's buggy)
+                                    Button(
+                                        onClick = { viewModel.loginWithPasskey(context) },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(56.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = LineGreen.copy(alpha = 0.1f)),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, LineGreen),
+                                        shape = RoundedCornerShape(16.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Icon(
+                                                imageVector = Icons.Default.Fingerprint,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp),
+                                                tint = LineGreen
+                                            )
+                                            Text("パスキーでログイン", fontSize = 16.sp, color = LineGreen, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    */
+
+                                    // External Signer Button (NIP-55)
+                                    Button(
+                                        onClick = {
+                                            try {
+                                                amberLauncher.launch(ExternalSigner.createGetPublicKeyIntent(context))
+                                            } catch (e: Exception) {
+                                                android.widget.Toast.makeText(context, "外部署名アプリが見つかりません", android.widget.Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(56.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = nuruColors.bgSecondary),
+                                        shape = RoundedCornerShape(16.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Icon(
+                                                imageVector = Icons.Default.AppShortcut,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp),
+                                                tint = nuruColors.textPrimary
+                                            )
+                                            Text("外部アプリでログイン (Amber等)", fontSize = 16.sp, color = nuruColors.textPrimary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         TextButton(
-                            onClick = { showNsecLogin = false },
+                            onClick = {
+                                showNsecLogin = false
+                                showOtherMethods = false
+                            },
                             modifier = Modifier.align(Alignment.CenterHorizontally)
                         ) {
                             Text("キャンセル", color = nuruColors.textTertiary)
