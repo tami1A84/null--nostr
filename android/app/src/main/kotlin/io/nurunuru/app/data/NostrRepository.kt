@@ -90,6 +90,7 @@ class NostrRepository(
         val engagements = enriched.associate { it.event.id to RecommendationEngine.EngagementCounts(
             likes = it.likeCount,
             reposts = it.repostCount,
+            replies = it.replyCount,
             zaps = (it.zapAmount / 1000).toInt() // Approximate sats
         ) }
 
@@ -347,7 +348,8 @@ class NostrRepository(
                 banner = obj["banner"]?.jsonPrimitive?.content,
                 lud16 = obj["lud16"]?.jsonPrimitive?.content,
                 website = obj["website"]?.jsonPrimitive?.content,
-                birthday = birthdayStr
+                birthday = birthdayStr,
+                geohash = event.getTagValue("g") ?: obj["geohash"]?.jsonPrimitive?.content
             )
         } catch (e: Exception) {
             UserProfile(pubkey = event.pubkey)
@@ -1254,6 +1256,7 @@ class NostrRepository(
         updateField("lud16", profile.lud16)
         updateField("website", profile.website)
         updateField("birthday", profile.birthday)
+        updateField("geohash", profile.geohash)
 
         val content = JsonObject(baseObj).toString()
 
@@ -1313,11 +1316,21 @@ class NostrRepository(
         val repostCounts = repostEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
         val myReposts = if (myPubkey != null) repostEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
 
+        // Fetch replies to count them
+        val repliesFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.TEXT_NOTE),
+            tags = mapOf("e" to ids),
+            limit = 500
+        )
+        val replyEvents = client.fetchEvents(repliesFilter, 3000)
+        val replyCounts = replyEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
+
         val zaps = fetchZaps(ids)
 
         return processedItems.map { (event, repost) ->
             val likeCount = reactionCounts[event.id] ?: 0
             val repostCount = repostCounts[event.id] ?: 0
+            val replyCount = replyCounts[event.id] ?: 0
             val zapAmount = zaps[event.id] ?: 0L
 
             // Scoring matching web weights (lib/recommendation.js):
@@ -1340,6 +1353,7 @@ class NostrRepository(
                 profile = profiles[event.pubkey],
                 likeCount = likeCount,
                 repostCount = repostCount,
+                replyCount = replyCount,
                 zapAmount = zapAmount,
                 score = engagementScore * timeMultiplier,
                 isLiked = myLikes.contains(event.id),
