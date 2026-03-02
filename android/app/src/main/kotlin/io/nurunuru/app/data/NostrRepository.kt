@@ -1395,7 +1395,7 @@ class NostrRepository(
             authors = pubkeys.take(50),
             limit = pubkeys.size
         )
-        val events = client.fetchEvents(filter, timeoutMs = 15_000)
+        val events = client.fetchEvents(filter, timeoutMs = 5_000)
 
         val latestByAuthor = mutableMapOf<String, NostrEvent>()
         for (event in events) {

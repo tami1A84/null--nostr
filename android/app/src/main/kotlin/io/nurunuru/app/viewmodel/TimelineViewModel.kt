@@ -84,7 +84,7 @@ class TimelineViewModel(
 
     private var globalLoadJob: kotlinx.coroutines.Job? = null
     fun loadGlobalTimeline(isRefresh: Boolean = false) {
-        if (!isRefresh && _uiState.value.isGlobalLoading) return
+        if (!isRefresh && globalLoadJob?.isActive == true) return
 
         globalLoadJob?.cancel()
         globalLoadJob = viewModelScope.launch {
@@ -133,7 +133,7 @@ class TimelineViewModel(
 
     private var followingLoadJob: kotlinx.coroutines.Job? = null
     fun loadFollowingTimeline(isRefresh: Boolean = false) {
-        if (!isRefresh && _uiState.value.isFollowingLoading) return
+        if (!isRefresh && followingLoadJob?.isActive == true) return
 
         followingLoadJob?.cancel()
         followingLoadJob = viewModelScope.launch {
