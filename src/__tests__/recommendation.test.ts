@@ -43,6 +43,9 @@ describe('Recommendation Algorithm', () => {
             bookmarks: 1,
             custom_reactions: 1
           }
+        },
+        profiles: {
+          'p1': { name: 'P1', picture: 'pic1' }
         }
       }
       // Weights:
@@ -67,9 +70,14 @@ describe('Recommendation Algorithm', () => {
       const now = Math.floor(Date.now() / 1000)
       const post47 = { id: '1', pubkey: 'p1', created_at: now - 47 * 3600 }
       const post49 = { id: '2', pubkey: 'p1', created_at: now - 49 * 3600 }
+      const options = {
+        profiles: {
+          'p1': { name: 'P1', picture: 'pic1' }
+        }
+      }
 
-      const score47 = calculateRecommendationScore(post47, {})
-      const score49 = calculateRecommendationScore(post49, {})
+      const score47 = calculateRecommendationScore(post47, options)
+      const score49 = calculateRecommendationScore(post49, options)
 
       expect(score49).toBeLessThan(score47)
       expect(score49).toBeLessThan(0.01)
@@ -92,6 +100,10 @@ describe('Recommendation Algorithm', () => {
           '2': { likes: 10 },
           '3': { likes: 10 },
           '4': { likes: 10 },
+        },
+        profiles: {
+          'author1': { name: 'Author 1', picture: 'pic1' },
+          'author2': { name: 'Author 2', picture: 'pic2' }
         }
       }
 

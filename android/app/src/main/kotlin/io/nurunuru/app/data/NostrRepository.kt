@@ -56,8 +56,14 @@ class NostrRepository(
         // 3. Enrich and score with detailed algorithm (synced with lib/recommendation.js)
         val enriched = enrichPosts(allEvents)
 
+        // Filter out users without icon or name (Requirement: exclude if either is missing)
+        val filtered = enriched.filter { post ->
+            val profile = post.profile
+            profile != null && !profile.picture.isNullOrBlank() && (!profile.name.isNullOrBlank() || !profile.displayName.isNullOrBlank())
+        }
+
         // Secondary sort for diversity and finalized scoring
-        return enriched
+        return filtered
             .sortedByDescending { it.score }
             .take(limit)
     }
