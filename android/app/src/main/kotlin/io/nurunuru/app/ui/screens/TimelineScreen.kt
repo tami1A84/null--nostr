@@ -70,44 +70,61 @@ fun TimelineScreen(
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TimelineHeader(
-                feedType = uiState.feedType,
-                onFeedTypeChange = { viewModel.switchFeed(it) },
-                showRecommendedDot = uiState.hasNewRecommendations,
-                onSearchClick = { showSearchModal = true },
-                onNotificationsClick = { showNotificationsModal = true }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showPostModal = true },
-                containerColor = LineGreen,
-                contentColor = Color.White,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "投稿する")
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {
+                TimelineHeader(
+                    feedType = uiState.feedType,
+                    onFeedTypeChange = { viewModel.switchFeed(it) },
+                    showRecommendedDot = uiState.hasNewRecommendations,
+                    onSearchClick = { showSearchModal = true },
+                    onNotificationsClick = { showNotificationsModal = true }
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = { showPostModal = true },
+                    containerColor = LineGreen,
+                    contentColor = Color.White,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "投稿する")
+                }
+            },
+            containerColor = nuruColors.bgPrimary
+        ) { padding ->
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                verticalAlignment = Alignment.Top
+            ) { page ->
+                // Note: Each page has its own refresh state and list state
+                // But we simplify by using common logic for now
+                TimelineContent(
+                    viewModel = viewModel,
+                    repository = repository,
+                    feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING,
+                    onProfileClick = { viewingPubkey = it },
+                    myPubkey = myPubkey
+                )
             }
-        },
-        containerColor = nuruColors.bgPrimary
-    ) { padding ->
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            verticalAlignment = Alignment.Top
-        ) { page ->
-            // Note: Each page has its own refresh state and list state
-            // But we simplify by using common logic for now
-            TimelineContent(
-                viewModel = viewModel,
+        }
+
+        // Post composition modal
+        if (showPostModal) {
+            PostModal(
+                myPubkey = myPubkey,
+                pictureUrl = myPictureUrl,
+                displayName = myDisplayName,
                 repository = repository,
-                feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING,
-                onProfileClick = { viewingPubkey = it },
-                myPubkey = myPubkey
+                onDismiss = { showPostModal = false },
+                onSuccess = {
+                    showPostModal = false
+                    viewModel.refresh()
+                }
             )
         }
     }
@@ -126,20 +143,6 @@ fun TimelineScreen(
         )
     }
 
-    // Post composition modal
-    if (showPostModal) {
-        PostModal(
-            myPubkey = myPubkey,
-            pictureUrl = myPictureUrl,
-            displayName = myDisplayName,
-            repository = repository,
-            onDismiss = { showPostModal = false },
-            onSuccess = {
-                showPostModal = false
-                viewModel.refresh()
-            }
-        )
-    }
 
     if (showSearchModal) {
         SearchModal(

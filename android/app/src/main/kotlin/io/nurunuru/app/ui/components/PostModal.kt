@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -49,9 +50,7 @@ import io.nurunuru.app.ui.theme.LocalNuruColors
 import kotlinx.coroutines.launch
 
 private const val MAX_NOTE_LENGTH = 140
-private val URL_REGEX = Regex("https?://[^\\s]+|nostr:[a-z0-9]+", RegexOption.IGNORE_CASE)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostModal(
     myPubkey: String,
@@ -74,6 +73,10 @@ fun PostModal(
     var selectedCustomEmojis by remember { mutableStateOf<List<CustomEmoji>>(emptyList()) }
     var showRecorder by remember { mutableStateOf(false) }
     var recordedVideo by remember { mutableStateOf<RecordedVideo?>(null) }
+
+    BackHandler {
+        onDismiss()
+    }
 
     // Speech to Text
     var isSTTActive by remember { mutableStateOf(false) }
@@ -103,16 +106,11 @@ fun PostModal(
     }
 
     val focusRequester = remember { FocusRequester() }
-    val currentLength = remember(text.text) { text.text.replace(URL_REGEX, "").length }
+    val currentLength = remember(text.text) { text.text.length }
     val remaining = MAX_NOTE_LENGTH - currentLength
     val canPost = (text.text.isNotBlank() || selectedImages.isNotEmpty() || recordedVideo != null) && remaining >= 0 && !posting
 
     val scope = rememberCoroutineScope()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    fun dismissSheet() {
-        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
-    }
 
     fun handlePost() {
         if (!canPost) return
@@ -172,7 +170,7 @@ fun PostModal(
                 if (success != null) {
                     toastState.show(ToastMessages.POST_SUCCESS, ToastType.SUCCESS)
                     onSuccess()
-                    dismissSheet()
+                    onDismiss()
                 } else {
                     toastState.show(ToastMessages.POST_FAILED, ToastType.ERROR)
                 }
@@ -206,62 +204,70 @@ fun PostModal(
         })
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = nuruColors.bgPrimary,
-        tonalElevation = 0.dp,
-        sheetState = sheetState,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = nuruColors.border) }
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = nuruColors.bgPrimary
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
+                .fillMaxSize()
+                .statusBarsPadding()
                 .imePadding()
-                .padding(bottom = 8.dp)
         ) {
             // Header
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .height(56.dp)
+                    .padding(horizontal = 16.dp)
             ) {
-                IconButton(onClick = { dismissSheet() }) {
-                    Icon(NuruIcons.Close, "閉じる", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
-                }
+                Text(
+                    text = "キャンセル",
+                    color = nuruColors.textSecondary,
+                    fontSize = 16.sp,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { onDismiss() }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                )
 
                 Text(
                     text = if (replyToId != null) "返信" else "新規投稿",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = nuruColors.textPrimary,
+                    modifier = Modifier.align(Alignment.Center)
                 )
 
                 Button(
                     onClick = { handlePost() },
                     enabled = canPost,
+                    modifier = Modifier.align(Alignment.CenterEnd),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = nuruColors.lineGreen,
                         disabledContainerColor = nuruColors.lineGreen.copy(alpha = 0.3f)
                     ),
-                    shape = RoundedCornerShape(24.dp),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
                 ) {
                     if (posting) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
                     } else {
-                        Text("投稿する", fontWeight = FontWeight.Bold)
+                        Text("投稿", fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
 
+            HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+
             // Content Area
             Column(
                 modifier = Modifier
+                    .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    .verticalScroll(rememberScrollState())
             ) {
                 // CW Input
                 if (showCWInput) {
@@ -289,11 +295,8 @@ fun PostModal(
                     Spacer(Modifier.height(8.dp))
                 }
 
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    UserAvatar(pictureUrl = pictureUrl, displayName = displayName, size = 40.dp)
-                    Spacer(Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         val inlineContent = mutableMapOf<String, InlineTextContent>()
                         val annotatedText = buildAnnotatedString {
                             val parts = text.text.split(Regex("(:\\w+:|#\\w+|https?://[^\\s]+)")).filter { it.isNotEmpty() }
@@ -303,7 +306,11 @@ fun PostModal(
 
                         BasicTextField(
                             value = text,
-                            onValueChange = { text = it },
+                            onValueChange = {
+                                if (it.text.length <= MAX_NOTE_LENGTH) {
+                                    text = it
+                                }
+                            },
                             textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                             cursorBrush = SolidColor(nuruColors.lineGreen),
                             modifier = Modifier
@@ -364,6 +371,8 @@ fun PostModal(
                 }
             }
 
+            HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+
             // Toolbar
             Row(
                 modifier = Modifier
@@ -416,9 +425,11 @@ fun PostModal(
                     pubkey = myPubkey,
                     onSelect = { emoji ->
                         val newText = text.text + ":${emoji.shortcode}:"
-                        text = TextFieldValue(newText, TextRange(newText.length))
-                        if (!selectedCustomEmojis.any { it.shortcode == emoji.shortcode }) {
-                            selectedCustomEmojis = selectedCustomEmojis + emoji
+                        if (newText.length <= MAX_NOTE_LENGTH) {
+                            text = TextFieldValue(newText, TextRange(newText.length))
+                            if (!selectedCustomEmojis.any { it.shortcode == emoji.shortcode }) {
+                                selectedCustomEmojis = selectedCustomEmojis + emoji
+                            }
                         }
                         showEmojiPicker = false
                     },

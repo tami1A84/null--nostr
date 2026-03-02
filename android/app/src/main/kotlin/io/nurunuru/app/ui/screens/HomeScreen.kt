@@ -59,45 +59,46 @@ fun HomeScreen(
     var postToDelete by remember { mutableStateOf<String?>(null) }
     var viewingPubkey by remember { mutableStateOf<String?>(null) }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = { Text("ホーム", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
-                actions = {
-                    TextButton(onClick = onLogout) {
-                        Text("ログアウト", color = TextSecondary, fontSize = 14.sp)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = bgPrimary,
-                    titleContentColor = TextPrimary
-                ),
-                windowInsets = WindowInsets.statusBars
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showPostModal = true },
-                containerColor = LineGreen,
-                contentColor = Color.White,
-                shape = CircleShape
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {
+                TopAppBar(
+                    title = { Text("ホーム", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+                    actions = {
+                        TextButton(onClick = onLogout) {
+                            Text("ログアウト", color = TextSecondary, fontSize = 14.sp)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = bgPrimary,
+                        titleContentColor = TextPrimary
+                    ),
+                    windowInsets = WindowInsets.statusBars
+                )
+            },
+            floatingActionButton = {
+                FloatingActionButton(
+                    onClick = { showPostModal = true },
+                    containerColor = LineGreen,
+                    contentColor = Color.White,
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "投稿")
+                }
+            },
+            containerColor = bgPrimary
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .nestedScroll(pullRefreshState.nestedScrollConnection)
             ) {
-                Icon(Icons.Default.Add, contentDescription = "投稿")
-            }
-        },
-        containerColor = bgPrimary
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .nestedScroll(pullRefreshState.nestedScrollConnection)
-        ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 16.dp) // Optimized
-            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp) // Optimized
+                ) {
                 item {
                     if (profile == null) {
                         ProfileSkeleton()
@@ -191,13 +192,27 @@ fun HomeScreen(
                         }
                     }
                 }
-            }
 
             PullToRefreshContainer(
                 state = pullRefreshState,
                 modifier = Modifier.align(Alignment.TopCenter),
                 containerColor = bgPrimary,
                 contentColor = LineGreen
+            )
+            }
+    }
+
+    if (showPostModal) {
+        PostModal(
+            myPubkey = viewModel.myPubkeyHex,
+            pictureUrl = profile?.picture,
+            displayName = profile?.displayedName ?: "",
+            repository = repository,
+            onDismiss = { showPostModal = false },
+            onSuccess = {
+                showPostModal = false
+                viewModel.refresh()
+            }
             )
         }
     }
@@ -232,20 +247,6 @@ fun HomeScreen(
             repository = repository,
             onDismiss = { viewingPubkey = null },
             onStartDM = { /* TODO */ }
-        )
-    }
-
-    if (showPostModal) {
-        PostModal(
-            myPubkey = viewModel.myPubkeyHex,
-            pictureUrl = profile?.picture,
-            displayName = profile?.displayedName ?: "",
-            repository = repository,
-            onDismiss = { showPostModal = false },
-            onSuccess = {
-                showPostModal = false
-                viewModel.refresh()
-            }
         )
     }
 
