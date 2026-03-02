@@ -1,5 +1,6 @@
 package io.nurunuru.app.data
 
+import io.nurunuru.app.data.cache.NostrCache
 import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlin.math.pow
@@ -14,9 +15,9 @@ import okhttp3.Request
  */
 class NostrRepository(
     private val client: NostrClient,
-    private val prefs: AppPreferences
+    private val prefs: AppPreferences,
+    private val cache: NostrCache
 ) {
-    private val profileCache = mutableMapOf<String, UserProfile>()
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     // ─── Timeline ─────────────────────────────────────────────────────────────
@@ -29,19 +30,20 @@ class NostrRepository(
 
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
         val now = System.currentTimeMillis() / 1000
+        val oneHourAgo = now - Constants.Time.HOUR_SECS
 
-        // 1. Fetch viral candidates (high engagement candidates from last 3 hours)
+        // 1. Fetch viral candidates (high engagement candidates from last 1 hour)
         val viralFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
             limit = 100,
-            since = now - 10800 // last 3 hours
+            since = oneHourAgo
         )
 
         // 2. Fetch recent global content (freshness)
         val recentFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
             limit = 50,
-            since = now - 1800 // last 30 mins
+            since = oneHourAgo
         )
 
         val allEvents = coroutineScope {
@@ -68,7 +70,7 @@ class NostrRepository(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
             authors = followList.take(500),
             limit = limit,
-            since = System.currentTimeMillis() / 1000 - 86400 // last 24h
+            since = System.currentTimeMillis() / 1000 - Constants.Time.HOUR_SECS
         )
         val events = client.fetchEvents(filter, timeoutMs = 6_000)
         return enrichPosts(events)
@@ -79,7 +81,8 @@ class NostrRepository(
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
             search = query,
-            limit = limit
+            limit = limit,
+            since = System.currentTimeMillis() / 1000 - Constants.Time.HOUR_SECS
         )
         val events = client.fetchEventsFrom(
             listOf(NostrClient.SEARCH_RELAY), filter, timeoutMs = 6_000
@@ -92,12 +95,13 @@ class NostrRepository(
     /** Fetch notifications (reactions + zaps targeting the user). */
     suspend fun fetchNotifications(pubkeyHex: String, limit: Int = 50): NotificationResult {
         val now = System.currentTimeMillis() / 1000
+        val oneHourAgo = now - Constants.Time.HOUR_SECS
 
         // 1. Fetch reactions (#p tag targeting me)
         val reactionFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.REACTION),
             tags = mapOf("p" to listOf(pubkeyHex)),
-            since = now - 86400 * 7, // last 7 days
+            since = oneHourAgo,
             limit = limit
         )
 
@@ -105,7 +109,7 @@ class NostrRepository(
         val zapFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.ZAP_RECEIPT),
             tags = mapOf("p" to listOf(pubkeyHex)),
-            since = now - 86400 * 7,
+            since = oneHourAgo,
             limit = limit
         )
 
@@ -233,23 +237,25 @@ class NostrRepository(
 
     // ─── Profiles ─────────────────────────────────────────────────────────────
 
-    suspend fun fetchProfile(pubkeyHex: String): UserProfile? {
-        profileCache[pubkeyHex]?.let { return it }
+    fun getCachedProfile(pubkeyHex: String): UserProfile? = cache.getCachedProfile(pubkeyHex)
 
+    suspend fun fetchProfile(pubkeyHex: String): UserProfile? {
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.METADATA),
             authors = listOf(pubkeyHex),
             limit = 1
         )
         val events = client.fetchEvents(filter, timeoutMs = 4_000)
-        val event = events.maxByOrNull { it.createdAt } ?: return null
+        val event = events.maxByOrNull { it.createdAt } ?: return getCachedProfile(pubkeyHex)
         val profile = parseProfile(event)
-        profileCache[pubkeyHex] = profile
+        cache.setCachedProfile(pubkeyHex, profile)
         return profile
     }
 
     suspend fun fetchProfiles(pubkeys: List<String>): Map<String, UserProfile> {
-        val missing = pubkeys.filter { !profileCache.containsKey(it) }.distinct()
+        val results = pubkeys.associateWith { cache.getCachedProfile(it) }.toMutableMap()
+        val missing = pubkeys.filter { results[it] == null }.distinct()
+
         if (missing.isNotEmpty()) {
             val filter = NostrClient.Filter(
                 kinds = listOf(NostrKind.METADATA),
@@ -259,9 +265,13 @@ class NostrRepository(
             val events = client.fetchEvents(filter, timeoutMs = 4_000)
             events.groupBy { it.pubkey }
                 .mapValues { (_, evts) -> evts.maxByOrNull { it.createdAt }!! }
-                .forEach { (pk, event) -> profileCache[pk] = parseProfile(event) }
+                .forEach { (pk, event) ->
+                    val profile = parseProfile(event)
+                    cache.setCachedProfile(pk, profile)
+                    results[pk] = profile
+                }
         }
-        return pubkeys.associateWith { profileCache[it] ?: UserProfile(pubkey = it) }
+        return pubkeys.associateWith { results[it] ?: UserProfile(pubkey = it) }
     }
 
     private fun parseProfile(event: NostrEvent): UserProfile {
@@ -303,6 +313,8 @@ class NostrRepository(
 
     // ─── Follow List ──────────────────────────────────────────────────────────
 
+    fun getCachedFollowList(pubkeyHex: String): List<String>? = cache.getCachedFollowList(pubkeyHex)
+
     suspend fun fetchFollowList(pubkeyHex: String): List<String> {
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.CONTACT_LIST),
@@ -310,8 +322,10 @@ class NostrRepository(
             limit = 1
         )
         val events = client.fetchEvents(filter, timeoutMs = 4_000)
-        val event = events.maxByOrNull { it.createdAt } ?: return emptyList()
-        return event.getTagValues("p")
+        val event = events.maxByOrNull { it.createdAt } ?: return getCachedFollowList(pubkeyHex) ?: emptyList()
+        val followList = event.getTagValues("p")
+        cache.setCachedFollowList(pubkeyHex, followList)
+        return followList
     }
 
     // ─── User Notes ───────────────────────────────────────────────────────────
@@ -320,17 +334,21 @@ class NostrRepository(
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.LONG_FORM, NostrKind.VIDEO_LOOP, NostrKind.REPOST),
             authors = listOf(pubkeyHex),
-            limit = limit
+            limit = limit,
+            since = System.currentTimeMillis() / 1000 - Constants.Time.HOUR_SECS
         )
         val events = client.fetchEvents(filter, timeoutMs = 5_000)
         return enrichPosts(events)
     }
 
     suspend fun fetchUserLikes(pubkeyHex: String, limit: Int = 30): List<ScoredPost> {
+        val now = System.currentTimeMillis() / 1000
+        val oneHourAgo = now - Constants.Time.HOUR_SECS
         val reactionFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.REACTION),
             authors = listOf(pubkeyHex),
-            limit = limit
+            limit = limit,
+            since = oneHourAgo
         )
         val reactions = client.fetchEvents(reactionFilter, timeoutMs = 4_000)
         val eventIds = reactions.mapNotNull { it.getTagValue("e") }.distinct()
@@ -497,6 +515,11 @@ class NostrRepository(
         ) != null
     }
 
+    fun getCachedEmojiList(pubkeyHex: String): NostrEvent? {
+        val jsonStr = cache.getCachedEmoji(pubkeyHex) ?: return null
+        return try { json.decodeFromString<NostrEvent>(jsonStr) } catch (e: Exception) { null }
+    }
+
     suspend fun fetchEmojiList(pubkeyHex: String): NostrEvent? {
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.EMOJI_LIST),
@@ -504,7 +527,12 @@ class NostrRepository(
             limit = 1
         )
         val events = client.fetchEvents(filter, timeoutMs = 4_000)
-        return events.maxByOrNull { it.createdAt }
+        val event = events.maxByOrNull { it.createdAt }
+        if (event != null) {
+            cache.setCachedEmoji(pubkeyHex, json.encodeToString(event))
+            return event
+        }
+        return getCachedEmojiList(pubkeyHex)
     }
 
     suspend fun fetchEmojiSet(author: String, dTag: String): EmojiSet? {
@@ -695,17 +723,21 @@ class NostrRepository(
     // ─── DMs ─────────────────────────────────────────────────────────────────
 
     suspend fun fetchDmConversations(pubkeyHex: String): List<DmConversation> {
+        val now = System.currentTimeMillis() / 1000
+        val oneHourAgo = now - Constants.Time.HOUR_SECS
         // Fetch received DMs (Kind 4 and Kind 1059)
         val receivedFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.ENCRYPTED_DM, NostrKind.DM_GIFT_WRAP),
             tags = mapOf("p" to listOf(pubkeyHex)),
-            limit = 200
+            limit = 200,
+            since = oneHourAgo
         )
         // Fetch sent DMs (Kind 4)
         val sentFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.ENCRYPTED_DM),
             authors = listOf(pubkeyHex),
-            limit = 200
+            limit = 200,
+            since = oneHourAgo
         )
         val allEvents = coroutineScope {
             val received = async { client.fetchEvents(receivedFilter, 5_000) }
@@ -862,6 +894,19 @@ class NostrRepository(
         return client.publish(kind = 1985, content = fullContent, tags = tags) != null
     }
 
+    fun getCachedMuteList(pubkeyHex: String): MuteListData? {
+        val jsonStr = cache.getCachedMuteList(pubkeyHex) ?: return null
+        return try {
+            val event = json.decodeFromString<NostrEvent>(jsonStr)
+            MuteListData(
+                pubkeys = event.getTagValues("p"),
+                eventIds = event.getTagValues("e"),
+                hashtags = event.getTagValues("t"),
+                words = event.getTagValues("word")
+            )
+        } catch (e: Exception) { null }
+    }
+
     suspend fun fetchMuteList(pubkeyHex: String): MuteListData {
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.MUTE_LIST),
@@ -869,14 +914,19 @@ class NostrRepository(
             limit = 1
         )
         val events = client.fetchEvents(filter, timeoutMs = 4_000)
-        val event = events.maxByOrNull { it.createdAt } ?: return MuteListData()
+        val event = events.maxByOrNull { it.createdAt }
 
-        return MuteListData(
-            pubkeys = event.getTagValues("p"),
-            eventIds = event.getTagValues("e"),
-            hashtags = event.getTagValues("t"),
-            words = event.getTagValues("word")
-        )
+        if (event != null) {
+            cache.setCachedMuteList(pubkeyHex, json.encodeToString(event))
+            return MuteListData(
+                pubkeys = event.getTagValues("p"),
+                eventIds = event.getTagValues("e"),
+                hashtags = event.getTagValues("t"),
+                words = event.getTagValues("word")
+            )
+        }
+
+        return getCachedMuteList(pubkeyHex) ?: MuteListData()
     }
 
     suspend fun removeFromMuteList(pubkeyHex: String, type: String, value: String): Boolean {

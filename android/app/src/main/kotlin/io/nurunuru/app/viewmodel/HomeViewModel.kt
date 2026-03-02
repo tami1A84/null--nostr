@@ -55,6 +55,18 @@ class HomeViewModel(
     fun loadProfile(pubkeyHex: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null, isNip05Verified = false, viewingPubkey = pubkeyHex.takeIf { it != myPubkeyHex }) }
+
+            // Pattern A: Load cached profile and follow list immediately
+            val cachedProfile = repository.getCachedProfile(pubkeyHex)
+            val cachedFollowList = repository.getCachedFollowList(pubkeyHex)
+            if (cachedProfile != null || cachedFollowList != null) {
+                _uiState.update { it.copy(
+                    profile = cachedProfile ?: it.profile,
+                    followList = cachedFollowList ?: it.followList,
+                    followCount = cachedFollowList?.size ?: it.followCount
+                ) }
+            }
+
             try {
                 val profile = repository.fetchProfile(pubkeyHex)
                 val posts = repository.fetchUserNotes(pubkeyHex, 50)

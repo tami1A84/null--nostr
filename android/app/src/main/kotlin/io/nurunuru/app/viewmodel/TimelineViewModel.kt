@@ -72,6 +72,10 @@ class TimelineViewModel(
     }
 
     private suspend fun loadFollowList() {
+        // Pattern A: Use cached follow list if available
+        repository.getCachedFollowList(pubkeyHex)?.let { cached ->
+            _uiState.update { it.copy(followList = cached) }
+        }
         try {
             val follows = repository.fetchFollowList(pubkeyHex)
             _uiState.update { it.copy(followList = follows) }
