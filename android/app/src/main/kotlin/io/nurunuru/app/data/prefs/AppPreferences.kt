@@ -153,11 +153,6 @@ class AppPreferences(context: Context) {
         return publicKeyHex != null && (hasSecureKey || privateKeyHex != null || isExternalSigner)
     }
 
-    @Deprecated("Use isLoggedIn(hasSecureKey) instead")
-    val isLoggedIn: Boolean
-        @Suppress("DEPRECATION")
-        get() = publicKeyHex != null && (privateKeyHex != null || isExternalSigner)
-
     fun clear() {
         prefs.edit().clear().apply()
     }

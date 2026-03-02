@@ -43,9 +43,32 @@ fun BiometricUnlockScreen(viewModel: AuthViewModel) {
             return
         }
 
+        // デバイスの生体認証能力をチェック
+        val biometricManager = BiometricManager.from(context)
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
+            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        when (biometricManager.canAuthenticate(authenticators)) {
+            BiometricManager.BIOMETRIC_SUCCESS -> { /* OK: 認証可能 */ }
+            else -> {
+                // 生体認証非対応 → 直接復号にフォールバック
+                if (viewModel.keyManager.unlockKeyDirect()) {
+                    viewModel.onBiometricFallbackSuccess()
+                } else {
+                    errorMessage = "生体認証が利用できません"
+                    viewModel.onBiometricFailure()
+                }
+                return
+            }
+        }
+
         val cipher = viewModel.keyManager.getCipherForDecryption()
         if (cipher == null) {
-            viewModel.onBiometricFailure()
+            // Cipher 取得失敗 → 直接復号にフォールバック
+            if (viewModel.keyManager.unlockKeyDirect()) {
+                viewModel.onBiometricFallbackSuccess()
+            } else {
+                viewModel.onBiometricFailure()
+            }
             return
         }
 

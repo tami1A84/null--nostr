@@ -50,7 +50,12 @@ class NostrClient(
 
                 // 2. Setup internal SDK signer (dummy if external)
                 val sdkSigner: NostrSigner = if (signer is InternalSigner) {
-                    val keys = Keys.parse(privateKeyHexForSdk())
+                    val keyHex = privateKeyHexForSdk()
+                    if (keyHex.isNullOrEmpty()) {
+                        Log.e(TAG, "Key not available from SecureKeyManager, cannot initialize SDK")
+                        return@launch
+                    }
+                    val keys = Keys.parse(keyHex)
                     NostrSigner.keys(keys)
                 } else {
                     // For external signers, we use a random key internally in the SDK Client
@@ -97,11 +102,8 @@ class NostrClient(
         }
     }
 
-    private fun privateKeyHexForSdk(): String {
-        return (signer as? InternalSigner)?.let {
-            // SecureKeyManager 経由で一時的に取得
-            it.getKeyHexFromManager()
-        } ?: ""
+    private fun privateKeyHexForSdk(): String? {
+        return (signer as? InternalSigner)?.getKeyHexFromManager()
     }
 
     private suspend fun signAndSend(builder: EventBuilder, targetRelays: List<String>? = null): Event? {

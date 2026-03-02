@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.security.keystore.StrongBoxUnavailableException
 import android.util.Base64
 import android.util.Log
 import java.security.KeyStore
@@ -109,13 +108,15 @@ class SecureKeyManager(private val context: Context) {
                 ks.deleteEntry(KEYSTORE_ALIAS)
                 Log.d(TAG, "StrongBox is available, using HSM-backed key")
                 return builder.setIsStrongBoxBacked(true).build()
-            } catch (e: StrongBoxUnavailableException) {
-                Log.d(TAG, "StrongBox not available, falling back to TEE")
             } catch (e: Exception) {
-                Log.d(TAG, "StrongBox check failed: ${e.message}, falling back to TEE")
+                // StrongBoxUnavailableException (API 28+) 含む全例外をキャッチ
+                // 注: StrongBoxUnavailableException を直接 catch すると API 26-27 でクラス検証エラーになるため
+                //      汎用 Exception で受ける
+                Log.d(TAG, "StrongBox not available: ${e.message}, falling back to TEE")
             }
         }
-        return builder.setIsStrongBoxBacked(false).build()
+        // API 26-27: setIsStrongBoxBacked() は API 28+ のため呼ばない
+        return builder.build()
     }
 
     // ─── 鍵の保存 ─────────────────────────────────────────────

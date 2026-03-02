@@ -12,6 +12,7 @@ import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.SecureKeyManager
 import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.data.prefs.AppPreferences
+import javax.crypto.Cipher
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -99,7 +100,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * 生体認証成功時に呼ばれる。
      */
-    fun onBiometricSuccess(cipher: javax.crypto.Cipher) {
+    fun onBiometricSuccess(cipher: Cipher) {
         viewModelScope.launch(Dispatchers.IO) {
             val pubKey = prefs.publicKeyHex
             if (pubKey != null && keyManager.unlockKey(cipher)) {
@@ -112,6 +113,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 _authState.value = AuthState.Error("秘密鍵のアンロックに失敗しました")
             }
         }
+    }
+
+    /**
+     * 生体認証が利用不可で直接復号に成功した場合のフォールバック。
+     */
+    fun onBiometricFallbackSuccess() {
+        val pubKey = prefs.publicKeyHex ?: return
+        _authState.value = AuthState.LoggedIn(pubKey, isExternal = false, hasInternalKey = true)
     }
 
     /**
