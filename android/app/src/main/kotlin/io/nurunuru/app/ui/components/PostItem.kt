@@ -51,6 +51,12 @@ fun PostItem(
     val cwReason = post.event.getTagValue("content-warning")
     var isCWExpanded by remember { mutableStateOf(cwReason == null) }
 
+    // Content length threshold for collapsing
+    val COLLAPSE_THRESHOLD = 140
+    val textLength = getTextLengthWithoutLinks(post.event.content)
+    val shouldCollapse = textLength > COLLAPSE_THRESHOLD
+    var isExpanded by remember { mutableStateOf(false) }
+
     var showReportModal by remember { mutableStateOf(false) }
     var showBirdwatchModal by remember { mutableStateOf(false) }
     var showZapModal by remember { mutableStateOf(false) }
@@ -102,8 +108,38 @@ fun PostItem(
                         PostCWHeader(reason = cwReason, onCollapse = { isCWExpanded = false })
                     }
 
-                    PostContent(post = post, repository = repository, onProfileClick = onProfileClick)
-                    PostMedia(post = post)
+                    if (shouldCollapse && !isExpanded) {
+                        PostContent(
+                            post = post,
+                            repository = repository,
+                            onProfileClick = onProfileClick,
+                            overrideContent = post.event.content.take(140) + "..."
+                        )
+                        PostMedia(post = post, overrideContent = post.event.content.take(140))
+                        Text(
+                            text = "もっと見る",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = nuruColors.lineGreen,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clickable { isExpanded = true }
+                                .padding(vertical = 4.dp)
+                        )
+                    } else {
+                        PostContent(post = post, repository = repository, onProfileClick = onProfileClick)
+                        PostMedia(post = post)
+                        if (shouldCollapse && isExpanded) {
+                            Text(
+                                text = "閉じる",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = nuruColors.lineGreen,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clickable { isExpanded = false }
+                                    .padding(vertical = 4.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
