@@ -82,41 +82,64 @@ class SecureKeyManager(private val context: Context) {
         }
 
         // StrongBox (HSM) を試行
-        val spec = tryWithStrongBox(specBuilder)
+        val isStrongBoxAvailable = checkStrongBoxAvailability()
+        if (isStrongBoxAvailable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            specBuilder.setIsStrongBoxBacked(true)
+        }
 
-        val keyGen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-        keyGen.init(spec)
-        keyGen.generateKey()
+        val spec = specBuilder.build()
+        try {
+            val keyGen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+            keyGen.init(spec)
+            keyGen.generateKey()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to generate key with spec (StrongBox=$isStrongBoxAvailable)", e)
+            if (isStrongBoxAvailable) {
+                // Fallback to TEE if StrongBox failed despite check
+                Log.d(TAG, "Retrying without StrongBox...")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    specBuilder.setIsStrongBoxBacked(false)
+                }
+                val fallbackSpec = specBuilder.build()
+                val keyGenFallback = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+                keyGenFallback.init(fallbackSpec)
+                keyGenFallback.generateKey()
+            } else {
+                throw e
+            }
+        }
 
         prefs.edit().putBoolean(PREF_BIOMETRIC_BOUND, requireBiometric).apply()
-        Log.d(TAG, "Keystore AES key generated (biometric=$requireBiometric)")
+        Log.d(TAG, "Keystore AES key generated (biometric=$requireBiometric, strongbox=$isStrongBoxAvailable)")
     }
 
     /**
      * StrongBox 対応デバイスでは HSM バッキングを試み、非対応ならフォールバック。
      */
-    private fun tryWithStrongBox(builder: KeyGenParameterSpec.Builder): KeyGenParameterSpec {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                val specWithStrongBox = builder.setIsStrongBoxBacked(true).build()
-                // テスト生成して成功するか確認
-                val testGen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-                testGen.init(specWithStrongBox)
-                testGen.generateKey()
-                // 成功 → テスト鍵を削除して本番用のspecを返す
-                val ks = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-                ks.deleteEntry(KEYSTORE_ALIAS)
-                Log.d(TAG, "StrongBox is available, using HSM-backed key")
-                return builder.setIsStrongBoxBacked(true).build()
-            } catch (e: Exception) {
-                // StrongBoxUnavailableException (API 28+) 含む全例外をキャッチ
-                // 注: StrongBoxUnavailableException を直接 catch すると API 26-27 でクラス検証エラーになるため
-                //      汎用 Exception で受ける
-                Log.d(TAG, "StrongBox not available: ${e.message}, falling back to TEE")
-            }
+    private fun checkStrongBoxAvailability(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false
+
+        val tempAlias = "strongbox_test_key"
+        return try {
+            val purposes = KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            val spec = KeyGenParameterSpec.Builder(tempAlias, purposes)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .setIsStrongBoxBacked(true)
+                .build()
+
+            val keyGen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+            keyGen.init(spec)
+            keyGen.generateKey()
+
+            val ks = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            ks.deleteEntry(tempAlias)
+            true
+        } catch (e: Exception) {
+            Log.d(TAG, "StrongBox check failed: ${e.message}")
+            false
         }
-        // API 26-27: setIsStrongBoxBacked() は API 28+ のため呼ばない
-        return builder.build()
     }
 
     // ─── 鍵の保存 ─────────────────────────────────────────────

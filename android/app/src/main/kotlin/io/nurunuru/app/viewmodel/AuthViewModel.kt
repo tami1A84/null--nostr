@@ -248,9 +248,21 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
 
-                keyManager.generateKeystoreKey(requireBiometric = false)
-                keyManager.storeKey(keyBytes, pubKeyHex)
-                keyBytes.fill(0)
+                try {
+                    keyManager.generateKeystoreKey(requireBiometric = false)
+                } catch (e: Exception) {
+                    _authState.value = AuthState.Error("キーストア鍵の生成に失敗しました: ${e.message}")
+                    return@launch
+                }
+
+                try {
+                    keyManager.storeKey(keyBytes, pubKeyHex)
+                } catch (e: Exception) {
+                    _authState.value = AuthState.Error("秘密鍵の暗号化保存に失敗しました: ${e.message}")
+                    return@launch
+                } finally {
+                    keyBytes.fill(0)
+                }
 
                 prefs.publicKeyHex = pubKeyHex
                 prefs.isExternalSigner = false
@@ -258,7 +270,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
                 _authState.value = AuthState.LoggedIn(pubKeyHex, isExternal = false, hasInternalKey = true)
             } catch (e: Exception) {
-                _authState.value = AuthState.Error("鍵の保存に失敗しました: ${e.message}")
+                _authState.value = AuthState.Error("ログイン処理中にエラーが発生しました: ${e.message}")
             }
         }
     }
