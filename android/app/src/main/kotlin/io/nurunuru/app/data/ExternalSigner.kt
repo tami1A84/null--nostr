@@ -215,51 +215,66 @@ object ExternalSigner : AppSigner {
         currentUser: String,
         pubKey: String
     ): Intent? {
-        try {
-            Log.d(TAG, "Querying provider: $baseUri/$type")
-            val uri = Uri.parse("$baseUri/$type")
+        // NIP-55: Authority is often <package>.<METHOD>
+        // We try both .METHOD and /method for compatibility
+        val methods = listOf(type.uppercase(), type.lowercase())
+        val delimiters = listOf(".", "/")
 
-            // NIP-55 Content Provider query:
-            // projection: data (event json or content)
-            // selection: [pubKey, currentUser]
-            val selectionArgs = if (pubKey.isNotBlank()) {
-                arrayOf(pubKey, currentUser)
-            } else {
-                arrayOf(currentUser)
-            }
+        for (delimiter in delimiters) {
+            for (method in methods) {
+                try {
+                    val uri = Uri.parse("${baseUri.removeSuffix("/")}$delimiter$method")
+                    Log.d(TAG, "Querying provider: $uri")
 
-            context.contentResolver.query(uri, null, data, selectionArgs, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val columnNames = cursor.columnNames
-                    val signatureIndex = cursor.getColumnIndex("signature")
-                    val eventIndex = cursor.getColumnIndex("event")
-                    val resultIndex = cursor.getColumnIndex("result")
+                    // NIP-55 Content Provider query:
+                    // projection: [data] (event json or content)
+                    // selection: type (e.g. "sign_event")
+                    // selectionArgs: [account, counterparty (optional)]
+                    val projection = arrayOf(data)
+                    val selection = type
+                    val selectionArgs = if (pubKey.isNotBlank()) {
+                        // Amber expects account first. NIP-55 specifies [counterparty, account]
+                        // but Amber's SignerProvider expects account at index 0.
+                        if (baseUri.contains("greenart7c3")) {
+                            arrayOf(currentUser, pubKey)
+                        } else {
+                            arrayOf(pubKey, currentUser)
+                        }
+                    } else {
+                        arrayOf(currentUser)
+                    }
 
-                    val signature = if (signatureIndex != -1) cursor.getString(signatureIndex) else null
-                    val event = if (eventIndex != -1) cursor.getString(eventIndex) else null
-                    val result = if (resultIndex != -1) cursor.getString(resultIndex) else null
+                    context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val signatureIndex = cursor.getColumnIndex("signature")
+                            val eventIndex = cursor.getColumnIndex("event")
+                            val resultIndex = cursor.getColumnIndex("result")
 
-                    if (signature == null && event == null && result == null) {
-                        // Try reading any non-null column as fallback
-                        for (i in 0 until cursor.columnCount) {
-                            val value = cursor.getString(i)
-                            if (!value.isNullOrBlank()) {
-                                return Intent().apply { putExtra("signature", value) }
+                            val signature = if (signatureIndex != -1) cursor.getString(signatureIndex) else null
+                            val event = if (eventIndex != -1) cursor.getString(eventIndex) else null
+                            val result = if (resultIndex != -1) cursor.getString(resultIndex) else null
+
+                            if (signature != null || event != null || result != null) {
+                                return Intent().apply {
+                                    putExtra("signature", signature)
+                                    putExtra("event", event)
+                                    putExtra("result", result)
+                                }
+                            }
+
+                            // If we didn't find the expected columns, try any non-null column as fallback
+                            for (i in 0 until cursor.columnCount) {
+                                val value = cursor.getString(i)
+                                if (!value.isNullOrBlank()) {
+                                    return Intent().apply { putExtra("signature", value) }
+                                }
                             }
                         }
-                        Log.w(TAG, "Provider returned empty columns")
-                        return null
                     }
-
-                    return Intent().apply {
-                        putExtra("signature", signature)
-                        putExtra("event", event)
-                        putExtra("result", result)
-                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Query failed for combination $baseUri $delimiter $method: ${e.message}")
                 }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "ContentResolver query failed for $baseUri: ${e.message}")
         }
         return null
     }
