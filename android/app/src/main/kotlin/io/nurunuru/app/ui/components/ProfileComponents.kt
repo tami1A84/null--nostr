@@ -114,22 +114,24 @@ fun ProfileHeader(
                             }
                         }
 
-                        if (profile?.nip05 != null && isNip05Verified) {
+                        if (!profile?.nip05.isNullOrBlank()) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 modifier = Modifier.padding(top = 2.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = LineGreen,
-                                    modifier = Modifier.size(14.dp)
-                                )
+                                if (isNip05Verified) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = LineGreen,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
                                 Text(
-                                    text = formatNip05(profile.nip05),
+                                    text = formatNip05(profile.nip05!!),
                                     fontSize = 13.sp,
-                                    color = LineGreen
+                                    color = if (isNip05Verified) LineGreen else TextTertiary
                                 )
                             }
                         }
