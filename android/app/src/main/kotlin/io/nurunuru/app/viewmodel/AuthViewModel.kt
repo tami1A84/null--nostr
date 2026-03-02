@@ -179,7 +179,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
             delay(1500)
 
-            val repository = NostrRepository(client, prefs)
+            val cache = io.nurunuru.app.data.cache.NostrCache(getApplication())
+            val repository = NostrRepository(client, prefs, cache)
 
             val profile = UserProfile(
                 pubkey = signer.getPublicKeyHex(),

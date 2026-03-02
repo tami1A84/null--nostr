@@ -71,7 +71,8 @@ fun MainScreen(
             signer = signer
         ).also { it.connect() }
     }
-    val repository = remember { NostrRepository(nostrClient, app.prefs) }
+    val nostrCache = remember { io.nurunuru.app.data.cache.NostrCache(context) }
+    val repository = remember { NostrRepository(nostrClient, app.prefs, nostrCache) }
 
     // ViewModels
     val timelineVM: TimelineViewModel = viewModel(
