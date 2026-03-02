@@ -247,10 +247,11 @@ fun PostHeader(
 fun PostContent(
     post: ScoredPost,
     repository: io.nurunuru.app.data.NostrRepository,
-    onProfileClick: (String) -> Unit
+    onProfileClick: (String) -> Unit,
+    overrideContent: String? = null
 ) {
     val nuruColors = LocalNuruColors.current
-    val content = post.event.content
+    val content = overrideContent ?: post.event.content
     val cleanContent = removeImageUrls(content).trim()
     if (cleanContent.isBlank()) return
 
@@ -435,10 +436,11 @@ fun EmbeddedNostrContent(
 }
 
 @Composable
-fun PostMedia(post: ScoredPost) {
+fun PostMedia(post: ScoredPost, overrideContent: String? = null) {
     val nuruColors = LocalNuruColors.current
+    val content = overrideContent ?: post.event.content
     if (post.event.kind == NostrKind.VIDEO_LOOP) {
-        val videoUrl = post.event.getTagValue("url") ?: post.event.content
+        val videoUrl = post.event.getTagValue("url") ?: content
         val isVerified = post.event.getTagValue("verification-level") == "verified_web"
 
         if (videoUrl.isNotBlank()) {
@@ -488,7 +490,7 @@ fun PostMedia(post: ScoredPost) {
             }
         }
     } else {
-        extractPostImages(post.event.content).let { images ->
+        extractPostImages(content).let { images ->
             if (images.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 PostImageGrid(images = images)
@@ -595,6 +597,16 @@ fun extractPostImages(content: String): List<String> =
 
 fun removeImageUrls(content: String): String =
     POST_IMAGE_REGEX.replace(content, "").trim()
+
+fun getTextLengthWithoutLinks(content: String?): Int {
+    if (content.isNullOrBlank()) return 0
+    // Remove URLs and nostr: links
+    val withoutLinks = content
+        .replace(Regex("https?://[^\\s]+", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("nostr:[a-z0-9]+", RegexOption.IGNORE_CASE), "")
+        .trim()
+    return withoutLinks.length
+}
 
 fun formatPostTimestamp(unixSec: Long): String {
     val now = System.currentTimeMillis() / 1000
