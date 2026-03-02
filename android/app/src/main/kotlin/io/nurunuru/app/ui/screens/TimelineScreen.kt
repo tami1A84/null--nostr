@@ -48,13 +48,10 @@ fun TimelineScreen(
     var showNotificationsModal by remember { mutableStateOf(false) }
     var viewingPubkey by remember { mutableStateOf<String?>(null) }
 
-    // Pager state for Recommended (0) and Following (1)
-    // Default to Following (index 1)
     val pagerState = rememberPagerState(
         initialPage = 1
     ) { 2 }
 
-    // Sync Pager -> ViewModel
     LaunchedEffect(pagerState.currentPage) {
         val targetFeed = if (pagerState.currentPage == 0) FeedType.GLOBAL else FeedType.FOLLOWING
         if (uiState.feedType != targetFeed) {
@@ -62,7 +59,6 @@ fun TimelineScreen(
         }
     }
 
-    // Sync ViewModel -> Pager
     LaunchedEffect(uiState.feedType) {
         val targetPage = if (uiState.feedType == FeedType.GLOBAL) 0 else 1
         if (pagerState.currentPage != targetPage) {
@@ -101,8 +97,6 @@ fun TimelineScreen(
                     .padding(padding),
                 verticalAlignment = Alignment.Top
             ) { page ->
-                // Note: Each page has its own refresh state and list state
-                // But we simplify by using common logic for now
                 TimelineContent(
                     viewModel = viewModel,
                     repository = repository,
@@ -113,7 +107,6 @@ fun TimelineScreen(
             }
         }
 
-        // Post composition modal
         if (showPostModal) {
             PostModal(
                 myPubkey = myPubkey,
@@ -142,7 +135,6 @@ fun TimelineScreen(
             onStartDM = { /* TODO */ }
         )
     }
-
 
     if (showSearchModal) {
         SearchModal(

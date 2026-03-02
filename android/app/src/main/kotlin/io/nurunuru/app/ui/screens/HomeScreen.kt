@@ -97,183 +97,184 @@ fun HomeScreen(
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 16.dp) // Optimized
+                    contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
-                item {
-                    if (profile == null) {
-                        ProfileSkeleton()
-                    } else {
-                        ProfileHeader(
-                            profile = profile,
-                            isOwnProfile = uiState.isOwnProfile,
-                        isFollowing = uiState.isFollowing,
-                        isNip05Verified = uiState.isNip05Verified,
-                        followCount = uiState.followCount,
-                        badges = uiState.badges,
-                        onEditClick = { showEditProfile = true },
-                        onFollowClick = {
-                            if (uiState.isFollowing) viewModel.unfollowUser(uiState.viewingPubkey!!)
-                            else viewModel.followUser(uiState.viewingPubkey!!)
-                        },
-                        onFollowListClick = {
-                            viewModel.loadFollowProfiles()
-                            showFollowList = true
-                        },
-                            clipboardManager = clipboardManager
-                        )
-                    }
-                }
-
-                item {
-                    ProfileTabs(
-                        activeTab = uiState.activeTab,
-                        onTabSelected = { viewModel.setActiveTab(it) },
-                        postCount = uiState.posts.size,
-                        likeCount = uiState.likedPosts.size
-                    )
-                }
-
-                if (uiState.isLoading) {
                     item {
-                        FriendlyLoading(message = "プロフィールを読み込んでいます")
-                    }
-                    items(5) {
-                        Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
-                            PostSkeleton()
-                        }
-                    }
-                } else {
-                    val displayPosts = if (uiState.activeTab == 0) uiState.posts else uiState.likedPosts
-                    if (displayPosts.isEmpty()) {
-                        item {
-                            EmptyState(
-                                icon = if (uiState.activeTab == 0) Icons.Default.EditNote else Icons.Default.FavoriteBorder,
-                                text = if (uiState.activeTab == 0) "投稿がありません" else "いいねがありません"
+                        if (profile == null) {
+                            ProfileSkeleton()
+                        } else {
+                            ProfileHeader(
+                                profile = profile,
+                                isOwnProfile = uiState.isOwnProfile,
+                                isFollowing = uiState.isFollowing,
+                                isNip05Verified = uiState.isNip05Verified,
+                                followCount = uiState.followCount,
+                                badges = uiState.badges,
+                                onEditClick = { showEditProfile = true },
+                                onFollowClick = {
+                                    if (uiState.isFollowing) viewModel.unfollowUser(uiState.viewingPubkey!!)
+                                    else viewModel.followUser(uiState.viewingPubkey!!)
+                                },
+                                onFollowListClick = {
+                                    viewModel.loadFollowProfiles()
+                                    showFollowList = true
+                                },
+                                clipboardManager = clipboardManager
                             )
                         }
-                    } else {
-                        items(displayPosts, key = { (if (uiState.activeTab == 1) "like_" else "") + it.event.id }) { post ->
-                            val alpha = remember { androidx.compose.animation.core.Animatable(0f) }
-                            LaunchedEffect(post.event.id) {
-                                alpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(300))
-                            }
+                    }
+
+                    item {
+                        ProfileTabs(
+                            activeTab = uiState.activeTab,
+                            onTabSelected = { viewModel.setActiveTab(it) },
+                            postCount = uiState.posts.size,
+                            likeCount = uiState.likedPosts.size
+                        )
+                    }
+
+                    if (uiState.isLoading) {
+                        item {
+                            FriendlyLoading(message = "プロフィールを読み込んでいます")
+                        }
+                        items(5) {
                             Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
-                                if (post.event.kind == 30023) {
-                                    LongFormPostItem(
-                                        post = post,
-                                        onLike = { emoji, tags -> viewModel.likePost(post.event.id, emoji, tags) },
-                                        onRepost = { viewModel.repostPost(post.event.id) },
-                                        onProfileClick = { if (it != viewModel.myPubkeyHex) viewingPubkey = it },
-                                        repository = repository,
-                                        onDelete = { postToDelete = post.event.id },
-                                        onMute = { viewModel.muteUser(post.event.pubkey) },
-                                        onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
-                                        onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
-                                        isOwnPost = post.event.pubkey == viewModel.myPubkeyHex
-                                    )
-                                } else {
-                                    PostItem(
-                                        modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
-                                        post = post,
-                                        onLike = { emoji, tags -> viewModel.likePost(post.event.id, emoji, tags) },
-                                        onRepost = { viewModel.repostPost(post.event.id) },
-                                        onProfileClick = { if (it != viewModel.myPubkeyHex) viewingPubkey = it },
-                                        repository = repository,
-                                        onDelete = { postToDelete = post.event.id },
-                                        onMute = { viewModel.muteUser(post.event.pubkey) },
-                                        onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
-                                        onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
-                                        onNotInterested = null,
-                                        isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
-                                        isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false
-                                    )
+                                PostSkeleton()
+                            }
+                        }
+                    } else {
+                        val displayPosts = if (uiState.activeTab == 0) uiState.posts else uiState.likedPosts
+                        if (displayPosts.isEmpty()) {
+                            item {
+                                EmptyState(
+                                    icon = if (uiState.activeTab == 0) Icons.Default.EditNote else Icons.Default.FavoriteBorder,
+                                    text = if (uiState.activeTab == 0) "投稿がありません" else "いいねがありません"
+                                )
+                            }
+                        } else {
+                            items(displayPosts, key = { (if (uiState.activeTab == 1) "like_" else "") + it.event.id }) { post ->
+                                val alpha = remember { androidx.compose.animation.core.Animatable(0f) }
+                                LaunchedEffect(post.event.id) {
+                                    alpha.animateTo(1f, animationSpec = androidx.compose.animation.core.tween(300))
+                                }
+                                Surface(Modifier.padding(horizontal = 12.dp), color = bgPrimary) {
+                                    if (post.event.kind == 30023) {
+                                        LongFormPostItem(
+                                            post = post,
+                                            onLike = { emoji, tags -> viewModel.likePost(post.event.id, emoji, tags) },
+                                            onRepost = { viewModel.repostPost(post.event.id) },
+                                            onProfileClick = { if (it != viewModel.myPubkeyHex) viewingPubkey = it },
+                                            repository = repository,
+                                            onDelete = { postToDelete = post.event.id },
+                                            onMute = { viewModel.muteUser(post.event.pubkey) },
+                                            onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
+                                            onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
+                                            isOwnPost = post.event.pubkey == viewModel.myPubkeyHex
+                                        )
+                                    } else {
+                                        PostItem(
+                                            modifier = Modifier.graphicsLayer { this.alpha = alpha.value },
+                                            post = post,
+                                            onLike = { emoji, tags -> viewModel.likePost(post.event.id, emoji, tags) },
+                                            onRepost = { viewModel.repostPost(post.event.id) },
+                                            onProfileClick = { if (it != viewModel.myPubkeyHex) viewingPubkey = it },
+                                            repository = repository,
+                                            onDelete = { postToDelete = post.event.id },
+                                            onMute = { viewModel.muteUser(post.event.pubkey) },
+                                            onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
+                                            onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
+                                            onNotInterested = null,
+                                            isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
+                                            isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-            PullToRefreshContainer(
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter),
-                containerColor = bgPrimary,
-                contentColor = LineGreen
-            )
+                PullToRefreshContainer(
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = bgPrimary,
+                    contentColor = LineGreen
+                )
             }
-    }
+        }
 
-    if (showPostModal) {
-        PostModal(
-            myPubkey = viewModel.myPubkeyHex,
-            pictureUrl = profile?.picture,
-            displayName = profile?.displayedName ?: "",
-            repository = repository,
-            onDismiss = { showPostModal = false },
-            onSuccess = {
-                showPostModal = false
-                viewModel.refresh()
-            }
+        if (showEditProfile) {
+            EditProfileModal(
+                profile = profile ?: UserProfile(pubkey = viewModel.myPubkeyHex),
+                onDismiss = { showEditProfile = false },
+                onSave = { viewModel.updateProfile(it); showEditProfile = false },
+                viewModel = viewModel
             )
         }
-    }
 
-    if (showEditProfile) {
-        EditProfileModal(
-            profile = profile ?: UserProfile(pubkey = viewModel.myPubkeyHex),
-            onDismiss = { showEditProfile = false },
-            onSave = { viewModel.updateProfile(it); showEditProfile = false },
-            viewModel = viewModel
-        )
-    }
+        if (showFollowList) {
+            FollowListModal(
+                pubkeys = uiState.followList,
+                profiles = uiState.followProfiles,
+                onDismiss = { showFollowList = false },
+                onUnfollow = { viewModel.unfollowUser(it) },
+                onProfileClick = { viewingPubkey = it; showFollowList = false }
+            )
+        }
 
-    if (showFollowList) {
-        FollowListModal(
-            pubkeys = uiState.followList,
-            profiles = uiState.followProfiles,
-            onDismiss = { showFollowList = false },
-            onUnfollow = { viewModel.unfollowUser(it) },
-            onProfileClick = { viewingPubkey = it; showFollowList = false }
-        )
-    }
+        if (viewingPubkey != null) {
+            val homeViewModel: HomeViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                key = "profile_$viewingPubkey",
+                factory = HomeViewModel.Factory(repository, viewModel.myPubkeyHex)
+            )
+            UserProfileModal(
+                pubkey = viewingPubkey!!,
+                viewModel = homeViewModel,
+                repository = repository,
+                onDismiss = { viewingPubkey = null },
+                onStartDM = { /* TODO */ }
+            )
+        }
 
-    if (viewingPubkey != null) {
-        val homeViewModel: HomeViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
-            key = "profile_$viewingPubkey",
-            factory = HomeViewModel.Factory(repository, viewModel.myPubkeyHex)
-        )
-        UserProfileModal(
-            pubkey = viewingPubkey!!,
-            viewModel = homeViewModel,
-            repository = repository,
-            onDismiss = { viewingPubkey = null },
-            onStartDM = { /* TODO */ }
-        )
-    }
-
-    if (postToDelete != null) {
-        AlertDialog(
-            onDismissRequest = { postToDelete = null },
-            title = { Text("削除の確認") },
-            text = { Text("この投稿を削除しますか？") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        postToDelete?.let { viewModel.deletePost(it) }
-                        postToDelete = null
+        if (postToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { postToDelete = null },
+                title = { Text("削除の確認") },
+                text = { Text("この投稿を削除しますか？") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            postToDelete?.let { viewModel.deletePost(it) }
+                            postToDelete = null
+                        }
+                    ) {
+                        Text("削除", color = Color.Red)
                     }
-                ) {
-                    Text("削除", color = Color.Red)
+                },
+                dismissButton = {
+                    TextButton(onClick = { postToDelete = null }) {
+                        Text("キャンセル", color = TextSecondary)
+                    }
+                },
+                containerColor = BgSecondary,
+                titleContentColor = TextPrimary,
+                textContentColor = TextSecondary
+            )
+        }
+
+        if (showPostModal) {
+            PostModal(
+                myPubkey = viewModel.myPubkeyHex,
+                pictureUrl = profile?.picture,
+                displayName = profile?.displayedName ?: "",
+                repository = repository,
+                onDismiss = { showPostModal = false },
+                onSuccess = {
+                    showPostModal = false
+                    viewModel.refresh()
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { postToDelete = null }) {
-                    Text("キャンセル", color = TextSecondary)
-                }
-            },
-            containerColor = BgSecondary,
-            titleContentColor = TextPrimary,
-            textContentColor = TextSecondary
-        )
+            )
+        }
     }
 }
 

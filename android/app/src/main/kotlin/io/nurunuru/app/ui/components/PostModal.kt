@@ -21,11 +21,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.InlineTextContent
-import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -120,7 +117,6 @@ fun PostModal(
                 var finalContent = text.text
                 val tags = mutableListOf<List<String>>()
 
-                // Parallel Upload Images
                 if (selectedImages.isNotEmpty() && recordedVideo == null) {
                     uploadProgress = "画像をアップロード中..."
                     val uploadedUrls = mutableListOf<String>()
@@ -138,14 +134,12 @@ fun PostModal(
                     }
                 }
 
-                // Video tags
                 recordedVideo?.let { video ->
                     tags.add(listOf("url", video.url))
                     tags.add(listOf("m", video.mimeType))
                     tags.add(listOf("imeta", "url ${video.url}", "m ${video.mimeType}", "size ${video.size}", "dim 720x720"))
                 }
 
-                // Tags
                 if (replyToId != null) {
                     tags.add(listOf("e", replyToId, "", "reply"))
                 }
@@ -196,7 +190,10 @@ fun PostModal(
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 if (!matches.isNullOrEmpty()) {
                     val spokenText = matches[0]
-                    text = TextFieldValue(text.text + (if (text.text.isEmpty()) "" else " ") + spokenText, TextRange(text.text.length + spokenText.length + (if (text.text.isEmpty()) 0 else 1)))
+                    val combinedText = text.text + (if (text.text.isEmpty()) "" else " ") + spokenText
+                    if (combinedText.length <= MAX_NOTE_LENGTH) {
+                        text = TextFieldValue(combinedText, TextRange(combinedText.length))
+                    }
                 }
             }
             override fun onPartialResults(partialResults: Bundle?) {}
@@ -214,54 +211,16 @@ fun PostModal(
                 .statusBarsPadding()
                 .imePadding()
         ) {
-            // Header
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 16.dp)
-            ) {
-                Text(
-                    text = "キャンセル",
-                    color = nuruColors.textSecondary,
-                    fontSize = 16.sp,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable { onDismiss() }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-
-                Text(
-                    text = if (replyToId != null) "返信" else "新規投稿",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = nuruColors.textPrimary,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-
-                Button(
-                    onClick = { handlePost() },
-                    enabled = canPost,
-                    modifier = Modifier.align(Alignment.CenterEnd),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = nuruColors.lineGreen,
-                        disabledContainerColor = nuruColors.lineGreen.copy(alpha = 0.3f)
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
-                ) {
-                    if (posting) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                    } else {
-                        Text("投稿", fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                }
-            }
+            PostHeader(
+                title = if (replyToId != null) "返信" else "新規投稿",
+                onDismiss = onDismiss,
+                onPost = { handlePost() },
+                canPost = canPost,
+                posting = posting
+            )
 
             HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
 
-            // Content Area
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -269,41 +228,15 @@ fun PostModal(
                     .padding(horizontal = 16.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                // CW Input
                 if (showCWInput) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    ) {
-                        Icon(NuruIcons.Warning, null, tint = Color(0xFFFF9800), modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        BasicTextField(
-                            value = contentWarning,
-                            onValueChange = { contentWarning = it },
-                            modifier = Modifier.weight(1f),
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFFFF9800)),
-                            cursorBrush = SolidColor(Color(0xFFFF9800)),
-                            decorationBox = { innerTextField ->
-                                if (contentWarning.isEmpty()) {
-                                    Text("警告の理由（ネタバレ等）", color = Color(0xFFFF9800).copy(alpha = 0.5f), style = MaterialTheme.typography.bodyMedium)
-                                }
-                                innerTextField()
-                            }
-                        )
-                    }
-                    HorizontalDivider(color = Color(0xFFFF9800).copy(alpha = 0.2f))
-                    Spacer(Modifier.height(8.dp))
+                    CWInput(
+                        contentWarning = contentWarning,
+                        onValueChange = { contentWarning = it }
+                    )
                 }
 
                 Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        val inlineContent = mutableMapOf<String, InlineTextContent>()
-                        val annotatedText = buildAnnotatedString {
-                            val parts = text.text.split(Regex("(:\\w+:|#\\w+|https?://[^\\s]+)")).filter { it.isNotEmpty() }
-                            // This is a simplified preview. For a real editor, it's better to use a custom VisualTransformation.
-                            append(text.text)
-                        }
-
                         BasicTextField(
                             value = text,
                             onValueChange = {
@@ -329,43 +262,18 @@ fun PostModal(
                             }
                         )
 
-                        // Media Previews
                         if (recordedVideo != null) {
-                            Box(modifier = Modifier.padding(vertical = 8.dp).size(160.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black)) {
-                                VideoPlayer(videoUrl = recordedVideo!!.uri.toString(), modifier = Modifier.fillMaxSize())
-                                IconButton(
-                                    onClick = { recordedVideo = null },
-                                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(24.dp).background(Color.Black.copy(0.5f), CircleShape)
-                                ) {
-                                    Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                                }
-                                Surface(
-                                    modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
-                                    color = nuruColors.lineGreen,
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text("6.3s LOOP", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
-                                }
-                            }
+                            VideoPreview(
+                                video = recordedVideo!!,
+                                onRemove = { recordedVideo = null }
+                            )
                         } else if (selectedImages.isNotEmpty()) {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-                                itemsIndexed(selectedImages) { index, uri ->
-                                    Box {
-                                        AsyncImage(
-                                            model = uri,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(100.dp).clip(RoundedCornerShape(8.dp)),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                        IconButton(
-                                            onClick = { selectedImages = selectedImages.toMutableList().also { it.removeAt(index) } },
-                                            modifier = Modifier.align(Alignment.TopEnd).size(24.dp).padding(2.dp).background(Color.Black.copy(0.5f), CircleShape)
-                                        ) {
-                                            Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                                        }
-                                    }
+                            ImagePreviewList(
+                                images = selectedImages,
+                                onRemove = { index ->
+                                    selectedImages = selectedImages.toMutableList().also { it.removeAt(index) }
                                 }
-                            }
+                            )
                         }
                     }
                 }
@@ -373,52 +281,26 @@ fun PostModal(
 
             HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
 
-            // Toolbar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                IconButton(onClick = { showRecorder = true }, enabled = selectedImages.isEmpty()) {
-                    Icon(NuruIcons.Video, "動画", tint = if (recordedVideo != null) nuruColors.lineGreen else nuruColors.textTertiary)
-                }
-                IconButton(onClick = { imagePickerLauncher.launch("image/*") }, enabled = recordedVideo == null && selectedImages.size < 3) {
-                    Icon(NuruIcons.Image, "画像", tint = if (selectedImages.isNotEmpty()) nuruColors.lineGreen else nuruColors.textTertiary)
-                }
-                IconButton(onClick = { showCWInput = !showCWInput }) {
-                    Icon(NuruIcons.Warning, "CW", tint = if (showCWInput) Color(0xFFFF9800) else nuruColors.textTertiary)
-                }
-                IconButton(onClick = { showEmojiPicker = !showEmojiPicker }) {
-                    Icon(NuruIcons.Emoji, "絵文字", tint = nuruColors.textTertiary)
-                }
-                IconButton(
-                    onClick = {
-                        if (hasMicPermission) {
-                            if (isSTTActive) speechRecognizer.stopListening()
-                            else speechRecognizer.startListening(sttIntent)
-                        } else {
-                            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                        }
+            PostToolbar(
+                recordedVideo = recordedVideo,
+                selectedImages = selectedImages,
+                showCWInput = showCWInput,
+                isSTTActive = isSTTActive,
+                hasMicPermission = hasMicPermission,
+                remaining = remaining,
+                onVideoClick = { showRecorder = true },
+                onImageClick = { imagePickerLauncher.launch("image/*") },
+                onCWClick = { showCWInput = !showCWInput },
+                onEmojiClick = { showEmojiPicker = !showEmojiPicker },
+                onMicClick = {
+                    if (hasMicPermission) {
+                        if (isSTTActive) speechRecognizer.stopListening()
+                        else speechRecognizer.startListening(sttIntent)
+                    } else {
+                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     }
-                ) {
-                    Icon(
-                        NuruIcons.Mic,
-                        "音声入力",
-                        tint = if (isSTTActive) Color.Red else if (hasMicPermission) nuruColors.textTertiary else nuruColors.textTertiary.copy(alpha = 0.3f)
-                    )
                 }
-
-                Spacer(Modifier.weight(1f))
-
-                Text(
-                    text = "$remaining",
-                    fontSize = 12.sp,
-                    color = if (remaining < 0) Color.Red else if (remaining < 20) Color(0xFFFF9800) else nuruColors.textTertiary,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-            }
+            )
 
             if (showEmojiPicker) {
                 EmojiPicker(
@@ -450,5 +332,190 @@ fun PostModal(
             onClose = { showRecorder = false },
             repository = repository
         )
+    }
+}
+
+@Composable
+private fun PostHeader(
+    title: String,
+    onDismiss: () -> Unit,
+    onPost: () -> Unit,
+    canPost: Boolean,
+    posting: Boolean
+) {
+    val nuruColors = LocalNuruColors.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .padding(horizontal = 16.dp)
+    ) {
+        Text(
+            text = "キャンセル",
+            color = nuruColors.textSecondary,
+            fontSize = 16.sp,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .clip(RoundedCornerShape(4.dp))
+                .clickable { onDismiss() }
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = nuruColors.textPrimary,
+            modifier = Modifier.align(Alignment.Center)
+        )
+
+        Button(
+            onClick = onPost,
+            enabled = canPost,
+            modifier = Modifier.align(Alignment.CenterEnd),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = nuruColors.lineGreen,
+                disabledContainerColor = nuruColors.lineGreen.copy(alpha = 0.3f)
+            ),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+        ) {
+            if (posting) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+            } else {
+                Text("投稿", fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PostToolbar(
+    recordedVideo: RecordedVideo?,
+    selectedImages: List<android.net.Uri>,
+    showCWInput: Boolean,
+    isSTTActive: Boolean,
+    hasMicPermission: Boolean,
+    remaining: Int,
+    onVideoClick: () -> Unit,
+    onImageClick: () -> Unit,
+    onCWClick: () -> Unit,
+    onEmojiClick: () -> Unit,
+    onMicClick: () -> Unit
+) {
+    val nuruColors = LocalNuruColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        IconButton(onClick = onVideoClick, enabled = selectedImages.isEmpty()) {
+            Icon(NuruIcons.Video, "動画", tint = if (recordedVideo != null) nuruColors.lineGreen else nuruColors.textTertiary)
+        }
+        IconButton(onClick = onImageClick, enabled = recordedVideo == null && selectedImages.size < 3) {
+            Icon(NuruIcons.Image, "画像", tint = if (selectedImages.isNotEmpty()) nuruColors.lineGreen else nuruColors.textTertiary)
+        }
+        IconButton(onClick = onCWClick) {
+            Icon(NuruIcons.Warning, "CW", tint = if (showCWInput) Color(0xFFFF9800) else nuruColors.textTertiary)
+        }
+        IconButton(onClick = onEmojiClick) {
+            Icon(NuruIcons.Emoji, "絵文字", tint = nuruColors.textTertiary)
+        }
+        IconButton(onClick = onMicClick) {
+            Icon(
+                NuruIcons.Mic,
+                "音声入力",
+                tint = if (isSTTActive) Color.Red else if (hasMicPermission) nuruColors.textTertiary else nuruColors.textTertiary.copy(alpha = 0.3f)
+            )
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        Text(
+            text = "$remaining",
+            fontSize = 12.sp,
+            color = if (remaining < 0) Color.Red else if (remaining < 20) Color(0xFFFF9800) else nuruColors.textTertiary,
+            modifier = Modifier.padding(end = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun CWInput(
+    contentWarning: String,
+    onValueChange: (String) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(bottom = 8.dp)
+    ) {
+        Icon(NuruIcons.Warning, null, tint = Color(0xFFFF9800), modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        androidx.compose.foundation.text.BasicTextField(
+            value = contentWarning,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color(0xFFFF9800)),
+            cursorBrush = SolidColor(Color(0xFFFF9800)),
+            decorationBox = { innerTextField ->
+                if (contentWarning.isEmpty()) {
+                    Text("警告の理由（ネタバレ等）", color = Color(0xFFFF9800).copy(alpha = 0.5f), style = MaterialTheme.typography.bodyMedium)
+                }
+                innerTextField()
+            }
+        )
+    }
+    HorizontalDivider(color = Color(0xFFFF9800).copy(alpha = 0.2f))
+    Spacer(Modifier.height(8.dp))
+}
+
+@Composable
+private fun VideoPreview(
+    video: RecordedVideo,
+    onRemove: () -> Unit
+) {
+    val nuruColors = LocalNuruColors.current
+    Box(modifier = Modifier.padding(vertical = 8.dp).size(160.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black)) {
+        VideoPlayer(videoUrl = video.uri.toString(), modifier = Modifier.fillMaxSize())
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(24.dp).background(Color.Black.copy(0.5f), CircleShape)
+        ) {
+            Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
+        }
+        Surface(
+            modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
+            color = nuruColors.lineGreen,
+            shape = RoundedCornerShape(4.dp)
+        ) {
+            Text("6.3s LOOP", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+        }
+    }
+}
+
+@Composable
+private fun ImagePreviewList(
+    images: List<android.net.Uri>,
+    onRemove: (Int) -> Unit
+) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
+        itemsIndexed(images) { index, uri ->
+            Box {
+                AsyncImage(
+                    model = uri,
+                    contentDescription = null,
+                    modifier = Modifier.size(100.dp).clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                IconButton(
+                    onClick = { onRemove(index) },
+                    modifier = Modifier.align(Alignment.TopEnd).size(24.dp).padding(2.dp).background(Color.Black.copy(0.5f), CircleShape)
+                ) {
+                    Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                }
+            }
+        }
     }
 }
