@@ -23,6 +23,8 @@ const nextConfig = {
       },
     ],
   },
+  // Silence Next.js 16 Turbopack error when webpack config is present
+  turbopack: {},
   // Suppress "Critical dependency" warnings from native .node module loading
   webpack: (config) => {
     config.ignoreWarnings = [

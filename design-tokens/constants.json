@@ -1,0 +1,146 @@
+{
+  "WS_CONFIG": {
+    "maxConcurrentRequests": { "value": 4, "type": "int", "kotlinPath": "Connection.MAX_CONCURRENT_REQUESTS" },
+    "maxRequestsPerRelay": { "value": 2, "type": "int", "kotlinPath": "Connection.MAX_REQUESTS_PER_RELAY" },
+    "requestTimeout": { "value": 15000, "type": "long", "kotlinPath": "Connection.REQUEST_TIMEOUT_MS" },
+    "eoseTimeout": { "value": 15000, "type": "long", "kotlinPath": "Connection.EOSE_TIMEOUT_MS" },
+    "poolIdleTimeout": { "value": 180000, "type": "long" },
+    "healthCheckInterval": { "value": 60000, "type": "long", "kotlinPath": "Connection.HEALTH_CHECK_INTERVAL_MS" },
+    "failedRelayCooldown": { "value": 120000, "type": "long", "kotlinPath": "Connection.FAILED_RELAY_COOLDOWN_MS" },
+    "maxFailuresBeforeCooldown": { "value": 3, "type": "int", "kotlinPath": "Connection.MAX_FAILURES_BEFORE_COOLDOWN" },
+    "retry": {
+      "maxAttempts": { "value": 3, "type": "int", "kotlinPath": "Connection.RETRY_MAX_ATTEMPTS" },
+      "baseDelay": { "value": 500, "type": "long", "kotlinPath": "Connection.RETRY_BASE_DELAY_MS" },
+      "maxDelay": { "value": 10000, "type": "long", "kotlinPath": "Connection.RETRY_MAX_DELAY_MS" },
+      "jitter": { "value": 0.3, "type": "float" }
+    },
+    "rateLimit": {
+      "requestsPerSecond": { "value": 10, "type": "int", "kotlinPath": "RateLimit.REQUESTS_PER_SECOND" },
+      "burstSize": { "value": 20, "type": "int", "kotlinPath": "RateLimit.BURST_SIZE" }
+    },
+    "subscription": {
+      "reconnectDelay": { "value": 1000, "type": "long" },
+      "maxReconnectDelay": { "value": 30000, "type": "long" },
+      "reconnectBackoffMultiplier": { "value": 1.5, "type": "float" },
+      "maxReconnectAttempts": { "value": 10, "type": "int" },
+      "heartbeatInterval": { "value": 30000, "type": "long" }
+    }
+  },
+  "CACHE_CONFIG": {
+    "prefix": { "value": "nurunuru_cache_", "type": "string" },
+    "durations": {
+      "profile": { "value": 300000, "type": "long", "kotlinPath": "CacheDuration.PROFILE" },
+      "muteList": { "value": 600000, "type": "long", "kotlinPath": "CacheDuration.MUTE_LIST" },
+      "followList": { "value": 600000, "type": "long", "kotlinPath": "CacheDuration.FOLLOW_LIST" },
+      "emoji": { "value": 1800000, "type": "long", "kotlinPath": "CacheDuration.EMOJI" },
+      "timeline": { "value": 30000, "type": "long", "kotlinPath": "CacheDuration.TIMELINE" },
+      "short": { "value": 60000, "type": "long", "kotlinPath": "CacheDuration.SHORT" },
+      "nip05": { "value": 300000, "type": "long", "kotlinPath": "CacheDuration.NIP05" },
+      "relayInfo": { "value": 3600000, "type": "long", "kotlinPath": "CacheDuration.RELAY_INFO" }
+    },
+    "maxEntries": {
+      "profiles": { "value": 500, "type": "int", "kotlinPath": "CacheMaxEntries.PROFILES" },
+      "timeline": { "value": 100, "type": "int", "kotlinPath": "CacheMaxEntries.TIMELINE" },
+      "reactions": { "value": 1000, "type": "int", "kotlinPath": "CacheMaxEntries.REACTIONS" }
+    },
+    "indexRefreshInterval": { "value": 60000, "type": "long" }
+  },
+  "DEDUP_CONFIG": {
+    "pendingRequestTTL": { "value": 30000, "type": "long" },
+    "completedResultTTL": { "value": 5000, "type": "long" },
+    "maxPendingRequests": { "value": 100, "type": "int" }
+  },
+  "UPLOAD_CONFIG": {
+    "maxConcurrentUploads": { "value": 3, "type": "int", "kotlinPath": "Upload.MAX_CONCURRENT_UPLOADS" },
+    "uploadTimeout": { "value": 30000, "type": "long", "kotlinPath": "Upload.UPLOAD_TIMEOUT_MS" },
+    "retry": {
+      "maxAttempts": { "value": 3, "type": "int", "kotlinPath": "Upload.RETRY_MAX_ATTEMPTS" },
+      "baseDelay": { "value": 1000, "type": "long", "kotlinPath": "Upload.RETRY_BASE_DELAY_MS" },
+      "maxDelay": { "value": 5000, "type": "long" },
+      "jitter": { "value": 0.3, "type": "float" }
+    },
+    "maxImagesPerPost": { "value": 3, "type": "int", "kotlinPath": "Upload.MAX_IMAGES_PER_POST" }
+  },
+  "UI_CONFIG": {
+    "debounce": {
+      "search": { "value": 300, "type": "long", "kotlinPath": "UI.DEBOUNCE_SEARCH_MS" },
+      "scroll": { "value": 100, "type": "long", "kotlinPath": "UI.DEBOUNCE_SCROLL_MS" },
+      "resize": { "value": 150, "type": "long" }
+    },
+    "pageSize": {
+      "timeline": { "value": 50, "type": "int", "kotlinPath": "UI.PAGE_SIZE_TIMELINE" },
+      "profiles": { "value": 20, "type": "int" },
+      "search": { "value": 30, "type": "int", "kotlinPath": "UI.PAGE_SIZE_SEARCH" },
+      "notifications": { "value": 50, "type": "int", "kotlinPath": "UI.PAGE_SIZE_NOTIFICATIONS" }
+    },
+    "skeleton": {
+      "timelineCount": { "value": 5, "type": "int", "kotlinPath": "UI.SKELETON_TIMELINE_COUNT" },
+      "profileCount": { "value": 3, "type": "int" }
+    },
+    "nip05VerifyTimeout": { "value": 5000, "type": "long", "kotlinPath": "UI.NIP05_VERIFY_TIMEOUT_MS" },
+    "profileFetchTimeout": { "value": 10000, "type": "long", "kotlinPath": "UI.PROFILE_FETCH_TIMEOUT_MS" }
+  },
+  "TIME": {
+    "MINUTE": { "value": 60, "type": "long", "kotlinPath": "Time.MINUTE_SECS" },
+    "HOUR": { "value": 3600, "type": "long", "kotlinPath": "Time.HOUR_SECS" },
+    "DAY": { "value": 86400, "type": "long", "kotlinPath": "Time.DAY_SECS" },
+    "WEEK": { "value": 604800, "type": "long", "kotlinPath": "Time.WEEK_SECS" },
+    "MS_SECOND": { "value": 1000, "type": "long", "kotlinPath": "Time.MS_SECOND" },
+    "MS_MINUTE": { "value": 60000, "type": "long", "kotlinPath": "Time.MS_MINUTE" },
+    "MS_HOUR": { "value": 3600000, "type": "long", "kotlinPath": "Time.MS_HOUR" },
+    "MS_DAY": { "value": 86400000, "type": "long", "kotlinPath": "Time.MS_DAY" }
+  },
+  "ENGAGEMENT_WEIGHTS": {
+    "zap": { "value": 100, "type": "double", "kotlinPath": "Engagement.WEIGHT_ZAP" },
+    "custom_reaction": { "value": 60, "type": "double", "kotlinPath": "Engagement.WEIGHT_CUSTOM_REACTION" },
+    "quote": { "value": 35, "type": "double", "kotlinPath": "Engagement.WEIGHT_QUOTE" },
+    "reply": { "value": 30, "type": "double", "kotlinPath": "Engagement.WEIGHT_REPLY" },
+    "repost": { "value": 25, "type": "double", "kotlinPath": "Engagement.WEIGHT_REPOST" },
+    "bookmark": { "value": 15, "type": "double", "kotlinPath": "Engagement.WEIGHT_BOOKMARK" },
+    "like": { "value": 5, "type": "double", "kotlinPath": "Engagement.WEIGHT_LIKE" }
+  },
+  "NEGATIVE_WEIGHTS": {
+    "not_interested": { "value": -50, "type": "double", "kotlinPath": "NegativeSignal.NOT_INTERESTED" },
+    "muted_author": { "value": -1000, "type": "double", "kotlinPath": "NegativeSignal.MUTED_AUTHOR" },
+    "reported": { "value": -200, "type": "double", "kotlinPath": "NegativeSignal.REPORTED" }
+  },
+  "SOCIAL_BOOST": {
+    "second_degree": { "value": 3.0, "type": "double", "kotlinPath": "SocialBoost.SECOND_DEGREE" },
+    "mutual_follow": { "value": 2.5, "type": "double", "kotlinPath": "SocialBoost.MUTUAL_FOLLOW" },
+    "high_engagement_author": { "value": 2.0, "type": "double", "kotlinPath": "SocialBoost.HIGH_ENGAGEMENT_AUTHOR" },
+    "first_degree": { "value": 0.5, "type": "double", "kotlinPath": "SocialBoost.FIRST_DEGREE" },
+    "unknown": { "value": 1.0, "type": "double", "kotlinPath": "SocialBoost.UNKNOWN" }
+  },
+  "TIME_DECAY": {
+    "halfLife": { "value": 6, "type": "double", "kotlinPath": "TimeDecay.HALF_LIFE_HOURS" },
+    "maxAge": { "value": 48, "type": "double", "kotlinPath": "TimeDecay.MAX_AGE_HOURS" },
+    "freshnessBoost": { "value": 1.5, "type": "double", "kotlinPath": "TimeDecay.FRESHNESS_BOOST" }
+  },
+  "ERROR_MESSAGES": {
+    "noSigningMethod": { "value": "署名機能が利用できません", "type": "string", "kotlinPath": "ErrorMessages.NO_SIGNING_METHOD" },
+    "signingFailed": { "value": "署名に失敗しました", "type": "string", "kotlinPath": "ErrorMessages.SIGNING_FAILED" },
+    "passkeySigningFailed": { "value": "パスキーでの署名に失敗しました。ミニアプリ画面で秘密鍵をエクスポートしてください。", "type": "string", "kotlinPath": "ErrorMessages.PASSKEY_SIGNING_FAILED" },
+    "amberSigningFailed": { "value": "Amberでの署名に失敗しました。再度お試しください。", "type": "string", "kotlinPath": "ErrorMessages.AMBER_SIGNING_FAILED" },
+    "bunkerSigningFailed": { "value": "Nostr Connectでの署名に失敗しました。再接続してください。", "type": "string" },
+    "encryptionFailed": { "value": "暗号化に失敗しました", "type": "string", "kotlinPath": "ErrorMessages.ENCRYPTION_FAILED" },
+    "decryptionFailed": { "value": "復号に失敗しました", "type": "string", "kotlinPath": "ErrorMessages.DECRYPTION_FAILED" },
+    "noEncryptionMethod": { "value": "暗号化機能が利用できません。ミニアプリ画面で秘密鍵をエクスポートしてください。", "type": "string", "kotlinPath": "ErrorMessages.NO_ENCRYPTION_METHOD" },
+    "dmRequiresAuth": { "value": "DMを送信するにはパスキー認証が必要です", "type": "string" },
+    "dmNotAvailable": { "value": "DM機能が利用できません。NIP-44対応の拡張機能か秘密鍵が必要です。", "type": "string" },
+    "nip07NotFound": { "value": "NIP-07拡張機能が見つかりません", "type": "string" },
+    "publicKeyFailed": { "value": "公開鍵の取得に失敗しました", "type": "string" },
+    "requestTimeout": { "value": "リクエストがタイムアウトしました", "type": "string", "kotlinPath": "ErrorMessages.REQUEST_TIMEOUT" },
+    "allRetriesFailed": { "value": "すべての再試行が失敗しました", "type": "string", "kotlinPath": "ErrorMessages.ALL_RETRIES_FAILED" },
+    "connectionFailed": { "value": "接続に失敗しました", "type": "string", "kotlinPath": "ErrorMessages.CONNECTION_FAILED" },
+    "alreadyFollowing": { "value": "既にフォローしています", "type": "string", "kotlinPath": "ErrorMessages.ALREADY_FOLLOWING" },
+    "noFollowList": { "value": "フォローリストがありません", "type": "string", "kotlinPath": "ErrorMessages.NO_FOLLOW_LIST" },
+    "amberTimeout": { "value": "Amberからの応答がタイムアウトしました", "type": "string", "kotlinPath": "ErrorMessages.AMBER_TIMEOUT" },
+    "amberInvalidEvent": { "value": "Amberから無効なイベントが返されました", "type": "string", "kotlinPath": "ErrorMessages.AMBER_INVALID_EVENT" },
+    "amberNoPendingRequest": { "value": "保留中の署名リクエストが見つかりません", "type": "string" },
+    "statusOffline": { "value": "オフライン", "type": "string", "kotlinPath": "ErrorMessages.STATUS_OFFLINE" },
+    "statusReconnecting": { "value": "再接続中...", "type": "string", "kotlinPath": "ErrorMessages.STATUS_RECONNECTING" },
+    "statusError": { "value": "接続に問題があります", "type": "string", "kotlinPath": "ErrorMessages.STATUS_ERROR" },
+    "statusConnected": { "value": "接続中", "type": "string", "kotlinPath": "ErrorMessages.STATUS_CONNECTED" },
+    "statusDisconnected": { "value": "切断", "type": "string", "kotlinPath": "ErrorMessages.STATUS_DISCONNECTED" }
+  }
+}
