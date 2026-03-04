@@ -299,7 +299,7 @@ class TimelineViewModel(
                 val authorPubkey = (_uiState.value.globalPosts + _uiState.value.followingPosts)
                     .firstOrNull { it.event.id == eventId }?.event?.pubkey
                 if (authorPubkey != null) {
-                    recommendationEngine?.recordEngagement("like", authorPubkey)
+                    repository.recordEngagement("like", authorPubkey)
                 }
             }
         }
@@ -314,7 +314,7 @@ class TimelineViewModel(
                 val authorPubkey = (_uiState.value.globalPosts + _uiState.value.followingPosts)
                     .firstOrNull { it.event.id == eventId }?.event?.pubkey
                 if (authorPubkey != null) {
-                    recommendationEngine?.recordEngagement("repost", authorPubkey)
+                    repository.recordEngagement("repost", authorPubkey)
                 }
             }
         }
@@ -393,16 +393,10 @@ class TimelineViewModel(
         if (authorPubkey != null) {
             viewModelScope.launch {
                 try {
-                    recommendationEngine?.markNotInterested(eventId, authorPubkey)
+                    repository.markNotInterested(eventId, authorPubkey)
                 } catch (_: Exception) { }
             }
         }
-    }
-
-    private var recommendationEngine: io.nurunuru.app.data.RecommendationEngine? = null
-
-    fun setRecommendationEngine(engine: io.nurunuru.app.data.RecommendationEngine) {
-        recommendationEngine = engine
     }
 
     class Factory(

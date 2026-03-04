@@ -19,6 +19,20 @@ class NostrRepository(
     private val cache: NostrCache,
     private val recommendationEngine: RecommendationEngine
 ) {
+    /** Toggle for using the Rust core for heavy operations. */
+    private var useRustCore: Boolean = true
+
+    fun setUseRustCore(enabled: Boolean) {
+        useRustCore = enabled
+    }
+
+    fun recordEngagement(action: String, authorPubkey: String) {
+        client.recordEngagement(action, authorPubkey)
+    }
+
+    fun markNotInterested(eventId: String, authorPubkey: String) {
+        client.markNotInterested(eventId, authorPubkey)
+    }
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     private fun getOneHourAgo(): Long = System.currentTimeMillis() / 1000 - Constants.Time.HOUR_SECS
@@ -32,6 +46,26 @@ class NostrRepository(
     }
 
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
+        if (useRustCore) {
+            return withContext(Dispatchers.IO) {
+                try {
+                    val rustClient = client.getRustClient() ?: return@withContext fetchGlobalTimelineLegacy(limit)
+                    val scored = rustClient.getRecommendedFeed(limit.toUInt())
+
+                    // Hybrid: fetch full events and enrich for UI details
+                    val eventIds = scored.map { it.eventId }
+                    val events = client.fetchEvents(NostrClient.Filter(ids = eventIds))
+                    enrichPosts(events)
+                } catch (e: Exception) {
+                    android.util.Log.e("NostrRepository", "Rust recommend failed, falling back", e)
+                    fetchGlobalTimelineLegacy(limit)
+                }
+            }
+        }
+        return fetchGlobalTimelineLegacy(limit)
+    }
+
+    private suspend fun fetchGlobalTimelineLegacy(limit: Int): List<ScoredPost> {
         val myPubkey = prefs.publicKeyHex ?: ""
         val oneHourAgo = getOneHourAgo()
         val threeHoursAgo = System.currentTimeMillis() / 1000 - 10800
@@ -108,6 +142,31 @@ class NostrRepository(
 
     /** Fetch timeline for followed users. */
     suspend fun fetchFollowTimeline(pubkeyHex: String, limit: Int = 50): List<ScoredPost> {
+        if (useRustCore) {
+            return withContext(Dispatchers.IO) {
+                try {
+                    val rustClient = client.getRustClient() ?: return@withContext fetchFollowTimelineLegacy(pubkeyHex, limit)
+                    val followList = fetchFollowList(pubkeyHex)
+                    if (followList.isEmpty()) return@withContext fetchGlobalTimeline(limit)
+
+                    // Use local cache first via Rust query_local
+                    val cachedEvents = rustClient.queryLocal(followList.take(500), limit.toUInt())
+                    val events = cachedEvents.map { Json.decodeFromString<NostrEvent>(it) }
+
+                    if (events.isNotEmpty()) {
+                        enrichPosts(events)
+                    } else {
+                        fetchFollowTimelineLegacy(pubkeyHex, limit)
+                    }
+                } catch (e: Exception) {
+                    fetchFollowTimelineLegacy(pubkeyHex, limit)
+                }
+            }
+        }
+        return fetchFollowTimelineLegacy(pubkeyHex, limit)
+    }
+
+    private suspend fun fetchFollowTimelineLegacy(pubkeyHex: String, limit: Int): List<ScoredPost> {
         val followList = fetchFollowList(pubkeyHex)
         if (followList.isEmpty()) return fetchGlobalTimeline(limit)
 
