@@ -19,9 +19,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 
 const tokens = JSON.parse(readFileSync(join(__dirname, 'tokens.json'), 'utf-8'));
+const constants = JSON.parse(readFileSync(join(__dirname, 'constants.json'), 'utf-8'));
 
 const CSS_OUT = join(ROOT, 'app', 'globals.tokens.css');
 const KT_OUT = join(ROOT, 'android', 'app', 'src', 'main', 'kotlin', 'io', 'nurunuru', 'app', 'ui', 'theme', 'NuruTokens.kt');
+const JS_CONST_OUT = join(ROOT, 'lib', 'constants.generated.js');
+const KT_CONST_OUT = join(ROOT, 'android', 'app', 'src', 'main', 'kotlin', 'io', 'nurunuru', 'app', 'data', 'Constants.kt');
 
 const isCheck = process.argv.includes('--check');
 
@@ -141,6 +144,147 @@ function generateCSS() {
   return lines.join('\n');
 }
 
+// ─── JS Constants Generation ──────────────────────────────────────────────────
+
+function generateJSConstants() {
+  const lines = [
+    '/* ============================================================ */',
+    '/* Auto-generated from design-tokens/constants.json — DO NOT EDIT */',
+    '/* Run: npm run tokens                                          */',
+    '/* ============================================================ */',
+    '',
+  ];
+
+  function processValue(val) {
+    if (val && typeof val === 'object' && val.value !== undefined) {
+      return JSON.stringify(val.value);
+    } else if (val && typeof val === 'object') {
+      const entries = Object.entries(val).map(([k, v]) => `${k}: ${processValue(v)}`);
+      return `{ ${entries.join(', ')} }`;
+    }
+    return JSON.stringify(val);
+  }
+
+  for (const [key, value] of Object.entries(constants)) {
+    lines.push(`export const ${key} = ${processValue(value)};`);
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+// ─── Kotlin Constants Generation ──────────────────────────────────────────────
+
+function generateKotlinConstants() {
+  const existingContent = existsSync(KT_CONST_OUT) ? readFileSync(KT_CONST_OUT, 'utf-8') : '';
+
+  const lines = [
+    'package io.nurunuru.app.data',
+    '',
+    '/**',
+    ' * Centralized application constants.',
+    ' * Auto-generated from design-tokens/constants.json — DO NOT EDIT',
+    ' * Run: npm run tokens',
+    ' */',
+    'object Constants {',
+  ];
+
+  const ktTree = {};
+
+  function addToTree(path, value, type) {
+    const parts = path.split('.');
+    let current = ktTree;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!current[parts[i]]) current[parts[i]] = {};
+      current = current[parts[i]];
+    }
+    current[parts[parts.length - 1]] = { value, type };
+  }
+
+  function walk(obj) {
+    for (const [, entry] of Object.entries(obj)) {
+      if (entry && typeof entry === 'object') {
+        if (entry.kotlinPath) {
+          addToTree(entry.kotlinPath, entry.value, entry.type);
+        } else {
+          walk(entry);
+        }
+      }
+    }
+  }
+
+  walk(constants);
+
+  // Preserve Android-only ErrorMessages
+  const errorMessagesMatch = existingContent.match(/object ErrorMessages \{([\s\S]*?)\}/);
+  if (errorMessagesMatch) {
+    const existingMsgs = errorMessagesMatch[1].match(/const val (\w+) = "(.+)"/g);
+    if (existingMsgs) {
+      if (!ktTree.ErrorMessages) ktTree.ErrorMessages = {};
+      existingMsgs.forEach(line => {
+        const m = line.match(/const val (\w+) = "(.+)"/);
+        if (m && !ktTree.ErrorMessages[m[1]]) {
+          ktTree.ErrorMessages[m[1]] = { value: m[2], type: 'string' };
+        }
+      });
+    }
+  }
+
+  function renderTree(tree, indent = '    ') {
+    for (const [key, val] of Object.entries(tree)) {
+      if (val.value !== undefined) {
+        let v = val.value;
+        let t = '';
+        if (val.type === 'long') {
+          v = v.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '_') + 'L';
+          t = 'const val ';
+        } else if (val.type === 'int') {
+          t = 'const val ';
+        } else if (val.type === 'double') {
+          v = v.toString();
+          if (!v.includes('.')) v += '.0';
+          t = 'const val ';
+        } else if (val.type === 'float') {
+          v = v.toString() + 'f';
+          t = 'const val ';
+        } else if (val.type === 'string') {
+          v = `"${v}"`;
+          t = 'const val ';
+        }
+        lines.push(`${indent}${t}${key} = ${v}`);
+      } else {
+        lines.push('');
+        lines.push(`${indent}object ${key} {`);
+        renderTree(val, indent + '    ');
+        lines.push(`${indent}}`);
+      }
+    }
+  }
+
+  renderTree(ktTree);
+
+  // Preserve ConnectionState enum
+  const enumMatch = existingContent.match(/enum class ConnectionState \{[\s\S]*?\}/);
+  if (enumMatch) {
+    lines.push('');
+    lines.push('    // ─── Connection State ────────────────────────────────────────────────────');
+    const enumLines = enumMatch[0].split('\n');
+    const firstLine = enumLines[0].trim();
+    lines.push(`    ${firstLine}`);
+    for (let i = 1; i < enumLines.length - 1; i++) {
+      lines.push(`        ${enumLines[i].trim()}`);
+    }
+    if (enumLines.length > 1) {
+      lines.push(`    ${enumLines[enumLines.length - 1].trim()}`);
+    }
+  }
+
+  lines.push('}');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
 // ─── Kotlin Generation ────────────────────────────────────────────────────────
 
 function generateKotlin() {
@@ -245,24 +389,31 @@ function generateKotlin() {
 
 const cssContent = generateCSS();
 const ktContent = generateKotlin();
+const jsConstContent = generateJSConstants();
+const ktConstContent = generateKotlinConstants();
 
 if (isCheck) {
   let hasDrift = false;
 
-  if (!existsSync(CSS_OUT) || readFileSync(CSS_OUT, 'utf-8') !== cssContent) {
-    console.error('DRIFT: app/globals.tokens.css is out of sync with tokens.json');
-    hasDrift = true;
-  }
-  if (!existsSync(KT_OUT) || readFileSync(KT_OUT, 'utf-8') !== ktContent) {
-    console.error('DRIFT: NuruTokens.kt is out of sync with tokens.json');
-    hasDrift = true;
+  const files = [
+    { path: CSS_OUT, content: cssContent, name: 'app/globals.tokens.css' },
+    { path: KT_OUT, content: ktContent, name: 'NuruTokens.kt' },
+    { path: JS_CONST_OUT, content: jsConstContent, name: 'lib/constants.generated.js' },
+    { path: KT_CONST_OUT, content: ktConstContent, name: 'Constants.kt' },
+  ];
+
+  for (const file of files) {
+    if (!existsSync(file.path) || readFileSync(file.path, 'utf-8') !== file.content) {
+      console.error(`DRIFT: ${file.name} is out of sync`);
+      hasDrift = true;
+    }
   }
 
   if (hasDrift) {
     console.error('\nRun "npm run tokens" to regenerate.');
     process.exit(1);
   } else {
-    console.log('All tokens in sync.');
+    console.log('All tokens and constants in sync.');
     process.exit(0);
   }
 } else {
@@ -271,4 +422,10 @@ if (isCheck) {
 
   writeFileSync(KT_OUT, ktContent);
   console.log(`Generated: ${KT_OUT}`);
+
+  writeFileSync(JS_CONST_OUT, jsConstContent);
+  console.log(`Generated: ${JS_CONST_OUT}`);
+
+  writeFileSync(KT_CONST_OUT, ktConstContent);
+  console.log(`Generated: ${KT_CONST_OUT}`);
 }

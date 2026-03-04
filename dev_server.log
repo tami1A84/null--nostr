@@ -1,0 +1,12 @@
+
+> nostr-line-client@1.0.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ✓ Ready in 1791ms
+ ○ Compiling / ...
+ ✓ Compiled / in 8.2s (665 modules)
+ GET / 200 in 8922ms
