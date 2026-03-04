@@ -10,3 +10,16 @@
  ○ Compiling / ...
  ✓ Compiled / in 8.2s (665 modules)
  GET / 200 in 8922ms
+ ✓ Compiled in 5.8s (340 modules)
+ ⚠ Found a change in next.config.js. Restarting the server to apply the changes...
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ⚠ Invalid next.config.js options detected:
+ ⚠     Unrecognized key(s) in object: 'turbopack'
+ ⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+ ✓ Ready in 5.3s
+ ○ Compiling / ...
+ ✓ Compiled / in 8.3s (665 modules)
+ GET / 200 in 9124ms

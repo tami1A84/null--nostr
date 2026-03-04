@@ -1,7 +1,7 @@
+@import './globals.tokens.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import './globals.tokens.css';
 
 * {
   margin: 0;
