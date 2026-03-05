@@ -79,7 +79,7 @@ fun MainScreen(
     val timelineVM: TimelineViewModel = viewModel(
         TimelineViewModel::class.java,
         factory = TimelineViewModel.Factory(repository, pubkeyHex)
-    ).also { it.setRecommendationEngine(recommendationEngine) }
+    )
     val talkVM: TalkViewModel = viewModel(
         TalkViewModel::class.java,
         factory = TalkViewModel.Factory(repository, nostrClient, pubkeyHex)

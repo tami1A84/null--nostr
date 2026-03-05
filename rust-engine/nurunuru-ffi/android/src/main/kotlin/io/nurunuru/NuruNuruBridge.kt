@@ -1,46 +1,14 @@
 package io.nurunuru
 
-import android.content.Context
+import uniffi.nurunuru.NuruNuruClient
+import uniffi.nurunuru.FfiScoredPost
+import uniffi.nurunuru.FfiUserProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /**
- * Convenience factory and async extension wrappers for the UniFFI-generated
- * [NuruNuruClient].
- *
- * ## Basic usage
- * ```kotlin
- * // Activity / ViewModel:
- * val client = NuruNuruBridge.create(requireContext(), nsecKey)
- *
- * lifecycleScope.launch {
- *     client.connectAsync()
- *     client.loginAsync(npubHex)
- *     val feed = client.getRecommendedFeedAsync(50u)
- *     // feed: List<FfiScoredPost>
- * }
- * ```
- *
- * The underlying [NuruNuruClient] methods are synchronous (they block the
- * calling thread via a Tokio runtime inside Rust). Always call them from a
- * coroutine using [Dispatchers.IO] or use the async extension functions
- * provided here.
+ * Convenience extension wrappers for the UniFFI-generated [NuruNuruClient].
  */
-object NuruNuruBridge {
-    /**
-     * Create a [NuruNuruClient] backed by the app's private storage.
-     *
-     * @param context       Application or Activity context (used to resolve the DB path).
-     * @param secretKeyHex  User's private key — hex or nsec Bech32.
-     */
-    fun create(context: Context, secretKeyHex: String): NuruNuruClient {
-        val dbDir = File(context.filesDir, "nurunuru-db").also { it.mkdirs() }
-        return NuruNuruClient(secretKeyHex = secretKeyHex, dbPath = dbDir.absolutePath)
-    }
-}
-
-// ─── Coroutine-friendly extension functions ────────────────────────────────
 
 /** Connect to relays on the IO dispatcher. */
 suspend fun NuruNuruClient.connectAsync() = withContext(Dispatchers.IO) { connect() }
