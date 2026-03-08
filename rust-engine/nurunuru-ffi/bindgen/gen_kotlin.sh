@@ -17,23 +17,28 @@ CRATE_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$CRATE_DIR"
 
-echo "==> Building nurunuru-ffi for host (for bindgen introspection)..."
-cargo build --release
+echo "==> Building nurunuru-ffi (debug, for bindgen introspection)..."
+# NOTE: bindgen requires the DEBUG build because the release build strips the
+# static symbol table (.symtab). uniffi-bindgen reads UNIFFI_META_* symbols
+# from .symtab; only .dynsym survives a release strip.
+cargo build
 
-# Use host .so / .dylib for bindgen introspection
+# Use debug .so / .dylib for bindgen introspection.
+# The workspace places artifacts in the workspace-level target/, one level up.
 if [[ "$(uname)" == "Darwin" ]]; then
-    LIB="target/release/libnurunuru_ffi.dylib"
+    LIB="$CRATE_DIR/../target/debug/libuniffi_nurunuru.dylib"
 else
-    LIB="target/release/libnurunuru_ffi.so"
+    LIB="$CRATE_DIR/../target/debug/libuniffi_nurunuru.so"
 fi
 
 echo "==> Generating Kotlin bindings from $LIB ..."
-mkdir -p bindgen/kotlin-out
+mkdir -p "$CRATE_DIR/bindgen/kotlin-out"
 
 cargo run --bin uniffi-bindgen -- generate \
-    --library "$LIB" \
+    --library \
     --language kotlin \
-    --out-dir bindgen/kotlin-out/
+    --out-dir "$CRATE_DIR/bindgen/kotlin-out/" \
+    "$LIB"
 
 echo ""
 echo "✓ Kotlin bindings written to bindgen/kotlin-out/"

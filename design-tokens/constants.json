@@ -33,7 +33,7 @@
       "muteList": { "value": 600000, "type": "long", "kotlinPath": "CacheDuration.MUTE_LIST" },
       "followList": { "value": 600000, "type": "long", "kotlinPath": "CacheDuration.FOLLOW_LIST" },
       "emoji": { "value": 1800000, "type": "long", "kotlinPath": "CacheDuration.EMOJI" },
-      "timeline": { "value": 30000, "type": "long", "kotlinPath": "CacheDuration.TIMELINE" },
+      "timeline": { "value": 600000, "type": "long", "kotlinPath": "CacheDuration.TIMELINE" },
       "short": { "value": 60000, "type": "long", "kotlinPath": "CacheDuration.SHORT" },
       "nip05": { "value": 300000, "type": "long", "kotlinPath": "CacheDuration.NIP05" },
       "relayInfo": { "value": 3600000, "type": "long", "kotlinPath": "CacheDuration.RELAY_INFO" }

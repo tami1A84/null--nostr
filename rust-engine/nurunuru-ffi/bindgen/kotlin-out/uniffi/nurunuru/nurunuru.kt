@@ -59,7 +59,7 @@ open class RustBuffer : Structure() {
     companion object {
         internal fun alloc(size: ULong = 0UL) = uniffiRustCall() { status ->
             // Note: need to convert the size to a `Long` value to make this work with JVM.
-            UniffiLib.INSTANCE.ffi_nurunuru_ffi_rustbuffer_alloc(size.toLong(), status)
+            UniffiLib.INSTANCE.ffi_uniffi_nurunuru_rustbuffer_alloc(size.toLong(), status)
         }.also {
             if(it.data == null) {
                throw RuntimeException("RustBuffer.alloc() returned null data pointer (size=${size})")
@@ -75,7 +75,7 @@ open class RustBuffer : Structure() {
         }
 
         internal fun free(buf: RustBuffer.ByValue) = uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.ffi_nurunuru_ffi_rustbuffer_free(buf, status)
+            UniffiLib.INSTANCE.ffi_uniffi_nurunuru_rustbuffer_free(buf, status)
         }
     }
 
@@ -756,64 +756,152 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
-// N.B. the name of the extension is very misleading, since it is
-// rather `InterfaceTooLargeException`, caused by too many methods
+// N.B. the name of the extension is very misleading, since it is 
+// rather `InterfaceTooLargeException`, caused by too many methods 
 // in the interface for large crates.
 //
 // By splitting the otherwise huge interface into two parts
-// * UniffiLib
+// * UniffiLib 
 // * IntegrityCheckingUniffiLib (this)
 // we allow for ~2x as many methods in the UniffiLib interface.
-//
-// The `ffi_uniffi_contract_version` method and all checksum methods are put
+// 
+// The `ffi_uniffi_contract_version` method and all checksum methods are put 
 // into `IntegrityCheckingUniffiLib` and these methods are called only once,
 // when the library is loaded.
 internal interface IntegrityCheckingUniffiLib : Library {
     // Integrity check functions only
-    fun uniffi_nurunuru_ffi_checksum_func_init_engine(
+    fun uniffi_uniffi_nurunuru_checksum_func_init_engine(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_connect(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_connect(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_connection_stats(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_connection_stats(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_create_unsigned_note(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_create_unsigned_event(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_disconnect(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_create_unsigned_note(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_fetch_follow_list(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_create_unsigned_note_with_tags(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_fetch_profile(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_create_unsigned_reaction(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_follow_user(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_create_unsigned_repost(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_format_timestamp(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_delete_event(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_get_recommended_feed(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_disconnect(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_login(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_events_from_relay(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_mark_not_interested(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_follow_list(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_publish_note(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_follow_timeline(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_publish_raw_event(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_global_timeline(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_query_local(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_profile(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_record_engagement(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_profiles(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_search(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_follow_user(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_send_dm(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_format_timestamp(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_method_nurunuruclient_unfollow_user(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_get_recommended_feed(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_constructor_nurunuruclient_new(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_login(
 ): Short
-fun uniffi_nurunuru_ffi_checksum_constructor_nurunuruclient_new_read_only(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mark_not_interested(
 ): Short
-fun ffi_nurunuru_ffi_uniffi_contract_version(
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_nip04_decrypt(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_nip04_encrypt(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_nip44_decrypt(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_nip44_encrypt(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_poll_live_events(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_event(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_note(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_note_with_tags(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_raw_event(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_query_local(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_query_local_global(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_react(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_record_engagement(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_repost(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_search(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_send_dm(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_start_live_subscription(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_stop_live_subscription(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_unfollow_user(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_update_profile(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new_read_only(
+): Short
+fun ffi_uniffi_nurunuru_uniffi_contract_version(
 ): Int
 
 }
@@ -825,8 +913,8 @@ internal interface UniffiLib : Library {
         internal val INSTANCE: UniffiLib by lazy {
             val componentName = "nurunuru"
             // For large crates we prevent `MethodTooLargeException` (see #2340)
-            // N.B. the name of the extension is very misleading, since it is
-            // rather `InterfaceTooLargeException`, caused by too many methods
+            // N.B. the name of the extension is very misleading, since it is 
+            // rather `InterfaceTooLargeException`, caused by too many methods 
             // in the interface for large crates.
             //
             // By splitting the otherwise huge interface into two parts
@@ -834,7 +922,7 @@ internal interface UniffiLib : Library {
             // * IntegrityCheckingUniffiLib
             // And all checksum methods are put into `IntegrityCheckingUniffiLib`
             // we allow for ~2x as many methods in the UniffiLib interface.
-            //
+            // 
             // Thus we first load the library with `loadIndirect` as `IntegrityCheckingUniffiLib`
             // so that we can (optionally!) call `uniffiCheckApiChecksums`...
             loadIndirect<IntegrityCheckingUniffiLib>(componentName)
@@ -849,12 +937,12 @@ internal interface UniffiLib : Library {
             // to trigger this issue, the performance impact is negligible, running on
             // a macOS M1 machine the `loadIndirect` call takes ~50ms.
             val lib = loadIndirect<UniffiLib>(componentName)
-            // No need to check the contract version and checksums, since
+            // No need to check the contract version and checksums, since 
             // we already did that with `IntegrityCheckingUniffiLib` above.
             // Loading of library with integrity check done.
             lib
         }
-
+        
         // The Cleaner for the whole library
         internal val CLEANER: UniffiCleaner by lazy {
             UniffiCleaner.create()
@@ -862,163 +950,207 @@ internal interface UniffiLib : Library {
     }
 
     // FFI functions
-    fun uniffi_nurunuru_ffi_fn_clone_nurunuruclient(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus,
+    fun uniffi_uniffi_nurunuru_fn_clone_nurunuruclient(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
-fun uniffi_nurunuru_ffi_fn_free_nurunuruclient(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_free_nurunuruclient(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_nurunuru_ffi_fn_constructor_nurunuruclient_new(`secretKeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new(`secretKeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
-fun uniffi_nurunuru_ffi_fn_constructor_nurunuruclient_new_read_only(`pubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new_read_only(`pubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_connect(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_connect(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_connection_stats(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_connection_stats(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_create_unsigned_note(`ptr`: Pointer,`pubkeyHex`: RustBuffer.ByValue,`content`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_create_unsigned_event(`ptr`: Pointer,`kind`: Int,`content`: RustBuffer.ByValue,`tags`: RustBuffer.ByValue,`creatorPubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_disconnect(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_create_unsigned_note(`ptr`: Pointer,`pubkeyHex`: RustBuffer.ByValue,`content`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_create_unsigned_note_with_tags(`ptr`: Pointer,`content`: RustBuffer.ByValue,`tags`: RustBuffer.ByValue,`creatorPubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_create_unsigned_reaction(`ptr`: Pointer,`eventIdHex`: RustBuffer.ByValue,`authorPubkeyHex`: RustBuffer.ByValue,`emoji`: RustBuffer.ByValue,`creatorPubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_create_unsigned_repost(`ptr`: Pointer,`eventJson`: RustBuffer.ByValue,`creatorPubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_delete_event(`ptr`: Pointer,`eventIdHex`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_disconnect(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_fetch_follow_list(`ptr`: Pointer,`pubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_events_from_relay(`ptr`: Pointer,`filterJson`: RustBuffer.ByValue,`timeoutSecs`: Int,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_fetch_profile(`ptr`: Pointer,`pubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_follow_list(`ptr`: Pointer,`pubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_follow_user(`ptr`: Pointer,`targetPubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-): Unit
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_format_timestamp(`ptr`: Pointer,`timestamp`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_follow_timeline(`ptr`: Pointer,`authors`: RustBuffer.ByValue,`limit`: Int,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_get_recommended_feed(`ptr`: Pointer,`limit`: Int,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_global_timeline(`ptr`: Pointer,`limit`: Int,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_login(`ptr`: Pointer,`pubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-): Unit
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_mark_not_interested(`ptr`: Pointer,`eventId`: RustBuffer.ByValue,`authorPubkey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-): Unit
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_publish_note(`ptr`: Pointer,`content`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_profile(`ptr`: Pointer,`pubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_publish_raw_event(`ptr`: Pointer,`eventJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_profiles(`ptr`: Pointer,`pubkeys`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_query_local(`ptr`: Pointer,`authors`: RustBuffer.ByValue,`limit`: Int,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_follow_user(`ptr`: Pointer,`targetPubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_format_timestamp(`ptr`: Pointer,`timestamp`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_record_engagement(`ptr`: Pointer,`action`: RustBuffer.ByValue,`authorPubkey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-): Unit
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_search(`ptr`: Pointer,`query`: RustBuffer.ByValue,`limit`: Int,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_get_recommended_feed(`ptr`: Pointer,`limit`: Int,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_send_dm(`ptr`: Pointer,`recipientHex`: RustBuffer.ByValue,`content`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_login(`ptr`: Pointer,`pubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_nurunuru_ffi_fn_method_nurunuruclient_unfollow_user(`ptr`: Pointer,`targetPubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mark_not_interested(`ptr`: Pointer,`eventId`: RustBuffer.ByValue,`authorPubkey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_nurunuru_ffi_fn_func_init_engine(`dbPath`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-): Unit
-fun ffi_nurunuru_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_nip04_decrypt(`ptr`: Pointer,`senderPubkeyHex`: RustBuffer.ByValue,`ciphertext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_nurunuru_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_nip04_encrypt(`ptr`: Pointer,`recipientPubkeyHex`: RustBuffer.ByValue,`plaintext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_nurunuru_ffi_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-): Unit
-fun ffi_nurunuru_ffi_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_nip44_decrypt(`ptr`: Pointer,`senderPubkeyHex`: RustBuffer.ByValue,`ciphertext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_nurunuru_ffi_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_nip44_encrypt(`ptr`: Pointer,`recipientPubkeyHex`: RustBuffer.ByValue,`plaintext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_poll_live_events(`ptr`: Pointer,`subId`: RustBuffer.ByValue,`maxCount`: Int,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_event(`ptr`: Pointer,`kind`: Int,`content`: RustBuffer.ByValue,`tags`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_note(`ptr`: Pointer,`content`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_note_with_tags(`ptr`: Pointer,`content`: RustBuffer.ByValue,`tags`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_raw_event(`ptr`: Pointer,`eventJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_query_local(`ptr`: Pointer,`authors`: RustBuffer.ByValue,`limit`: Int,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_query_local_global(`ptr`: Pointer,`limit`: Int,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_react(`ptr`: Pointer,`eventIdHex`: RustBuffer.ByValue,`authorPubkeyHex`: RustBuffer.ByValue,`emoji`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_record_engagement(`ptr`: Pointer,`action`: RustBuffer.ByValue,`authorPubkey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_u8(`handle`: Long,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_repost(`ptr`: Pointer,`eventJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_search(`ptr`: Pointer,`query`: RustBuffer.ByValue,`limit`: Int,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_send_dm(`ptr`: Pointer,`recipientHex`: RustBuffer.ByValue,`content`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_u8(`handle`: Long,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_start_live_subscription(`ptr`: Pointer,`authors`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_stop_live_subscription(`ptr`: Pointer,`subId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_unfollow_user(`ptr`: Pointer,`targetPubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_update_profile(`ptr`: Pointer,`metadataJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_func_init_engine(`dbPath`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun ffi_uniffi_nurunuru_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun ffi_uniffi_nurunuru_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun ffi_uniffi_nurunuru_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun ffi_uniffi_nurunuru_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun ffi_uniffi_nurunuru_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+): Unit
+fun ffi_uniffi_nurunuru_rust_future_cancel_u8(`handle`: Long,
+): Unit
+fun ffi_uniffi_nurunuru_rust_future_free_u8(`handle`: Long,
+): Unit
+fun ffi_uniffi_nurunuru_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun ffi_nurunuru_ffi_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_i8(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_i8(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_i8(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_i8(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun ffi_nurunuru_ffi_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_u16(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_u16(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_u16(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_u16(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Short
-fun ffi_nurunuru_ffi_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_i16(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_i16(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_i16(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_i16(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Short
-fun ffi_nurunuru_ffi_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_u32(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_u32(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_u32(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_u32(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun ffi_nurunuru_ffi_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_i32(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_i32(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_i32(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_i32(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun ffi_nurunuru_ffi_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_u64(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_u64(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_u64(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_u64(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun ffi_nurunuru_ffi_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_i64(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_i64(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_i64(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_i64(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun ffi_nurunuru_ffi_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_f32(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_f32(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_f32(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_f32(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Float
-fun ffi_nurunuru_ffi_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_f64(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_f64(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_f64(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_f64(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Double
-fun ffi_nurunuru_ffi_rust_future_poll_pointer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_pointer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_pointer(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_pointer(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_pointer(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_pointer(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_pointer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_pointer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
-fun ffi_nurunuru_ffi_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_rust_buffer(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_rust_buffer(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_rust_buffer(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_rust_buffer(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_nurunuru_ffi_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_uniffi_nurunuru_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_cancel_void(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_cancel_void(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_free_void(`handle`: Long,
+fun ffi_uniffi_nurunuru_rust_future_free_void(`handle`: Long,
 ): Unit
-fun ffi_nurunuru_ffi_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+fun ffi_uniffi_nurunuru_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 
 }
@@ -1027,74 +1159,140 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
     // Get the bindings contract version from our ComponentInterface
     val bindings_contract_version = 29
     // Get the scaffolding contract version by calling the into the dylib
-    val scaffolding_contract_version = lib.ffi_nurunuru_ffi_uniffi_contract_version()
+    val scaffolding_contract_version = lib.ffi_uniffi_nurunuru_uniffi_contract_version()
     if (bindings_contract_version != scaffolding_contract_version) {
         throw RuntimeException("UniFFI contract version mismatch: try cleaning and rebuilding your project")
     }
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_nurunuru_ffi_checksum_func_init_engine() != 54183.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_func_init_engine() != 11794.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_connect() != 60654.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_connect() != 60367.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_connection_stats() != 46577.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_connection_stats() != 61626.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_create_unsigned_note() != 24107.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_create_unsigned_event() != 49643.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_disconnect() != 38631.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_create_unsigned_note() != 63830.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_fetch_follow_list() != 46391.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_create_unsigned_note_with_tags() != 50494.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_fetch_profile() != 8539.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_create_unsigned_reaction() != 53302.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_follow_user() != 13972.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_create_unsigned_repost() != 23051.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_format_timestamp() != 26250.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_delete_event() != 19760.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_get_recommended_feed() != 3279.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_disconnect() != 24329.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_login() != 56079.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_events_from_relay() != 47830.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_mark_not_interested() != 14317.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_follow_list() != 27471.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_publish_note() != 17434.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_follow_timeline() != 38806.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_publish_raw_event() != 29968.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_global_timeline() != 34592.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_query_local() != 51732.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_profile() != 36544.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_record_engagement() != 57804.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_profiles() != 16045.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_search() != 31612.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_follow_user() != 8603.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_send_dm() != 20544.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_format_timestamp() != 40449.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_method_nurunuruclient_unfollow_user() != 42695.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_get_recommended_feed() != 26430.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_constructor_nurunuruclient_new() != 29919.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_login() != 60292.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_nurunuru_ffi_checksum_constructor_nurunuruclient_new_read_only() != 736.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mark_not_interested() != 2204.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_nip04_decrypt() != 5575.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_nip04_encrypt() != 25480.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_nip44_decrypt() != 36024.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_nip44_encrypt() != 5472.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_poll_live_events() != 23571.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_event() != 11144.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_note() != 35820.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_note_with_tags() != 26543.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_raw_event() != 20623.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_query_local() != 50993.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_query_local_global() != 21329.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_react() != 51908.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_record_engagement() != 56250.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_repost() != 3923.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_search() != 16969.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_send_dm() != 48383.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_start_live_subscription() != 15505.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_stop_live_subscription() != 40772.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_unfollow_user() != 4124.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_update_profile() != 36361.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new() != 46748.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new_read_only() != 26367.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1169,7 +1367,7 @@ inline fun <T : Disposable?, R> T.use(block: (T) -> R) =
         }
     }
 
-/**
+/** 
  * Used to instantiate an interface without an actual pointer, for fakes in tests, mostly.
  *
  * @suppress
@@ -1465,47 +1663,304 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
 //
 
 
+/**
+ * FFI-safe wrapper around the NuruNuru engine.
+ * Holds a Tokio runtime for blocking-async bridging.
+ */
 public interface NuruNuruClientInterface {
-
+    
+    /**
+     * Connect to all configured relays.
+     */
     fun `connect`()
-
+    
+    /**
+     * Return current relay connection statistics.
+     */
     fun `connectionStats`(): FfiConnectionStats
-
+    
+    /**
+     * Create an **unsigned** event of any kind for external signing.
+     */
+    fun `createUnsignedEvent`(`kind`: kotlin.UInt, `content`: kotlin.String, `tags`: List<List<kotlin.String>>, `creatorPubkeyHex`: kotlin.String): kotlin.String
+    
+    /**
+     * Create an **unsigned** kind-1 text note JSON for external signing.
+     *
+     * The returned JSON should be passed to the app-layer signer (NIP-07 / Amber),
+     * then the signed result given to `publish_raw_event`.
+     */
     fun `createUnsignedNote`(`pubkeyHex`: kotlin.String, `content`: kotlin.String): kotlin.String
-
+    
+    /**
+     * Create an **unsigned** text note with tags JSON for external signing.
+     */
+    fun `createUnsignedNoteWithTags`(`content`: kotlin.String, `tags`: List<List<kotlin.String>>, `creatorPubkeyHex`: kotlin.String): kotlin.String
+    
+    /**
+     * Create an **unsigned** reaction (kind 7) JSON for external signing.
+     */
+    fun `createUnsignedReaction`(`eventIdHex`: kotlin.String, `authorPubkeyHex`: kotlin.String, `emoji`: kotlin.String, `creatorPubkeyHex`: kotlin.String): kotlin.String
+    
+    /**
+     * Create an **unsigned** repost (kind 6) JSON for external signing.
+     */
+    fun `createUnsignedRepost`(`eventJson`: kotlin.String, `creatorPubkeyHex`: kotlin.String): kotlin.String
+    
+    /**
+     * Delete an event (Kind 5, NIP-09).
+     *
+     * Returns the deletion event ID hex.
+     */
+    fun `deleteEvent`(`eventIdHex`: kotlin.String, `reason`: kotlin.String?): kotlin.String
+    
+    /**
+     * Disconnect from all relays.
+     */
     fun `disconnect`()
-
+    
+    /**
+     * Fetch events from connected relays using a NIP-01 JSON filter.
+     *
+     * `filter_json` must be a JSON object matching the NIP-01 filter spec:
+     * ```json
+     * {"kinds":[1],"authors":["hex..."],"limit":50,"since":1700000000}
+     * ```
+     * Tag filters use the `#<tag>` format: `{"#p":["hex..."],"#e":["id..."]}`.
+     * NIP-50 full-text search: `{"kinds":[1],"search":"query","limit":30}`.
+     *
+     * Returns serialised event JSON strings, newest-first.
+     * `timeout_secs` controls how long to wait for relay responses.
+     */
+    fun `fetchEventsFromRelay`(`filterJson`: kotlin.String, `timeoutSecs`: kotlin.UInt): List<kotlin.String>
+    
+    /**
+     * Fetch the follow list for a user. Returns pubkey hex strings.
+     */
     fun `fetchFollowList`(`pubkeyHex`: kotlin.String): List<kotlin.String>
-
+    
+    /**
+     * Fetch the follow timeline for a set of authors (Kind 1 text notes).
+     *
+     * Issues a single REQ to all connected relays filtered by the given
+     * pubkey hex list.  nostrdb caches the results for subsequent
+     * `query_local` calls.
+     *
+     * Pass up to 500 pubkeys (relay REQ limit).  Callers should obtain the
+     * follow list first via `fetch_follow_list` or the local app cache.
+     */
+    fun `fetchFollowTimeline`(`authors`: List<kotlin.String>, `limit`: kotlin.UInt): List<kotlin.String>
+    
+    /**
+     * Connect to relays and fetch the global timeline (Kind 1 text notes,
+     * no author filter). Returns up to `limit` events as serialised JSON
+     * strings, newest-first.
+     *
+     * Internally calls `engine.fetch_timeline(authors=None)`, which issues a
+     * REQ to all connected relays and waits up to 15 s for results.
+     * Call `connect()` first so the relays are ready.
+     */
+    fun `fetchGlobalTimeline`(`limit`: kotlin.UInt): List<kotlin.String>
+    
+    /**
+     * Fetch a user profile (kind 0 metadata). Returns `None` if not found.
+     */
     fun `fetchProfile`(`pubkeyHex`: kotlin.String): FfiUserProfile?
-
+    
+    /**
+     * Batch-fetch user profiles (kind 0 metadata).
+     *
+     * For each pubkey: nostrdb is checked first; only the pubkeys not already
+     * cached are fetched from relays in a single REQ.  This is the recommended
+     * path to avoid per-profile JNI calls during timeline enrichment.
+     *
+     * Returns one `FfiUserProfile` per pubkey that was found.  Pubkeys with no
+     * profile event on any relay will be absent from the result.
+     */
+    fun `fetchProfiles`(`pubkeys`: List<kotlin.String>): List<FfiUserProfile>
+    
+    /**
+     * Follow a user (publishes an updated kind-3 contact list).
+     */
     fun `followUser`(`targetPubkeyHex`: kotlin.String)
-
+    
+    /**
+     * Format a Unix timestamp as a Japanese relative string (e.g. "3分").
+     */
     fun `formatTimestamp`(`timestamp`: kotlin.ULong): kotlin.String
-
+    
+    /**
+     * Get the recommended feed. Returns scored event metadata.
+     */
     fun `getRecommendedFeed`(`limit`: kotlin.UInt): List<FfiScoredPost>
-
+    
+    /**
+     * Set the current user's public key and load follow/mute lists.
+     */
     fun `login`(`pubkeyHex`: kotlin.String)
-
+    
+    /**
+     * Mark a post as "not interested" to suppress it from the feed.
+     */
     fun `markNotInterested`(`eventId`: kotlin.String, `authorPubkey`: kotlin.String)
-
+    
+    /**
+     * NIP-04 decrypt a message from a sender (legacy DM, Kind 4).
+     *
+     * Only available for internal-signer clients.
+     */
+    fun `nip04Decrypt`(`senderPubkeyHex`: kotlin.String, `ciphertext`: kotlin.String): kotlin.String
+    
+    /**
+     * NIP-04 encrypt a message for a recipient (legacy DM, Kind 4).
+     *
+     * Only available for internal-signer clients (created via `new(secret_key_hex)`).
+     * Returns the ciphertext string suitable for use as a Kind-4 event content.
+     */
+    fun `nip04Encrypt`(`recipientPubkeyHex`: kotlin.String, `plaintext`: kotlin.String): kotlin.String
+    
+    /**
+     * NIP-44 decrypt a message from a sender.
+     *
+     * Only available for internal-signer clients.
+     */
+    fun `nip44Decrypt`(`senderPubkeyHex`: kotlin.String, `ciphertext`: kotlin.String): kotlin.String
+    
+    /**
+     * NIP-44 encrypt a message for a recipient (NIP-17 gift-wrap, seals, etc.).
+     *
+     * Only available for internal-signer clients.
+     */
+    fun `nip44Encrypt`(`recipientPubkeyHex`: kotlin.String, `plaintext`: kotlin.String): kotlin.String
+    
+    /**
+     * Drain up to `max_count` buffered live events. Returns serialised JSON
+     * strings. Returns an empty vec when no new events have arrived.
+     *
+     * Safe to call on a background thread; will return immediately.
+     */
+    fun `pollLiveEvents`(`subId`: kotlin.String, `maxCount`: kotlin.UInt): List<kotlin.String>
+    
+    /**
+     * Generic event publisher for kinds without a dedicated method.
+     *
+     * Covers: Kind 0 (profile), Kind 3 (contacts), Kind 10000 (mute),
+     * Kind 10002 (relay list), Kind 1984 (report), Kind 1985 (label), …
+     *
+     * `tags` — list of tag arrays: `[["e","<id>"],["p","<pk>","<relay>"]]`
+     * Returns the published event ID hex.
+     */
+    fun `publishEvent`(`kind`: kotlin.UInt, `content`: kotlin.String, `tags`: List<List<kotlin.String>>): kotlin.String
+    
+    /**
+     * Publish a text note (kind 1). Returns the event ID hex.
+     * For internal signers only — the engine signs with the stored private key.
+     */
     fun `publishNote`(`content`: kotlin.String): kotlin.String
-
+    
+    /**
+     * Publish a text note with tags (Kind 1).
+     *
+     * `tags` is a list of tag arrays, e.g.:
+     * `[["e","<event-id>","","reply"],["p","<pubkey>"]]`
+     */
+    fun `publishNoteWithTags`(`content`: kotlin.String, `tags`: List<List<kotlin.String>>): kotlin.String
+    
+    /**
+     * Publish an already-signed Nostr event JSON to all connected relays.
+     *
+     * Used by the external signer flow: the app receives an unsigned event from
+     * `create_unsigned_note`, signs it via NIP-07 / Amber, then passes the
+     * signed JSON here. Returns the event ID hex on success.
+     */
     fun `publishRawEvent`(`eventJson`: kotlin.String): kotlin.String
-
-    fun `queryLocal`(`authors`: List<kotlin.String>?, `limit`: kotlin.UInt): List<kotlin.String>
-
+    
+    /**
+     * Query the local nostrdb cache by author pubkeys.
+     *
+     * Returns serialised JSON strings of matching kind-1 (text note) events,
+     * newest-first, up to `limit` results.
+     */
+    fun `queryLocal`(`authors`: List<kotlin.String>, `limit`: kotlin.UInt): List<kotlin.String>
+    
+    /**
+     * Query the local nostrdb cache for the global timeline (no author filter).
+     *
+     * Returns serialised JSON strings of kind-1 events, newest-first, up to `limit`.
+     */
+    fun `queryLocalGlobal`(`limit`: kotlin.UInt): List<kotlin.String>
+    
+    /**
+     * React to an event (Kind 7, NIP-25).
+     *
+     * `emoji` is typically `"+"` (like), `"-"` (dislike), or a custom
+     * emoji shortcode.  Returns the reaction event ID hex.
+     */
+    fun `react`(`eventIdHex`: kotlin.String, `authorPubkeyHex`: kotlin.String, `emoji`: kotlin.String): kotlin.String
+    
+    /**
+     * Record an engagement action (like / repost / reply) for personalisation.
+     */
     fun `recordEngagement`(`action`: kotlin.String, `authorPubkey`: kotlin.String)
-
+    
+    /**
+     * Repost an event (Kind 6, NIP-18).
+     *
+     * `event_json` must be the full serialised Nostr event JSON received from
+     * a relay (including `id`, `pubkey`, `sig`).
+     * Returns the repost event ID hex.
+     */
+    fun `repost`(`eventJson`: kotlin.String): kotlin.String
+    
+    /**
+     * Full-text search (NIP-50). Returns matching event ID hex strings.
+     */
     fun `search`(`query`: kotlin.String, `limit`: kotlin.UInt): List<kotlin.String>
-
+    
+    /**
+     * Send an encrypted DM (NIP-17).
+     */
     fun `sendDm`(`recipientHex`: kotlin.String, `content`: kotlin.String)
-
+    
+    /**
+     * Start a persistent relay subscription for live events.
+     *
+     * Pass an empty `authors` vec for the global feed, or a list of pubkey
+     * hex strings for the follow timeline.
+     *
+     * Returns a subscription ID to pass to `poll_live_events` and
+     * `stop_live_subscription`.  The subscription emits Kind-1 text notes
+     * with `since = now` so only new events (posted after this call) arrive.
+     */
+    fun `startLiveSubscription`(`authors`: List<kotlin.String>): kotlin.String
+    
+    /**
+     * Cancel a live subscription and release all associated resources.
+     */
+    fun `stopLiveSubscription`(`subId`: kotlin.String)
+    
+    /**
+     * Unfollow a user (publishes an updated kind-3 contact list).
+     */
     fun `unfollowUser`(`targetPubkeyHex`: kotlin.String)
-
+    
+    /**
+     * Update user profile (Kind 0, NIP-01).
+     *
+     * `metadata_json` must be a JSON object with profile fields:
+     * `{"name":"...","display_name":"...","about":"...","picture":"...","nip05":"...","lud16":"..."}`
+     *
+     * Returns the published event ID hex.
+     */
+    fun `updateProfile`(`metadataJson`: kotlin.String): kotlin.String
+    
     companion object
 }
 
+/**
+ * FFI-safe wrapper around the NuruNuru engine.
+ * Holds a Tokio runtime for blocking-async bridging.
+ */
 open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
 {
 
@@ -1524,10 +1979,15 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
         this.pointer = null
         this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(pointer))
     }
+    /**
+     * Create a signing client from a private key (hex or nsec).
+     *
+     * Requires `init_engine()` to have been called first.
+     */
     constructor(`secretKeyHex`: kotlin.String) :
         this(
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_constructor_nurunuruclient_new(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new(
         FfiConverterString.lower(`secretKeyHex`),_status)
 }
     )
@@ -1583,7 +2043,7 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
         override fun run() {
             pointer?.let { ptr ->
                 uniffiRustCall { status ->
-                    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_free_nurunuruclient(ptr, status)
+                    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_free_nurunuruclient(ptr, status)
                 }
             }
         }
@@ -1591,249 +2051,746 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
 
     fun uniffiClonePointer(): Pointer {
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_clone_nurunuruclient(pointer!!, status)
+            UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_clone_nurunuruclient(pointer!!, status)
         }
     }
 
-    override fun `connect`()
-        =
+    
+    /**
+     * Connect to all configured relays.
+     */override fun `connect`()
+        = 
     callWithPointer {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_connect(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_connect(
         it, _status)
 }
     }
+    
+    
 
-
-
-    override fun `connectionStats`(): FfiConnectionStats {
+    
+    /**
+     * Return current relay connection statistics.
+     */override fun `connectionStats`(): FfiConnectionStats {
             return FfiConverterTypeFfiConnectionStats.lift(
     callWithPointer {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_connection_stats(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_connection_stats(
         it, _status)
 }
     }
     )
     }
+    
 
+    
+    /**
+     * Create an **unsigned** event of any kind for external signing.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `createUnsignedEvent`(`kind`: kotlin.UInt, `content`: kotlin.String, `tags`: List<List<kotlin.String>>, `creatorPubkeyHex`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_create_unsigned_event(
+        it, FfiConverterUInt.lower(`kind`),FfiConverterString.lower(`content`),FfiConverterSequenceSequenceString.lower(`tags`),FfiConverterString.lower(`creatorPubkeyHex`),_status)
+}
+    }
+    )
+    }
+    
 
-
+    
+    /**
+     * Create an **unsigned** kind-1 text note JSON for external signing.
+     *
+     * The returned JSON should be passed to the app-layer signer (NIP-07 / Amber),
+     * then the signed result given to `publish_raw_event`.
+     */
     @Throws(NuruNuruFfiException::class)override fun `createUnsignedNote`(`pubkeyHex`: kotlin.String, `content`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_create_unsigned_note(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_create_unsigned_note(
         it, FfiConverterString.lower(`pubkeyHex`),FfiConverterString.lower(`content`),_status)
 }
     }
     )
     }
+    
 
-
-
-    @Throws(NuruNuruFfiException::class)override fun `disconnect`()
-        =
+    
+    /**
+     * Create an **unsigned** text note with tags JSON for external signing.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `createUnsignedNoteWithTags`(`content`: kotlin.String, `tags`: List<List<kotlin.String>>, `creatorPubkeyHex`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_disconnect(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_create_unsigned_note_with_tags(
+        it, FfiConverterString.lower(`content`),FfiConverterSequenceSequenceString.lower(`tags`),FfiConverterString.lower(`creatorPubkeyHex`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Create an **unsigned** reaction (kind 7) JSON for external signing.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `createUnsignedReaction`(`eventIdHex`: kotlin.String, `authorPubkeyHex`: kotlin.String, `emoji`: kotlin.String, `creatorPubkeyHex`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_create_unsigned_reaction(
+        it, FfiConverterString.lower(`eventIdHex`),FfiConverterString.lower(`authorPubkeyHex`),FfiConverterString.lower(`emoji`),FfiConverterString.lower(`creatorPubkeyHex`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Create an **unsigned** repost (kind 6) JSON for external signing.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `createUnsignedRepost`(`eventJson`: kotlin.String, `creatorPubkeyHex`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_create_unsigned_repost(
+        it, FfiConverterString.lower(`eventJson`),FfiConverterString.lower(`creatorPubkeyHex`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Delete an event (Kind 5, NIP-09).
+     *
+     * Returns the deletion event ID hex.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `deleteEvent`(`eventIdHex`: kotlin.String, `reason`: kotlin.String?): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_delete_event(
+        it, FfiConverterString.lower(`eventIdHex`),FfiConverterOptionalString.lower(`reason`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Disconnect from all relays.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `disconnect`()
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_disconnect(
         it, _status)
 }
     }
+    
+    
 
+    
+    /**
+     * Fetch events from connected relays using a NIP-01 JSON filter.
+     *
+     * `filter_json` must be a JSON object matching the NIP-01 filter spec:
+     * ```json
+     * {"kinds":[1],"authors":["hex..."],"limit":50,"since":1700000000}
+     * ```
+     * Tag filters use the `#<tag>` format: `{"#p":["hex..."],"#e":["id..."]}`.
+     * NIP-50 full-text search: `{"kinds":[1],"search":"query","limit":30}`.
+     *
+     * Returns serialised event JSON strings, newest-first.
+     * `timeout_secs` controls how long to wait for relay responses.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `fetchEventsFromRelay`(`filterJson`: kotlin.String, `timeoutSecs`: kotlin.UInt): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_events_from_relay(
+        it, FfiConverterString.lower(`filterJson`),FfiConverterUInt.lower(`timeoutSecs`),_status)
+}
+    }
+    )
+    }
+    
 
-
-
+    
+    /**
+     * Fetch the follow list for a user. Returns pubkey hex strings.
+     */
     @Throws(NuruNuruFfiException::class)override fun `fetchFollowList`(`pubkeyHex`: kotlin.String): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_fetch_follow_list(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_follow_list(
         it, FfiConverterString.lower(`pubkeyHex`),_status)
 }
     }
     )
     }
+    
 
-
-
-    @Throws(NuruNuruFfiException::class)override fun `fetchProfile`(`pubkeyHex`: kotlin.String): FfiUserProfile? {
-            return FfiConverterOptionalTypeFfiUserProfile.lift(
+    
+    /**
+     * Fetch the follow timeline for a set of authors (Kind 1 text notes).
+     *
+     * Issues a single REQ to all connected relays filtered by the given
+     * pubkey hex list.  nostrdb caches the results for subsequent
+     * `query_local` calls.
+     *
+     * Pass up to 500 pubkeys (relay REQ limit).  Callers should obtain the
+     * follow list first via `fetch_follow_list` or the local app cache.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `fetchFollowTimeline`(`authors`: List<kotlin.String>, `limit`: kotlin.UInt): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_fetch_profile(
-        it, FfiConverterString.lower(`pubkeyHex`),_status)
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_follow_timeline(
+        it, FfiConverterSequenceString.lower(`authors`),FfiConverterUInt.lower(`limit`),_status)
 }
     }
     )
     }
+    
 
-
-
-    @Throws(NuruNuruFfiException::class)override fun `followUser`(`targetPubkeyHex`: kotlin.String)
-        =
+    
+    /**
+     * Connect to relays and fetch the global timeline (Kind 1 text notes,
+     * no author filter). Returns up to `limit` events as serialised JSON
+     * strings, newest-first.
+     *
+     * Internally calls `engine.fetch_timeline(authors=None)`, which issues a
+     * REQ to all connected relays and waits up to 15 s for results.
+     * Call `connect()` first so the relays are ready.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `fetchGlobalTimeline`(`limit`: kotlin.UInt): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_follow_user(
-        it, FfiConverterString.lower(`targetPubkeyHex`),_status)
-}
-    }
-
-
-
-    override fun `formatTimestamp`(`timestamp`: kotlin.ULong): kotlin.String {
-            return FfiConverterString.lift(
-    callWithPointer {
-    uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_format_timestamp(
-        it, FfiConverterULong.lower(`timestamp`),_status)
-}
-    }
-    )
-    }
-
-
-
-    @Throws(NuruNuruFfiException::class)override fun `getRecommendedFeed`(`limit`: kotlin.UInt): List<FfiScoredPost> {
-            return FfiConverterSequenceTypeFfiScoredPost.lift(
-    callWithPointer {
-    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_get_recommended_feed(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_global_timeline(
         it, FfiConverterUInt.lower(`limit`),_status)
 }
     }
     )
     }
+    
 
-
-
-    @Throws(NuruNuruFfiException::class)override fun `login`(`pubkeyHex`: kotlin.String)
-        =
+    
+    /**
+     * Fetch a user profile (kind 0 metadata). Returns `None` if not found.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `fetchProfile`(`pubkeyHex`: kotlin.String): FfiUserProfile? {
+            return FfiConverterOptionalTypeFfiUserProfile.lift(
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_login(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_profile(
         it, FfiConverterString.lower(`pubkeyHex`),_status)
 }
     }
+    )
+    }
+    
 
+    
+    /**
+     * Batch-fetch user profiles (kind 0 metadata).
+     *
+     * For each pubkey: nostrdb is checked first; only the pubkeys not already
+     * cached are fetched from relays in a single REQ.  This is the recommended
+     * path to avoid per-profile JNI calls during timeline enrichment.
+     *
+     * Returns one `FfiUserProfile` per pubkey that was found.  Pubkeys with no
+     * profile event on any relay will be absent from the result.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `fetchProfiles`(`pubkeys`: List<kotlin.String>): List<FfiUserProfile> {
+            return FfiConverterSequenceTypeFfiUserProfile.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_profiles(
+        it, FfiConverterSequenceString.lower(`pubkeys`),_status)
+}
+    }
+    )
+    }
+    
 
+    
+    /**
+     * Follow a user (publishes an updated kind-3 contact list).
+     */
+    @Throws(NuruNuruFfiException::class)override fun `followUser`(`targetPubkeyHex`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_follow_user(
+        it, FfiConverterString.lower(`targetPubkeyHex`),_status)
+}
+    }
+    
+    
 
-    override fun `markNotInterested`(`eventId`: kotlin.String, `authorPubkey`: kotlin.String)
-        =
+    
+    /**
+     * Format a Unix timestamp as a Japanese relative string (e.g. "3分").
+     */override fun `formatTimestamp`(`timestamp`: kotlin.ULong): kotlin.String {
+            return FfiConverterString.lift(
     callWithPointer {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_mark_not_interested(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_format_timestamp(
+        it, FfiConverterULong.lower(`timestamp`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get the recommended feed. Returns scored event metadata.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `getRecommendedFeed`(`limit`: kotlin.UInt): List<FfiScoredPost> {
+            return FfiConverterSequenceTypeFfiScoredPost.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_get_recommended_feed(
+        it, FfiConverterUInt.lower(`limit`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Set the current user's public key and load follow/mute lists.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `login`(`pubkeyHex`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_login(
+        it, FfiConverterString.lower(`pubkeyHex`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Mark a post as "not interested" to suppress it from the feed.
+     */override fun `markNotInterested`(`eventId`: kotlin.String, `authorPubkey`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mark_not_interested(
         it, FfiConverterString.lower(`eventId`),FfiConverterString.lower(`authorPubkey`),_status)
 }
     }
+    
+    
 
+    
+    /**
+     * NIP-04 decrypt a message from a sender (legacy DM, Kind 4).
+     *
+     * Only available for internal-signer clients.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `nip04Decrypt`(`senderPubkeyHex`: kotlin.String, `ciphertext`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_nip04_decrypt(
+        it, FfiConverterString.lower(`senderPubkeyHex`),FfiConverterString.lower(`ciphertext`),_status)
+}
+    }
+    )
+    }
+    
 
+    
+    /**
+     * NIP-04 encrypt a message for a recipient (legacy DM, Kind 4).
+     *
+     * Only available for internal-signer clients (created via `new(secret_key_hex)`).
+     * Returns the ciphertext string suitable for use as a Kind-4 event content.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `nip04Encrypt`(`recipientPubkeyHex`: kotlin.String, `plaintext`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_nip04_encrypt(
+        it, FfiConverterString.lower(`recipientPubkeyHex`),FfiConverterString.lower(`plaintext`),_status)
+}
+    }
+    )
+    }
+    
 
+    
+    /**
+     * NIP-44 decrypt a message from a sender.
+     *
+     * Only available for internal-signer clients.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `nip44Decrypt`(`senderPubkeyHex`: kotlin.String, `ciphertext`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_nip44_decrypt(
+        it, FfiConverterString.lower(`senderPubkeyHex`),FfiConverterString.lower(`ciphertext`),_status)
+}
+    }
+    )
+    }
+    
 
+    
+    /**
+     * NIP-44 encrypt a message for a recipient (NIP-17 gift-wrap, seals, etc.).
+     *
+     * Only available for internal-signer clients.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `nip44Encrypt`(`recipientPubkeyHex`: kotlin.String, `plaintext`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_nip44_encrypt(
+        it, FfiConverterString.lower(`recipientPubkeyHex`),FfiConverterString.lower(`plaintext`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Drain up to `max_count` buffered live events. Returns serialised JSON
+     * strings. Returns an empty vec when no new events have arrived.
+     *
+     * Safe to call on a background thread; will return immediately.
+     */override fun `pollLiveEvents`(`subId`: kotlin.String, `maxCount`: kotlin.UInt): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_poll_live_events(
+        it, FfiConverterString.lower(`subId`),FfiConverterUInt.lower(`maxCount`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Generic event publisher for kinds without a dedicated method.
+     *
+     * Covers: Kind 0 (profile), Kind 3 (contacts), Kind 10000 (mute),
+     * Kind 10002 (relay list), Kind 1984 (report), Kind 1985 (label), …
+     *
+     * `tags` — list of tag arrays: `[["e","<id>"],["p","<pk>","<relay>"]]`
+     * Returns the published event ID hex.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `publishEvent`(`kind`: kotlin.UInt, `content`: kotlin.String, `tags`: List<List<kotlin.String>>): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_event(
+        it, FfiConverterUInt.lower(`kind`),FfiConverterString.lower(`content`),FfiConverterSequenceSequenceString.lower(`tags`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Publish a text note (kind 1). Returns the event ID hex.
+     * For internal signers only — the engine signs with the stored private key.
+     */
     @Throws(NuruNuruFfiException::class)override fun `publishNote`(`content`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_publish_note(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_note(
         it, FfiConverterString.lower(`content`),_status)
 }
     }
     )
     }
+    
 
+    
+    /**
+     * Publish a text note with tags (Kind 1).
+     *
+     * `tags` is a list of tag arrays, e.g.:
+     * `[["e","<event-id>","","reply"],["p","<pubkey>"]]`
+     */
+    @Throws(NuruNuruFfiException::class)override fun `publishNoteWithTags`(`content`: kotlin.String, `tags`: List<List<kotlin.String>>): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_note_with_tags(
+        it, FfiConverterString.lower(`content`),FfiConverterSequenceSequenceString.lower(`tags`),_status)
+}
+    }
+    )
+    }
+    
 
-
+    
+    /**
+     * Publish an already-signed Nostr event JSON to all connected relays.
+     *
+     * Used by the external signer flow: the app receives an unsigned event from
+     * `create_unsigned_note`, signs it via NIP-07 / Amber, then passes the
+     * signed JSON here. Returns the event ID hex on success.
+     */
     @Throws(NuruNuruFfiException::class)override fun `publishRawEvent`(`eventJson`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_publish_raw_event(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_raw_event(
         it, FfiConverterString.lower(`eventJson`),_status)
 }
     }
     )
     }
+    
 
-
-
-    @Throws(NuruNuruFfiException::class)override fun `queryLocal`(`authors`: List<kotlin.String>?, `limit`: kotlin.UInt): List<kotlin.String> {
+    
+    /**
+     * Query the local nostrdb cache by author pubkeys.
+     *
+     * Returns serialised JSON strings of matching kind-1 (text note) events,
+     * newest-first, up to `limit` results.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `queryLocal`(`authors`: List<kotlin.String>, `limit`: kotlin.UInt): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_query_local(
-        it, FfiConverterOptionalSequenceString.lower(`authors`),FfiConverterUInt.lower(`limit`),_status)
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_query_local(
+        it, FfiConverterSequenceString.lower(`authors`),FfiConverterUInt.lower(`limit`),_status)
 }
     }
     )
     }
+    
 
+    
+    /**
+     * Query the local nostrdb cache for the global timeline (no author filter).
+     *
+     * Returns serialised JSON strings of kind-1 events, newest-first, up to `limit`.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `queryLocalGlobal`(`limit`: kotlin.UInt): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_query_local_global(
+        it, FfiConverterUInt.lower(`limit`),_status)
+}
+    }
+    )
+    }
+    
 
-    override fun `recordEngagement`(`action`: kotlin.String, `authorPubkey`: kotlin.String)
-        =
+    
+    /**
+     * React to an event (Kind 7, NIP-25).
+     *
+     * `emoji` is typically `"+"` (like), `"-"` (dislike), or a custom
+     * emoji shortcode.  Returns the reaction event ID hex.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `react`(`eventIdHex`: kotlin.String, `authorPubkeyHex`: kotlin.String, `emoji`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_react(
+        it, FfiConverterString.lower(`eventIdHex`),FfiConverterString.lower(`authorPubkeyHex`),FfiConverterString.lower(`emoji`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Record an engagement action (like / repost / reply) for personalisation.
+     */override fun `recordEngagement`(`action`: kotlin.String, `authorPubkey`: kotlin.String)
+        = 
     callWithPointer {
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_record_engagement(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_record_engagement(
         it, FfiConverterString.lower(`action`),FfiConverterString.lower(`authorPubkey`),_status)
 }
     }
+    
+    
 
+    
+    /**
+     * Repost an event (Kind 6, NIP-18).
+     *
+     * `event_json` must be the full serialised Nostr event JSON received from
+     * a relay (including `id`, `pubkey`, `sig`).
+     * Returns the repost event ID hex.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `repost`(`eventJson`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_repost(
+        it, FfiConverterString.lower(`eventJson`),_status)
+}
+    }
+    )
+    }
+    
 
-
-
+    
+    /**
+     * Full-text search (NIP-50). Returns matching event ID hex strings.
+     */
     @Throws(NuruNuruFfiException::class)override fun `search`(`query`: kotlin.String, `limit`: kotlin.UInt): List<kotlin.String> {
             return FfiConverterSequenceString.lift(
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_search(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_search(
         it, FfiConverterString.lower(`query`),FfiConverterUInt.lower(`limit`),_status)
 }
     }
     )
     }
+    
 
-
-
+    
+    /**
+     * Send an encrypted DM (NIP-17).
+     */
     @Throws(NuruNuruFfiException::class)override fun `sendDm`(`recipientHex`: kotlin.String, `content`: kotlin.String)
-        =
+        = 
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_send_dm(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_send_dm(
         it, FfiConverterString.lower(`recipientHex`),FfiConverterString.lower(`content`),_status)
 }
     }
+    
+    
 
-
-
-
-    @Throws(NuruNuruFfiException::class)override fun `unfollowUser`(`targetPubkeyHex`: kotlin.String)
-        =
+    
+    /**
+     * Start a persistent relay subscription for live events.
+     *
+     * Pass an empty `authors` vec for the global feed, or a list of pubkey
+     * hex strings for the follow timeline.
+     *
+     * Returns a subscription ID to pass to `poll_live_events` and
+     * `stop_live_subscription`.  The subscription emits Kind-1 text notes
+     * with `since = now` so only new events (posted after this call) arrive.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `startLiveSubscription`(`authors`: List<kotlin.String>): kotlin.String {
+            return FfiConverterString.lift(
     callWithPointer {
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_method_nurunuruclient_unfollow_user(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_start_live_subscription(
+        it, FfiConverterSequenceString.lower(`authors`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Cancel a live subscription and release all associated resources.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `stopLiveSubscription`(`subId`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_stop_live_subscription(
+        it, FfiConverterString.lower(`subId`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Unfollow a user (publishes an updated kind-3 contact list).
+     */
+    @Throws(NuruNuruFfiException::class)override fun `unfollowUser`(`targetPubkeyHex`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_unfollow_user(
         it, FfiConverterString.lower(`targetPubkeyHex`),_status)
 }
     }
+    
+    
 
+    
+    /**
+     * Update user profile (Kind 0, NIP-01).
+     *
+     * `metadata_json` must be a JSON object with profile fields:
+     * `{"name":"...","display_name":"...","about":"...","picture":"...","nip05":"...","lud16":"..."}`
+     *
+     * Returns the published event ID hex.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `updateProfile`(`metadataJson`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_update_profile(
+        it, FfiConverterString.lower(`metadataJson`),_status)
+}
+    }
+    )
+    }
+    
 
+    
 
-
-
-
+    
     companion object {
-
+        
+    /**
+     * Create a read-only client for users who sign externally (NIP-07 / Amber / NIP-46).
+     *
+     * The client can fetch timeline and profile data normally. Signing happens
+     * out-of-band in the app layer via `create_unsigned_note` + `publish_raw_event`.
+     *
+     * Requires `init_engine()` to have been called first.
+     */
     @Throws(NuruNuruFfiException::class) fun `newReadOnly`(`pubkeyHex`: kotlin.String): NuruNuruClient {
             return FfiConverterTypeNuruNuruClient.lift(
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_constructor_nurunuruclient_new_read_only(
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new_read_only(
         FfiConverterString.lower(`pubkeyHex`),_status)
 }
     )
     }
+    
 
-
-
+        
     }
-
+    
 }
 
 /**
@@ -1867,10 +2824,10 @@ public object FfiConverterTypeNuruNuruClient: FfiConverter<NuruNuruClient, Point
 
 
 data class FfiConnectionStats (
-    var `connectedRelays`: kotlin.UInt,
+    var `connectedRelays`: kotlin.UInt, 
     var `totalRelays`: kotlin.UInt
 ) {
-
+    
     companion object
 }
 
@@ -1899,12 +2856,12 @@ public object FfiConverterTypeFfiConnectionStats: FfiConverterRustBuffer<FfiConn
 
 
 data class FfiScoredPost (
-    var `eventId`: kotlin.String,
-    var `pubkey`: kotlin.String,
-    var `score`: kotlin.Double,
+    var `eventId`: kotlin.String, 
+    var `pubkey`: kotlin.String, 
+    var `score`: kotlin.Double, 
     var `createdAt`: kotlin.ULong
 ) {
-
+    
     companion object
 }
 
@@ -1939,15 +2896,15 @@ public object FfiConverterTypeFfiScoredPost: FfiConverterRustBuffer<FfiScoredPos
 
 
 data class FfiUserProfile (
-    var `name`: kotlin.String,
-    var `displayName`: kotlin.String,
-    var `about`: kotlin.String,
-    var `picture`: kotlin.String,
-    var `nip05`: kotlin.String,
-    var `lud16`: kotlin.String,
+    var `name`: kotlin.String, 
+    var `displayName`: kotlin.String, 
+    var `about`: kotlin.String, 
+    var `picture`: kotlin.String, 
+    var `nip05`: kotlin.String, 
+    var `lud16`: kotlin.String, 
     var `pubkey`: kotlin.String
 ) {
-
+    
     companion object
 }
 
@@ -1992,18 +2949,38 @@ public object FfiConverterTypeFfiUserProfile: FfiConverterRustBuffer<FfiUserProf
 
 
 
-sealed class NuruNuruFfiException(message: String): kotlin.Exception(message) {
-
-        class RuntimeException(message: String) : NuruNuruFfiException(message)
-
-        class KeyException(message: String) : NuruNuruFfiException(message)
-
-        class EngineException(message: String) : NuruNuruFfiException(message)
-
+sealed class NuruNuruFfiException: kotlin.Exception() {
+    
+    class RuntimeException(
+        
+        val v1: kotlin.String
+        ) : NuruNuruFfiException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class KeyException(
+        
+        val v1: kotlin.String
+        ) : NuruNuruFfiException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
+    class EngineException(
+        
+        val v1: kotlin.String
+        ) : NuruNuruFfiException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+    
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NuruNuruFfiException> {
         override fun lift(error_buf: RustBuffer.ByValue): NuruNuruFfiException = FfiConverterTypeNuruNuruFfiError.lift(error_buf)
     }
+
+    
 }
 
 /**
@@ -2011,37 +2988,94 @@ sealed class NuruNuruFfiException(message: String): kotlin.Exception(message) {
  */
 public object FfiConverterTypeNuruNuruFfiError : FfiConverterRustBuffer<NuruNuruFfiException> {
     override fun read(buf: ByteBuffer): NuruNuruFfiException {
+        
 
-            return when(buf.getInt()) {
-            1 -> NuruNuruFfiException.RuntimeException(FfiConverterString.read(buf))
-            2 -> NuruNuruFfiException.KeyException(FfiConverterString.read(buf))
-            3 -> NuruNuruFfiException.EngineException(FfiConverterString.read(buf))
+        return when(buf.getInt()) {
+            1 -> NuruNuruFfiException.RuntimeException(
+                FfiConverterString.read(buf),
+                )
+            2 -> NuruNuruFfiException.KeyException(
+                FfiConverterString.read(buf),
+                )
+            3 -> NuruNuruFfiException.EngineException(
+                FfiConverterString.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
-
     }
 
     override fun allocationSize(value: NuruNuruFfiException): ULong {
-        return 4UL
+        return when(value) {
+            is NuruNuruFfiException.RuntimeException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is NuruNuruFfiException.KeyException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is NuruNuruFfiException.EngineException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
     }
 
     override fun write(value: NuruNuruFfiException, buf: ByteBuffer) {
         when(value) {
             is NuruNuruFfiException.RuntimeException -> {
                 buf.putInt(1)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is NuruNuruFfiException.KeyException -> {
                 buf.putInt(2)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is NuruNuruFfiException.EngineException -> {
                 buf.putInt(3)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
+    override fun read(buf: ByteBuffer): kotlin.String? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterString.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.String?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterString.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.String?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterString.write(value, buf)
+        }
+    }
 }
 
 
@@ -2072,38 +3106,6 @@ public object FfiConverterOptionalTypeFfiUserProfile: FfiConverterRustBuffer<Ffi
         } else {
             buf.put(1)
             FfiConverterTypeFfiUserProfile.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
-public object FfiConverterOptionalSequenceString: FfiConverterRustBuffer<List<kotlin.String>?> {
-    override fun read(buf: ByteBuffer): List<kotlin.String>? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterSequenceString.read(buf)
-    }
-
-    override fun allocationSize(value: List<kotlin.String>?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterSequenceString.allocationSize(value)
-        }
-    }
-
-    override fun write(value: List<kotlin.String>?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterSequenceString.write(value, buf)
         }
     }
 }
@@ -2162,9 +3164,79 @@ public object FfiConverterSequenceTypeFfiScoredPost: FfiConverterRustBuffer<List
             FfiConverterTypeFfiScoredPost.write(it, buf)
         }
     }
-} fun `initEngine`(`dbPath`: kotlin.String)
-        =
-    uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_nurunuru_ffi_fn_func_init_engine(
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeFfiUserProfile: FfiConverterRustBuffer<List<FfiUserProfile>> {
+    override fun read(buf: ByteBuffer): List<FfiUserProfile> {
+        val len = buf.getInt()
+        return List<FfiUserProfile>(len) {
+            FfiConverterTypeFfiUserProfile.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiUserProfile>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiUserProfile.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiUserProfile>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiUserProfile.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceSequenceString: FfiConverterRustBuffer<List<List<kotlin.String>>> {
+    override fun read(buf: ByteBuffer): List<List<kotlin.String>> {
+        val len = buf.getInt()
+        return List<List<kotlin.String>>(len) {
+            FfiConverterSequenceString.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<List<kotlin.String>>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterSequenceString.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<List<kotlin.String>>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterSequenceString.write(it, buf)
+        }
+    }
+}
+        /**
+         * One-time global initialisation. Call this once in `Application.onCreate()`
+         * before creating any `NuruNuruClient`.
+         *
+         * `db_path` is the directory where nostrdb stores its data files.
+         * Recommended value: `"${context.filesDir}/nostrdb_ndb"`.
+         *
+         * Subsequent calls after the first are silently ignored (idempotent).
+         */
+    @Throws(NuruNuruFfiException::class) fun `initEngine`(`dbPath`: kotlin.String)
+        = 
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_func_init_engine(
         FfiConverterString.lower(`dbPath`),_status)
 }
+    
+    
+
+

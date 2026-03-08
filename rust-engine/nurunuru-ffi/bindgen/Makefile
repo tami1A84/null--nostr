@@ -38,18 +38,18 @@ ios-sim: ios-sim-arm64 ios-sim-x86
 	@echo "==> Creating fat library for iOS Simulator..."
 	mkdir -p $(CRATE_DIR)/target/ios-sim-fat/release
 	lipo -create \
-		$(CRATE_DIR)/target/aarch64-apple-ios-sim/release/libnurunuru_ffi.a \
-		$(CRATE_DIR)/target/x86_64-apple-ios/release/libnurunuru_ffi.a \
-		-output $(CRATE_DIR)/target/ios-sim-fat/release/libnurunuru_ffi.a
+		$(CRATE_DIR)/target/aarch64-apple-ios-sim/release/libuniffi_nurunuru.a \
+		$(CRATE_DIR)/target/x86_64-apple-ios/release/libuniffi_nurunuru.a \
+		-output $(CRATE_DIR)/target/ios-sim-fat/release/libuniffi_nurunuru.a
 	@echo "==> Fat simulator library ready."
 
 xcframework: ios-device ios-sim swift
 	@echo "==> Creating XCFramework..."
 	rm -rf $(IOS_DIR)/NuruNuruFFI.xcframework
 	xcodebuild -create-xcframework \
-		-library $(CRATE_DIR)/target/aarch64-apple-ios/release/libnurunuru_ffi.a \
+		-library $(CRATE_DIR)/target/aarch64-apple-ios/release/libuniffi_nurunuru.a \
 		-headers $(BINDGEN_DIR)/swift-out \
-		-library $(CRATE_DIR)/target/ios-sim-fat/release/libnurunuru_ffi.a \
+		-library $(CRATE_DIR)/target/ios-sim-fat/release/libuniffi_nurunuru.a \
 		-headers $(BINDGEN_DIR)/swift-out \
 		-output $(IOS_DIR)/NuruNuruFFI.xcframework
 	@echo "==> XCFramework written to ios/NuruNuruFFI.xcframework"
@@ -64,14 +64,14 @@ android-arm64:
 	@echo "==> Building for Android ARM64 (aarch64-linux-android)..."
 	cd $(CRATE_DIR) && cargo build --release --target aarch64-linux-android
 	mkdir -p $(CRATE_DIR)/android/libs/arm64-v8a
-	cp $(CRATE_DIR)/target/aarch64-linux-android/release/libnurunuru_ffi.so \
+	cp $(CRATE_DIR)/target/aarch64-linux-android/release/libuniffi_nurunuru.so \
 	   $(CRATE_DIR)/android/libs/arm64-v8a/
 
 android-x86_64:
 	@echo "==> Building for Android x86_64 (x86_64-linux-android)..."
 	cd $(CRATE_DIR) && cargo build --release --target x86_64-linux-android
 	mkdir -p $(CRATE_DIR)/android/libs/x86_64
-	cp $(CRATE_DIR)/target/x86_64-linux-android/release/libnurunuru_ffi.so \
+	cp $(CRATE_DIR)/target/x86_64-linux-android/release/libuniffi_nurunuru.so \
 	   $(CRATE_DIR)/android/libs/x86_64/
 
 android-all: android-arm64 android-x86_64

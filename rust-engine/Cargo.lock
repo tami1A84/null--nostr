@@ -1232,6 +1232,7 @@ version = "0.1.0"
 dependencies = [
  "nostr",
  "nurunuru-core",
+ "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "uniffi",

@@ -58,19 +58,24 @@ fun MainScreen(
     // Create shared NostrClient and Repository
     val recommendationEngine = remember { io.nurunuru.app.data.RecommendationEngine(context) }
     val nostrClient = remember {
-        val signer = if (hasInternalKey) {
-            io.nurunuru.app.data.InternalSigner(keyManager)
+        if (!hasInternalKey && app.prewarmedNostrClient != null) {
+            // Reuse the client pre-warmed in Application.onCreate() — relay
+            // connections are already established by the time we get here.
+            app.prewarmedNostrClient!!
         } else {
-            io.nurunuru.app.data.ExternalSigner.apply {
-                setCurrentUser(pubkeyHex)
+            val signer = if (hasInternalKey) {
+                io.nurunuru.app.data.InternalSigner(keyManager)
+            } else {
+                io.nurunuru.app.data.ExternalSigner.apply {
+                    setCurrentUser(pubkeyHex)
+                }
             }
+            NostrClient(
+                context = context,
+                relays = app.prefs.relays.toList(),
+                signer = signer
+            ).also { it.connect() }
         }
-
-        NostrClient(
-            context = context,
-            relays = app.prefs.relays.toList(),
-            signer = signer
-        ).also { it.connect() }
     }
     val nostrCache = remember { io.nurunuru.app.data.cache.NostrCache(context) }
     val repository = remember { NostrRepository(nostrClient, app.prefs, nostrCache, recommendationEngine) }
