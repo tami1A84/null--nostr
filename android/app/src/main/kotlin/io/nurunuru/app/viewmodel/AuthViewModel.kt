@@ -219,10 +219,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loginWithAmber(pubkey: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            prefs.publicKeyHex = pubkey
+            // Normalize to hex — Amber may return npub (bech32) or hex format
+            val pubkeyHex = io.nurunuru.app.data.NostrKeyUtils.parsePublicKey(pubkey) ?: pubkey
+            prefs.publicKeyHex = pubkeyHex
             prefs.isExternalSigner = true
-            io.nurunuru.app.data.ExternalSigner.setCurrentUser(pubkey)
-            _authState.value = AuthState.LoggedIn(pubkey, isExternal = true)
+            io.nurunuru.app.data.ExternalSigner.setCurrentUser(pubkeyHex)
+            _authState.value = AuthState.LoggedIn(pubkeyHex, isExternal = true)
         }
     }
 

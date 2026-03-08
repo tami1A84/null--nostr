@@ -46,9 +46,31 @@ object ExternalSigner : AppSigner {
     private val mutex = kotlinx.coroutines.sync.Mutex()
 
     fun createGetPublicKeyIntent(context: Context?): Intent {
+        // Request auto-sign permissions for all operations this app needs.
+        // Amber will ask the user once to grant these; subsequent ContentProvider
+        // calls will then succeed silently without showing the approval UI.
+        val permissions = """[
+            {"type":"sign_event","kind":0},
+            {"type":"sign_event","kind":1},
+            {"type":"sign_event","kind":3},
+            {"type":"sign_event","kind":5},
+            {"type":"sign_event","kind":6},
+            {"type":"sign_event","kind":7},
+            {"type":"sign_event","kind":10000},
+            {"type":"sign_event","kind":10002},
+            {"type":"sign_event","kind":30030},
+            {"type":"sign_event","kind":30008},
+            {"type":"sign_event","kind":1984},
+            {"type":"sign_event","kind":1985},
+            {"type":"nip04_encrypt"},
+            {"type":"nip04_decrypt"},
+            {"type":"nip44_encrypt"},
+            {"type":"nip44_decrypt"}
+        ]""".trimIndent().replace("\n", "").replace("  ", "")
         return Intent(Intent.ACTION_VIEW, Uri.parse("nostrsigner:")).apply {
             `package` = PACKAGE_NAME
             putExtra("type", "get_public_key")
+            putExtra("permissions", permissions)
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
     }
@@ -164,6 +186,7 @@ object ExternalSigner : AppSigner {
         if (resultIntent != null) return resultIntent
 
         // Fallback to Intent (App switching)
+        Log.d(TAG, "ContentProvider returned null, falling back to Intent (type=${intent.getStringExtra("type")})")
         val deferred = CompletableDeferred<Intent>()
         pendingRequest = deferred
 
@@ -173,9 +196,13 @@ object ExternalSigner : AppSigner {
             MainActivity.instance?.launchExternalSigner(intent) ?: return null
         }
 
+        Log.d(TAG, "Intent launched, awaiting result...")
         return try {
-            deferred.await()
+            val result = deferred.await()
+            Log.d(TAG, "Deferred completed: extras=${result.extras?.keySet()?.joinToString()}")
+            result
         } catch (e: Exception) {
+            Log.w(TAG, "Deferred cancelled/failed: ${e.message}")
             null
         } finally {
             pendingRequest = null
@@ -304,6 +331,7 @@ object ExternalSigner : AppSigner {
     }
 
     fun onResult(intent: Intent?) {
+        Log.d(TAG, "onResult called: intent=${if (intent != null) "non-null (extras: ${intent.extras?.keySet()?.joinToString()})" else "null"}")
         if (intent != null) {
             pendingRequest?.complete(intent)
         } else {

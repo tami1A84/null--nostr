@@ -7,13 +7,16 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
-import rust.nostr.sdk.*
+import rust.nostr.sdk.PublicKey
+import uniffi.nurunuru.NuruNuruClient
+import uniffi.nurunuru.FfiScoredPost
+import uniffi.nurunuru.FfiUserProfile
 import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "NostrClient"
 
 /**
- * Nostr client powered by the official rust-nostr SDK (0.44.2).
+ * Nostr client powered by the NuruNuru Rust Core.
  */
 class NostrClient(
     private val context: Context,
@@ -25,7 +28,7 @@ class NostrClient(
         const val SEARCH_RELAY = "wss://search.nos.today"
     }
 
-    private var sdkClient: Client? = null
+    private var sdkClient: NuruNuruClient? = null
     private val _isReady = kotlinx.coroutines.flow.MutableStateFlow(false)
     val isReady = _isReady.asStateFlow()
 
@@ -41,63 +44,44 @@ class NostrClient(
 
     fun getSigner(): AppSigner = signer
 
+    fun getRustClient(): NuruNuruClient? = sdkClient
+
     fun connect() {
         scope.launch {
             try {
-                // 1. Initialize nostrdb (LMDB) in the app's files directory (Android safe path)
-                val dbPath = context.filesDir.absolutePath + "/nostrdb"
-                val database = NostrDatabase.lmdb(dbPath)
-
-                // 2. Setup internal SDK signer (dummy if external)
-                val sdkSigner: NostrSigner = if (signer is InternalSigner) {
+                val client = if (signer is InternalSigner) {
                     val keyHex = privateKeyHexForSdk()
                     if (keyHex.isNullOrEmpty()) {
-                        Log.e(TAG, "Key not available from SecureKeyManager, cannot initialize SDK")
+                        Log.e(TAG, "Key not available from SecureKeyManager, cannot initialize Rust Client")
                         return@launch
                     }
-                    val keys = Keys.parse(keyHex)
-                    NostrSigner.keys(keys)
+                    NuruNuruClient(keyHex)
                 } else {
-                    // For external signers, we use a random key internally in the SDK Client
-                    // because we intercept signing calls manually.
-                    NostrSigner.keys(Keys.generate())
-                }
-
-                // 3. Build SDK Client
-                val client = ClientBuilder()
-                    .signer(sdkSigner)
-                    .database(database)
-                    .build()
-
-                // 4. Add relays (handle emulator localhost -> 10.0.2.2)
-                relays.forEach { url ->
-                    val mappedUrl = mapLocalhost(url)
-                    try {
-                        client.addRelay(RelayUrl.parse(mappedUrl))
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to add relay $mappedUrl: ${e.message}")
+                    // Normalise pubkey to 64-char lowercase hex.
+                    // prefs may store npub1... bech32 if the login flow stored it
+                    // that way, or it may have been set from Amber as hex already.
+                    val hexPubkey = if (publicKeyHex.startsWith("npub1")) {
+                        try {
+                            PublicKey.parse(publicKeyHex).toHex()
+                        } catch (_: Exception) { publicKeyHex }
+                    } else {
+                        publicKeyHex
                     }
-                }
-
-                // 5. Add NIP-50 search relay (separate from default relays)
-                try {
-                    client.addRelay(RelayUrl.parse(SEARCH_RELAY))
-                    Log.d(TAG, "Added NIP-50 search relay: $SEARCH_RELAY")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to add search relay: ${e.message}")
+                    if (hexPubkey.length != 64 || hexPubkey.any { it !in '0'..'9' && it !in 'a'..'f' && it !in 'A'..'F' }) {
+                        Log.e(TAG, "Invalid pubkey for Rust client (len=${hexPubkey.length}): ${hexPubkey.take(12)}…")
+                        return@launch
+                    }
+                    NuruNuruClient.newReadOnly(hexPubkey)
                 }
 
                 sdkClient = client
                 _isReady.value = true
                 client.connect()
 
-                Log.d(TAG, "rust-nostr SDK Client connected")
-
-                // Start listening for notifications
-                startNotificationListener(client)
+                Log.d(TAG, "NuruNuru Rust Client connected")
 
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize rust-nostr Client", e)
+                Log.e(TAG, "Failed to initialize NuruNuru Rust Client", e)
             }
         }
     }
@@ -106,48 +90,9 @@ class NostrClient(
         return (signer as? InternalSigner)?.getKeyHexFromManager()
     }
 
-    private suspend fun signAndSend(builder: EventBuilder, targetRelays: List<String>? = null): Event? {
-        val client = sdkClient ?: return null
-        return try {
-            // For internal signer and no target relays, we use client.sendEventBuilder
-            // because it handles more things internally (like auth-required callbacks).
-            if (signer is InternalSigner && targetRelays.isNullOrEmpty()) {
-                val output = client.sendEventBuilder(builder)
-                return client.database().eventById(output.id)
-            }
+    // signAndSend removed — all publishing now goes through rustClient directly
 
-            // Otherwise, manually sign and send
-            val publicKey = PublicKey.parse(publicKeyHex)
-            val unsignedEvent = builder.build(publicKey)
-            val unsignedJson = unsignedEvent.asJson()
-
-            Log.d(TAG, "Requesting signature for: $unsignedJson")
-            val signedJson = signer.signEvent(unsignedJson) ?: run {
-                Log.e(TAG, "Signer returned null")
-                return null
-            }
-
-            val signedEvent = Event.fromJson(signedJson)
-            if (targetRelays.isNullOrEmpty()) {
-                client.sendEvent(signedEvent)
-            } else {
-                val urls = targetRelays.mapNotNull {
-                    try { RelayUrl.parse(it) } catch (e: Exception) { null }
-                }
-                if (urls.isNotEmpty()) {
-                    client.sendEventTo(urls, signedEvent)
-                } else {
-                    client.sendEvent(signedEvent)
-                }
-            }
-            signedEvent
-        } catch (e: Exception) {
-            Log.e(TAG, "Sign and send failed", e)
-            null
-        }
-    }
-
-    private suspend fun ensureClient(): Client? {
+    private suspend fun ensureClient(): NuruNuruClient? {
         if (sdkClient == null) {
             withTimeoutOrNull(5000) {
                 isReady.filter { it }.first()
@@ -156,53 +101,12 @@ class NostrClient(
         return sdkClient
     }
 
-    suspend fun publish(kind: Int, content: String, tags: List<List<String>> = emptyList(), targetRelays: List<String>? = null): NostrEvent? {
-        return withContext(Dispatchers.IO) {
-            val client = ensureClient() ?: return@withContext null
-            val sdkTags = tags.map { Tag.parse(it) }
-            val builder = EventBuilder(Kind(kind.toUShort()), content).tags(sdkTags)
-            signAndSend(builder, targetRelays)?.let { mapSdkEvent(it) }
-        }
-    }
-
-    private fun startNotificationListener(client: Client) {
-        scope.launch {
-            // SDK 0.44.x: HandleNotification methods are suspend fun
-            client.handleNotifications(object : HandleNotification {
-                override suspend fun handle(relayUrl: RelayUrl, subscriptionId: String, event: Event) {
-                    val nostrEvent = mapSdkEvent(event)
-                    _events.emit(nostrEvent)
-                    subscriptionCallbacks[subscriptionId]?.invoke(nostrEvent)
-                }
-
-                override suspend fun handleMsg(relayUrl: RelayUrl, message: RelayMessage) {
-                    // Handle other relay messages if needed (EOSE, OK, etc.)
-                }
-            })
-        }
-    }
-
     fun disconnect() {
         scope.launch {
             sdkClient?.disconnect()
             sdkClient = null
             scope.cancel()
         }
-    }
-
-    // ─── Helpers ─────────────────────────────────────────────────────────────
-
-    private fun mapLocalhost(url: String): String {
-        return if (url.contains("localhost") || url.contains("127.0.0.1")) {
-            url.replace("localhost", "10.0.2.2").replace("127.0.0.1", "10.0.2.2")
-        } else {
-            url
-        }
-    }
-
-    private fun mapSdkEvent(e: Event): NostrEvent {
-        val json = Json { ignoreUnknownKeys = true }
-        return json.decodeFromString<NostrEvent>(e.asJson())
     }
 
     // ─── Subscriptions ────────────────────────────────────────────────────────
@@ -220,35 +124,11 @@ class NostrClient(
 
     fun subscribe(subId: String, filter: Filter, onEvent: (NostrEvent) -> Unit) {
         subscriptionCallbacks[subId] = onEvent
-        scope.launch {
-            val client = sdkClient ?: return@launch
-            val sdkFilter = mapFilter(filter)
-            client.subscribe(sdkFilter)
-        }
+        // TODO: Bridge with Rust core stream subscription
     }
 
     fun unsubscribe(subId: String) {
         subscriptionCallbacks.remove(subId)
-    }
-
-    private fun mapFilter(f: Filter): rust.nostr.sdk.Filter {
-        var sdkF = rust.nostr.sdk.Filter()
-        f.ids?.let { ids -> sdkF = sdkF.ids(ids.map { EventId.parse(it) }) }
-        f.authors?.let { authors -> sdkF = sdkF.authors(authors.map { PublicKey.parse(it) }) }
-        f.kinds?.let { kinds -> sdkF = sdkF.kinds(kinds.map { Kind(it.toUShort()) }) }
-        f.since?.let { sdkF = sdkF.since(Timestamp.fromSecs(it.toULong())) }
-        f.until?.let { sdkF = sdkF.until(Timestamp.fromSecs(it.toULong())) }
-        f.limit?.let { sdkF = sdkF.limit(it.toULong()) }
-        f.search?.let { sdkF = sdkF.search(it) }
-        f.tags?.forEach { (tagName, values) ->
-            try {
-                val alphabet = Alphabet.valueOf(tagName.uppercase())
-                val tag = SingleLetterTag.lowercase(alphabet)
-                sdkF = sdkF.customTags(tag, values)
-            } catch (e: Exception) {
-            }
-        }
-        return sdkF
     }
 
     // ─── One-shot Fetch ──────────────────────────────────────────────────────
@@ -257,10 +137,10 @@ class NostrClient(
         return withContext(Dispatchers.IO) {
             val client = ensureClient() ?: return@withContext emptyList()
             try {
-                val sdkFilter = mapFilter(filter)
-                val eventsWrapper = client.fetchEvents(sdkFilter, java.time.Duration.ofMillis(timeoutMs))
-                // SDK 0.44: Use .toVec() to get a Kotlin List<Event>
-                eventsWrapper.toVec().map { mapSdkEvent(it) }
+                val filterJson = buildFilterJson(filter)
+                val timeoutSecs = ((timeoutMs + 999) / 1000).toUInt()
+                val eventsJson = client.fetchEventsFromRelay(filterJson, timeoutSecs)
+                eventsJson.map { Json { ignoreUnknownKeys = true }.decodeFromString<NostrEvent>(it) }
             } catch (e: Exception) {
                 Log.w(TAG, "Fetch events failed: ${e.message}")
                 emptyList()
@@ -268,39 +148,52 @@ class NostrClient(
         }
     }
 
-    /** Fetch events from specific relays only (e.g. NIP-50 search relay). */
+    /** Fetch events from specific relays only (e.g. NIP-50 search relay).
+     *  The Rust engine already has the search relay configured, so this
+     *  is equivalent to fetchEvents — the search relay is included automatically. */
     suspend fun fetchEventsFrom(
         relayUrls: List<String>,
         filter: Filter,
         timeoutMs: Long = 5_000
     ): List<NostrEvent> {
-        return withContext(Dispatchers.IO) {
-            val client = ensureClient() ?: return@withContext emptyList()
-            try {
-                val sdkFilter = mapFilter(filter)
-                val urls = relayUrls.mapNotNull {
-                    try { RelayUrl.parse(it) } catch (e: Exception) { null }
+        return fetchEvents(filter, timeoutMs)
+    }
+
+    /** Serialise a [Filter] to a NIP-01 JSON filter string for the Rust FFI. */
+    private fun buildFilterJson(filter: Filter): String {
+        val obj = buildJsonObject {
+            filter.ids?.takeIf { it.isNotEmpty() }?.let { ids ->
+                put("ids", buildJsonArray { ids.forEach { add(it) } })
+            }
+            filter.authors?.takeIf { it.isNotEmpty() }?.let { authors ->
+                put("authors", buildJsonArray { authors.forEach { add(it) } })
+            }
+            filter.kinds?.takeIf { it.isNotEmpty() }?.let { kinds ->
+                put("kinds", buildJsonArray { kinds.forEach { add(it) } })
+            }
+            filter.since?.let { put("since", it) }
+            filter.until?.let { put("until", it) }
+            filter.limit?.let { put("limit", it) }
+            filter.search?.let { put("search", it) }
+            // Tag filters: keys like "e","p","d" → "#e","#p","#d" in NIP-01 JSON
+            filter.tags?.forEach { (key, values) ->
+                if (values.isNotEmpty()) {
+                    put("#$key", buildJsonArray { values.forEach { add(it) } })
                 }
-                if (urls.isEmpty()) return@withContext emptyList()
-                val eventsWrapper = client.fetchEventsFrom(
-                    urls, sdkFilter, java.time.Duration.ofMillis(timeoutMs)
-                )
-                eventsWrapper.toVec().map { mapSdkEvent(it) }
-            } catch (e: Exception) {
-                Log.w(TAG, "Fetch events from ${relayUrls.joinToString()} failed: ${e.message}")
-                emptyList()
             }
         }
+        return obj.toString()
     }
 
     // ─── Publish ──────────────────────────────────────────────────────────────
 
+    /** Publish a pre-signed Nostr event as-is (used for backup import). */
     suspend fun publishEvent(event: NostrEvent): Boolean {
         return withContext(Dispatchers.IO) {
             val client = ensureClient() ?: return@withContext false
             try {
-                val sdkEvent = Event.fromJson(serializeNostrEvent(event))
-                client.sendEvent(sdkEvent)
+                val jsonStr = Json { encodeDefaults = true }.encodeToString(event)
+                client.publishRawEvent(jsonStr)
                 true
             } catch (e: Exception) {
                 Log.w(TAG, "Publish raw event failed: ${e.message}")
@@ -309,44 +202,12 @@ class NostrClient(
         }
     }
 
-    private fun serializeNostrEvent(e: NostrEvent): String {
-        val json = Json { encodeDefaults = true }
-        return json.encodeToString(e)
+    fun recordEngagement(action: String, authorPubkey: String) {
+        sdkClient?.recordEngagement(action, authorPubkey)
     }
 
-    suspend fun publishNote(content: String, tags: List<List<String>> = emptyList()): NostrEvent? {
-        return withContext(Dispatchers.IO) {
-            val client = ensureClient() ?: return@withContext null
-            val sdkTags = tags.map { Tag.parse(it) }
-            val builder = EventBuilder.textNote(content).tags(sdkTags)
-            signAndSend(builder)?.let { mapSdkEvent(it) }
-        }
-    }
-
-    suspend fun publishReaction(eventId: String, emoji: String = "+"): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                val id = EventId.parse(eventId)
-                val tags = listOf(Tag.event(id))
-                val builder = EventBuilder(Kind(7u), emoji).tags(tags)
-                signAndSend(builder) != null
-            } catch (e: Exception) {
-                false
-            }
-        }
-    }
-
-    suspend fun publishRepost(eventId: String): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                val id = EventId.parse(eventId)
-                val tags = listOf(Tag.event(id))
-                val builder = EventBuilder(Kind(6u), "").tags(tags)
-                signAndSend(builder) != null
-            } catch (e: Exception) {
-                false
-            }
-        }
+    fun markNotInterested(eventId: String, authorPubkey: String) {
+        sdkClient?.markNotInterested(eventId, authorPubkey)
     }
 
     // ─── DMs ─────────────────────────────────────────────────────────────────
@@ -354,8 +215,9 @@ class NostrClient(
     suspend fun sendEncryptedDm(recipientPubkeyHex: String, content: String): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val encrypted = encryptNip04(recipientPubkeyHex, content) ?: return@withContext false
-                publish(4, encrypted, listOf(listOf("p", recipientPubkeyHex))) != null
+                val client = ensureClient() ?: return@withContext false
+                client.sendDm(recipientPubkeyHex, content)
+                true
             } catch (e: Exception) {
                 false
             }
@@ -363,18 +225,43 @@ class NostrClient(
     }
 
     suspend fun decryptNip04(senderPubkeyHex: String, encryptedContent: String): String? {
+        // InternalSigner: prefer Rust FFI (same Rust crate, avoids JNI round-trip to rust-nostr-sdk)
+        if (signer is InternalSigner) {
+            sdkClient?.let { client ->
+                try { return client.nip04Decrypt(senderPubkeyHex, encryptedContent) }
+                catch (_: Exception) { /* fall through to AppSigner */ }
+            }
+        }
         return signer.nip04Decrypt(senderPubkeyHex, encryptedContent)
     }
 
     suspend fun decryptNip44(senderPubkeyHex: String, encryptedContent: String): String? {
+        if (signer is InternalSigner) {
+            sdkClient?.let { client ->
+                try { return client.nip44Decrypt(senderPubkeyHex, encryptedContent) }
+                catch (_: Exception) { }
+            }
+        }
         return signer.nip44Decrypt(senderPubkeyHex, encryptedContent)
     }
 
     suspend fun encryptNip04(receiverPubkeyHex: String, content: String): String? {
+        if (signer is InternalSigner) {
+            sdkClient?.let { client ->
+                try { return client.nip04Encrypt(receiverPubkeyHex, content) }
+                catch (_: Exception) { }
+            }
+        }
         return signer.nip04Encrypt(receiverPubkeyHex, content)
     }
 
     suspend fun encryptNip44(receiverPubkeyHex: String, content: String): String? {
+        if (signer is InternalSigner) {
+            sdkClient?.let { client ->
+                try { return client.nip44Encrypt(receiverPubkeyHex, content) }
+                catch (_: Exception) { }
+            }
+        }
         return signer.nip44Encrypt(receiverPubkeyHex, content)
     }
 }

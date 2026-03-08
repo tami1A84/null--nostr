@@ -139,7 +139,10 @@ class HomeViewModel(
     fun likePost(eventId: String, emoji: String = "+", customTags: List<List<String>> = emptyList()) {
         viewModelScope.launch {
             try {
-                val success = repository.likePost(eventId, emoji, customTags)
+                val post = (_uiState.value.posts + _uiState.value.likedPosts)
+                    .firstOrNull { it.event.id == eventId }
+                val authorPubkey = post?.event?.pubkey ?: ""
+                val success = repository.likePost(eventId, authorPubkey, emoji, customTags)
                 if (success) {
                     _uiState.update { state ->
                         val updatePost = { post: ScoredPost ->
@@ -163,7 +166,14 @@ class HomeViewModel(
     fun repostPost(eventId: String) {
         viewModelScope.launch {
             try {
-                val success = repository.repostPost(eventId)
+                val post = (_uiState.value.posts + _uiState.value.likedPosts)
+                    .firstOrNull { it.event.id == eventId }
+                val eventJson = post?.event?.let {
+                    try { kotlinx.serialization.json.Json { encodeDefaults = true }.encodeToString(
+                        io.nurunuru.app.data.models.NostrEvent.serializer(), it)
+                    } catch (_: Exception) { null }
+                }
+                val success = repository.repostPost(eventId, eventJson)
                 if (success) {
                     _uiState.update { state ->
                         val updatePost = { post: ScoredPost ->

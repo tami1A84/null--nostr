@@ -30,7 +30,7 @@ object Constants {
         const val MUTE_LIST = 600_000L
         const val FOLLOW_LIST = 600_000L
         const val EMOJI = 1_800_000L
-        const val TIMELINE = 30_000L
+        const val TIMELINE = 600_000L
         const val SHORT = 60_000L
         const val NIP05 = 300_000L
         const val RELAY_INFO = 3_600_000L

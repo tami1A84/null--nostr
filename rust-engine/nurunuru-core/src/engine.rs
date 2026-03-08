@@ -815,6 +815,25 @@ impl NuruNuruEngine {
         Ok(events.into_iter().collect())
     }
 
+    /// Fetch events from connected relays using an arbitrary filter.
+    ///
+    /// Unlike `query_local` (which reads only the local nostrdb cache),
+    /// this method issues a real REQ to all connected relays and waits
+    /// up to `timeout_secs` seconds for responses.
+    pub async fn fetch_events_raw(&self, filter: Filter, timeout_secs: u64) -> Result<Vec<Event>> {
+        let events = self
+            .client
+            .fetch_events(filter, Duration::from_secs(timeout_secs))
+            .await?;
+        Ok(events.into_iter().collect())
+    }
+
+    /// Send any `EventBuilder` — used by the FFI's generic `publish_event`.
+    pub async fn send_builder(&self, builder: EventBuilder) -> Result<EventId> {
+        let output = self.client.send_event_builder(builder).await?;
+        Ok(output.val)
+    }
+
     /// Publish an already-signed Nostr event to all connected relays.
     ///
     /// Unlike `publish_note` which builds and signs an event, this method

@@ -7,8 +7,8 @@ import io.nurunuru.app.data.Nip05Utils
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.ScoredPost
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 
 enum class FeedType { GLOBAL, FOLLOWING }
 
@@ -49,6 +49,14 @@ class TimelineViewModel(
     private val _navigationEvents = MutableSharedFlow<SearchNavigationEvent>()
     val navigationEvents = _navigationEvents.asSharedFlow()
 
+    // ─── Live streaming ───────────────────────────────────────────────────────
+    /** Active subscription ID. Null until the initial load completes. */
+    private var liveSubId: String? = null
+    private var livePollingJob: Job? = null
+
+    /** IDs of posts already in the timeline, used to deduplicate live events. */
+    private val seenEventIds = mutableSetOf<String>()
+
     init {
         loadData()
     }
@@ -61,21 +69,113 @@ class TimelineViewModel(
             val followListJob = launch { loadFollowList() }
             val globalJob = launch { loadGlobalTimeline() }
 
-            // Cache-first: Load following timeline from cache immediately
+            // Cache-first step 1: Try JSON cache (fully-enriched, instant decode)
+            var cacheShown = false
             val cachedFollowing = repository.getCachedTimeline()
             if (cachedFollowing != null) {
                 try {
-                    val posts = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromString<List<io.nurunuru.app.data.models.ScoredPost>>(cachedFollowing)
+                    val posts = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                        .decodeFromString<List<io.nurunuru.app.data.models.ScoredPost>>(cachedFollowing)
                     if (posts.isNotEmpty()) {
+                        seenEventIds.addAll(posts.map { it.event.id })
                         _uiState.update { it.copy(followingPosts = posts, isFollowingLoading = false) }
+                        cacheShown = true
+                        android.util.Log.d("TimelineViewModel", "JSON cache: ${posts.size} posts shown")
                     }
-                } catch (e: Exception) { /* ignore */ }
+                } catch (_: Exception) { }
+            }
+
+            // Cache-first step 2: Fall back to nostrdb queryLocal if JSON cache unavailable
+            if (!cacheShown) {
+                val nostrdbPosts = repository.fetchCachedFollowTimeline(pubkeyHex, 50)
+                if (nostrdbPosts.isNotEmpty()) {
+                    seenEventIds.addAll(nostrdbPosts.map { it.event.id })
+                    _uiState.update { it.copy(followingPosts = nostrdbPosts, isFollowingLoading = false) }
+                    android.util.Log.d("TimelineViewModel", "nostrdb cache: ${nostrdbPosts.size} posts shown")
+                }
             }
 
             followListJob.join()
-            // Only load following timeline after follow list is known
+            // Refresh following timeline from relay (keeps cached posts visible during fetch)
             loadFollowingTimeline()
+
+            // Start live streaming once the initial data is loaded.
+            startLiveStreaming()
         }
+    }
+
+    /**
+     * Kick off a 1-second polling loop that prepends new events to the active
+     * feed.  Called automatically after the initial load.
+     */
+    private fun startLiveStreaming() {
+        livePollingJob?.cancel()
+
+        // Seed deduplication set from whatever is already displayed.
+        val state = _uiState.value
+        seenEventIds.clear()
+        seenEventIds.addAll(state.globalPosts.map { it.event.id })
+        seenEventIds.addAll(state.followingPosts.map { it.event.id })
+
+        // Subscribe globally so both tabs receive all new events in real time.
+        // Using an empty authors list sends a REQ with no author filter, which
+        // matches all Kind-1 notes on connected relays.
+        val followAuthors = emptyList<String>()
+
+        livePollingJob = viewModelScope.launch(Dispatchers.IO) {
+            val subId = repository.startLiveStream(followAuthors)
+            if (subId == null) {
+                android.util.Log.w("TimelineViewModel", "Live stream unavailable (Rust client not ready)")
+                return@launch
+            }
+            liveSubId = subId
+
+            try {
+                while (isActive) {
+                    delay(1_000)
+
+                    val newEvents = repository.pollLiveStream(subId)
+                    if (newEvents.isEmpty()) continue
+
+                    // Filter out duplicates (relay may echo back our own events).
+                    val fresh = newEvents.filter { seenEventIds.add(it.id) }
+                    if (fresh.isEmpty()) continue
+
+                    android.util.Log.d("TimelineViewModel",
+                        "Live: ${fresh.size} new event(s) received")
+
+                    // Enrich with profile + engagement data on IO, then push to UI.
+                    val enriched = repository.enrichPostsDirect(fresh)
+                    if (enriched.isEmpty()) continue
+
+                    withContext(Dispatchers.Main) {
+                        val followSet = _uiState.value.followList.toSet()
+                        _uiState.update { state ->
+                            // Deduplicate against the current lists to guard against
+                            // posts added after seenEventIds was seeded (e.g. relay
+                            // fetch completing after live stream started).
+                            val existingGlobalIds = state.globalPosts.mapTo(HashSet()) { it.event.id }
+                            val existingFollowIds = state.followingPosts.mapTo(HashSet()) { it.event.id }
+                            state.copy(
+                                globalPosts = enriched.filter { it.event.id !in existingGlobalIds } + state.globalPosts,
+                                followingPosts = enriched.filter {
+                                    followSet.contains(it.event.pubkey) && it.event.id !in existingFollowIds
+                                } + state.followingPosts
+                            )
+                        }
+                    }
+                }
+            } finally {
+                repository.stopLiveStream(subId)
+                liveSubId = null
+            }
+        }
+    }
+
+    /** Stop live polling (e.g. when screen is backgrounded or VM is cleared). */
+    fun stopLiveStreaming() {
+        livePollingJob?.cancel()
+        livePollingJob = null
     }
 
     private fun loadRecentSearches() {
@@ -101,10 +201,11 @@ class TimelineViewModel(
         globalLoadJob = viewModelScope.launch {
             _uiState.update {
                 if (isRefresh) it.copy(isGlobalRefreshing = true, globalError = null)
-                else it.copy(isGlobalLoading = true, globalError = null, globalPosts = emptyList())
+                else it.copy(isGlobalLoading = true, globalError = null)
             }
             try {
                 val posts = repository.fetchGlobalTimeline(50)
+                seenEventIds.addAll(posts.map { it.event.id })
                 _uiState.update { state ->
                     state.copy(
                         globalPosts = posts,
@@ -157,6 +258,7 @@ class TimelineViewModel(
             }
             try {
                 val posts = repository.fetchFollowTimeline(pubkeyHex, 50)
+                seenEventIds.addAll(posts.map { it.event.id })
                 _uiState.update { it.copy(
                     followingPosts = posts,
                     isFollowingLoading = false,
@@ -292,30 +394,31 @@ class TimelineViewModel(
 
     fun likePost(eventId: String, emoji: String = "+", customTags: List<List<String>> = emptyList()) {
         viewModelScope.launch {
-            val success = repository.likePost(eventId, emoji, customTags)
+            val post = (_uiState.value.globalPosts + _uiState.value.followingPosts)
+                .firstOrNull { it.event.id == eventId }
+            val authorPubkey = post?.event?.pubkey ?: ""
+            val success = repository.likePost(eventId, authorPubkey, emoji, customTags)
             if (success) {
                 updatePostInteraction(eventId, isLike = true)
-                // Record engagement for recommendation engine (synced with web)
-                val authorPubkey = (_uiState.value.globalPosts + _uiState.value.followingPosts)
-                    .firstOrNull { it.event.id == eventId }?.event?.pubkey
-                if (authorPubkey != null) {
-                    recommendationEngine?.recordEngagement("like", authorPubkey)
-                }
+                if (authorPubkey.isNotEmpty()) repository.recordEngagement("like", authorPubkey)
             }
         }
     }
 
     fun repostPost(eventId: String) {
         viewModelScope.launch {
-            val success = repository.repostPost(eventId)
+            val post = (_uiState.value.globalPosts + _uiState.value.followingPosts)
+                .firstOrNull { it.event.id == eventId }
+            val eventJson = post?.event?.let {
+                try { kotlinx.serialization.json.Json { encodeDefaults = true }.encodeToString(
+                    io.nurunuru.app.data.models.NostrEvent.serializer(), it)
+                } catch (_: Exception) { null }
+            }
+            val success = repository.repostPost(eventId, eventJson)
             if (success) {
                 updatePostInteraction(eventId, isLike = false)
-                // Record engagement for recommendation engine (synced with web)
-                val authorPubkey = (_uiState.value.globalPosts + _uiState.value.followingPosts)
-                    .firstOrNull { it.event.id == eventId }?.event?.pubkey
-                if (authorPubkey != null) {
-                    recommendationEngine?.recordEngagement("repost", authorPubkey)
-                }
+                val authorPubkey = post?.event?.pubkey
+                if (authorPubkey != null) repository.recordEngagement("repost", authorPubkey)
             }
         }
     }
@@ -393,16 +496,16 @@ class TimelineViewModel(
         if (authorPubkey != null) {
             viewModelScope.launch {
                 try {
-                    recommendationEngine?.markNotInterested(eventId, authorPubkey)
+                    repository.markNotInterested(eventId, authorPubkey)
                 } catch (_: Exception) { }
             }
         }
     }
 
-    private var recommendationEngine: io.nurunuru.app.data.RecommendationEngine? = null
-
-    fun setRecommendationEngine(engine: io.nurunuru.app.data.RecommendationEngine) {
-        recommendationEngine = engine
+    override fun onCleared() {
+        super.onCleared()
+        liveSubId?.let { repository.stopLiveStream(it) }
+        liveSubId = null
     }
 
     class Factory(

@@ -91,5 +91,5 @@ dependencies {
     debugImplementation(libs.androidx.ui.test.manifest)
 
     // Uncomment after building Rust FFI:
-    // implementation(project(":nurunuru-ffi"))
+    implementation(project(":nurunuru-ffi"))
 }
