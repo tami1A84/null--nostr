@@ -26,3 +26,17 @@
 
 # Coil
 -dontwarn coil.**
+
+# JNA (required: R8 must not rename peer field or Structure subclass fields/methods)
+-keep class com.sun.jna.** { *; }
+-keepclassmembers class com.sun.jna.** { *; }
+-keep class * extends com.sun.jna.Structure { *; }
+-keep class * extends com.sun.jna.Callback { *; }
+-dontwarn com.sun.jna.**
+
+# UniFFI-generated bindings (nurunuru Rust engine)
+-keep class uniffi.nurunuru.** { *; }
+
+# rust-nostr SDK (UniFFI/JNA-based — must not be obfuscated)
+-keep class rust.nostr.** { *; }
+-dontwarn rust.nostr.**

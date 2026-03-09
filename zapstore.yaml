@@ -2,28 +2,39 @@
 # https://zapstore.dev/docs/publish
 
 name: ぬるぬる
-identifier: app.nurunuru
-summary: LINE風のシンプルで可愛いNostrクライアント
+identifier: io.nurunuru.app
+summary: LINE風のNostrクライアント — シンプルで可愛い、みんなのためのNostr
 description: |
-  ぬるぬるは、LINE風のUIを持つNostrクライアントです。
-  
-  ## 主な機能
-  - タイムライン（リレー/フォロー切り替え）
-  - 暗号化DM（NIP-17対応）
-  - いいね・リポスト・Zap
-  - NIP-05認証・バッジ表示
-  - カスタム絵文字対応
-  - パスキーログイン
+  🌟 概要
+
+「ぬるぬる」は、親しみやすいチャット風インターフェースを備えた、ユーザーフレンドリーなNostrクライアントです。パフォーマンス、セキュリティ、そして心地よいユーザー体験に重点を置いて開発されています。
+✨ 特徴
+📱 タイムライン
+
+    推奨フィード: アルゴリズムによる「おすすめ」と「フォロー中」の切り替え。
+    Birdwatch: コミュニティによるコンテキスト追加と評価 (NIP-32)。
+    リッチメディア: 画像、カスタム絵文字、ループ動画 (Divine) に対応。
+
+💬 トーク
+
+    安全なDM: NIP-17/44/59 に基づく暗号化されたプライベートメッセージ。
+    チャット画面: 使い慣れた操作感のデザイン。
+
+🔒 セキュリティ
+
+    パスキー対応: パスワード不要の安全なログイン。
+    セキュアな鍵管理: 秘密鍵は安全に保護され、外部に露出しません。
+グイン
   - PWA対応
   
   ## 対応NIP
-  NIP-01, NIP-02, NIP-05, NIP-07, NIP-09, NIP-17, NIP-19, 
-  NIP-25, NIP-27, NIP-30, NIP-44, NIP-46, NIP-50, NIP-51, 
-  NIP-57, NIP-58, NIP-59, NIP-98
+  NIP-01, NIP-02, NIP-05, NIP-07, NIP-09,NIP-11, NIP-17, NIP-19, 
+  NIP-25, NIP-27, NIP-30,NIP-32,NIP-42, NIP-44, NIP-46, NIP-50, NIP-51, 
+  NIP-57, NIP-58, NIP-59, NIP-62,NIP-65,NIP-70,NIP-98
 
-repository: https://github.com/kojira/nostr-line-client
-homepage: https://yabu.me
-license: MIT
+repository: https://github.com/tami1A84/null--nostr
+homepage: 
+license: Unlicense license 
 tags: nostr social messaging line japan
 
 icon: public/favicon-512.png

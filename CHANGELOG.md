@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-03-10
+
+### Fixed (Android)
+- JNA/UniFFI ProGuardルール欠落によるリリースビルドのクラッシュ・タイムライン未表示を修正
+  - `com.sun.jna.**` / `uniffi.nurunuru.**` / `rust.nostr.**` を R8 難読化対象外に設定
+
+## [1.1.0] - 2026-03-09
+
+### Added (Android)
+- Rustエンジンによるおすすめタイムライン
+- Pull-to-refresh・新着投稿ピルUI
+- ハッシュタグタップ対応
+- 外部ミニアプリをWebView（NIP-07署名プロキシ）で開く機能
+- バッジ・カスタム絵文字のキャッシュファースト表示
+
+### Fixed (Android)
+- ホームタブの投稿・いいね更新が反映されない問題
+- タブ切り替え時のスクロール状態保持
+
 ## [1.0.3] - 2025-12-22
 
 ### Changed

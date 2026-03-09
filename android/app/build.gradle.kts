@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,20 +8,38 @@ plugins {
     alias(libs.plugins.paparazzi)
 }
 
+// local.properties からパスワードを読み込む設定
+val localProps = Properties().also {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        it.load(localPropertiesFile.inputStream())
+    }
+}
+
 android {
     namespace = "io.nurunuru.app"
     compileSdk = 34
+
+    signingConfigs {
+        create("release") {
+            storeFile = file(localProps["KEYSTORE_PATH"] as? String ?: "")
+            storePassword = localProps["KEYSTORE_PASSWORD"] as? String ?: ""
+            keyAlias = localProps["KEY_ALIAS"] as? String ?: ""
+            keyPassword = localProps["KEY_PASSWORD"] as? String ?: ""
+        }
+    }
 
     defaultConfig {
         applicationId = "io.nurunuru.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.2.0"
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release") 
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -75,7 +95,6 @@ dependencies {
 
     // Official rust-nostr SDK
     implementation(libs.rust.nostr.sdk)
-    // implementation(libs.rust.nostr.signer.proxy)
     implementation("net.java.dev.jna:jna:5.15.0@aar")
 
     // Media playback (Kind 34236)
@@ -90,6 +109,5 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
-    // Uncomment after building Rust FFI:
     implementation(project(":nurunuru-ffi"))
 }
