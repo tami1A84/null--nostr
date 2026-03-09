@@ -546,6 +546,37 @@ impl NuruNuruClient {
             .collect())
     }
 
+    /// Fetch the recommended "For You" timeline.
+    ///
+    /// Applies the X-algorithm-inspired ranking with:
+    /// - Parallel relay fetching (network candidates + viral out-of-network)
+    /// - Author profile enrichment for NIP-05 quality boost
+    /// - Geohash proximity boosting when `user_geohash` is provided
+    ///
+    /// Returns serialised event JSON strings ordered by recommendation score.
+    /// `user_geohash` — optional geohash from app settings (e.g. `"xn76u"`).
+    pub fn fetch_recommended_timeline(
+        &self,
+        limit: u32,
+        user_geohash: Option<String>,
+    ) -> Result<Vec<String>, NuruNuruFfiError> {
+        let events = self
+            .runtime
+            .block_on(
+                self.engine
+                    .get_recommended_events_ordered(limit as usize, user_geohash),
+            )
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+
+        events
+            .iter()
+            .map(|e| {
+                serde_json::to_string(e)
+                    .map_err(|err| NuruNuruFfiError::EngineError(err.to_string()))
+            })
+            .collect()
+    }
+
     // ─── Personalisation signals ────────────────────────────────────────────
 
     /// Mark a post as "not interested" to suppress it from the feed.

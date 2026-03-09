@@ -800,6 +800,8 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -846,6 +848,8 @@ fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_global_timeline(
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_profile(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_profiles(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_recommended_timeline(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_follow_user(
 ): Short
@@ -987,6 +991,8 @@ fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_global_timeline(`ptr`:
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_profile(`ptr`: Pointer,`pubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_profiles(`ptr`: Pointer,`pubkeys`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_recommended_timeline(`ptr`: Pointer,`limit`: Int,`userGeohash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_follow_user(`ptr`: Pointer,`targetPubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
@@ -1212,6 +1218,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_profiles() != 16045.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_fetch_recommended_timeline() != 28228.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_follow_user() != 8603.toShort()) {
@@ -1780,6 +1789,19 @@ public interface NuruNuruClientInterface {
     fun `fetchProfiles`(`pubkeys`: List<kotlin.String>): List<FfiUserProfile>
     
     /**
+     * Fetch the recommended "For You" timeline.
+     *
+     * Applies the X-algorithm-inspired ranking with:
+     * - Parallel relay fetching (network candidates + viral out-of-network)
+     * - Author profile enrichment for NIP-05 quality boost
+     * - Geohash proximity boosting when `user_geohash` is provided
+     *
+     * Returns serialised event JSON strings ordered by recommendation score.
+     * `user_geohash` — optional geohash from app settings (e.g. `"xn76u"`).
+     */
+    fun `fetchRecommendedTimeline`(`limit`: kotlin.UInt, `userGeohash`: kotlin.String?): List<kotlin.String>
+    
+    /**
      * Follow a user (publishes an updated kind-3 contact list).
      */
     fun `followUser`(`targetPubkeyHex`: kotlin.String)
@@ -2320,6 +2342,30 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_profiles(
         it, FfiConverterSequenceString.lower(`pubkeys`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Fetch the recommended "For You" timeline.
+     *
+     * Applies the X-algorithm-inspired ranking with:
+     * - Parallel relay fetching (network candidates + viral out-of-network)
+     * - Author profile enrichment for NIP-05 quality boost
+     * - Geohash proximity boosting when `user_geohash` is provided
+     *
+     * Returns serialised event JSON strings ordered by recommendation score.
+     * `user_geohash` — optional geohash from app settings (e.g. `"xn76u"`).
+     */
+    @Throws(NuruNuruFfiException::class)override fun `fetchRecommendedTimeline`(`limit`: kotlin.UInt, `userGeohash`: kotlin.String?): List<kotlin.String> {
+            return FfiConverterSequenceString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_fetch_recommended_timeline(
+        it, FfiConverterUInt.lower(`limit`),FfiConverterOptionalString.lower(`userGeohash`),_status)
 }
     }
     )

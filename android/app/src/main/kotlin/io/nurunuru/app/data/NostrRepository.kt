@@ -82,6 +82,35 @@ class NostrRepository(
         return client.fetchEvents(filter, timeoutMs)
     }
 
+    suspend fun fetchRecommendedTimeline(limit: Int = 50): List<ScoredPost> {
+        if (useRustCore) {
+            val rustClient = client.getRustClient()
+            if (rustClient != null) {
+                return withContext(Dispatchers.IO) {
+                    try {
+                        val eventsJson = rustClient.fetchRecommendedTimeline(
+                            limit.toUInt(), prefs.userGeohash
+                        )
+                        android.util.Log.d("NostrRepository",
+                            "Rust fetchRecommendedTimeline: ${eventsJson.size} ranked events")
+                        if (eventsJson.isEmpty()) return@withContext fetchGlobalTimelineLegacy(limit)
+                        val events = eventsJson.mapNotNull { json ->
+                            try { Json.decodeFromString<NostrEvent>(json) }
+                            catch (e: Exception) { null }
+                        }
+                        if (events.isEmpty()) return@withContext fetchGlobalTimelineLegacy(limit)
+                        enrichPosts(events)
+                    } catch (e: Exception) {
+                        android.util.Log.e("NostrRepository",
+                            "Rust fetchRecommendedTimeline failed, falling back to legacy", e)
+                        fetchGlobalTimelineLegacy(limit)
+                    }
+                }
+            }
+        }
+        return fetchGlobalTimelineLegacy(limit)
+    }
+
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
         if (useRustCore) {
             return withContext(Dispatchers.IO) {

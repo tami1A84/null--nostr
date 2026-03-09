@@ -204,7 +204,7 @@ class TimelineViewModel(
                 else it.copy(isGlobalLoading = true, globalError = null)
             }
             try {
-                val posts = repository.fetchGlobalTimeline(50)
+                val posts = repository.fetchRecommendedTimeline(50)
                 seenEventIds.addAll(posts.map { it.event.id })
                 _uiState.update { state ->
                     state.copy(
