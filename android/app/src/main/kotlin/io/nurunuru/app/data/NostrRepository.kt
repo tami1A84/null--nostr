@@ -5,6 +5,7 @@ import io.nurunuru.app.data.models.*
 import io.nurunuru.app.data.prefs.AppPreferences
 import kotlin.math.pow
 import kotlinx.coroutines.*
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -836,6 +837,18 @@ class NostrRepository(
         return badgeDefinitions
     }
 
+    // ─── Badge Cache helpers ───────────────────────────────────────────────────
+
+    fun getCachedProfileBadges(pubkeyHex: String): List<BadgeInfo> {
+        val raw = cache.getCachedBadgeInfo(pubkeyHex) ?: return emptyList()
+        return try { json.decodeFromString(raw) } catch (_: Exception) { emptyList() }
+    }
+
+    fun getCachedAwardedBadgesList(pubkeyHex: String): List<BadgeInfo> {
+        val raw = cache.getCachedAwardedBadges(pubkeyHex) ?: return emptyList()
+        return try { json.decodeFromString(raw) } catch (_: Exception) { emptyList() }
+    }
+
     suspend fun fetchProfileBadgesInfo(pubkeyHex: String): List<BadgeInfo> = coroutineScope {
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.PROFILE_BADGES),
@@ -888,7 +901,10 @@ class NostrRepository(
                 }
             }
         }
-        badgeRequests.awaitAll()
+        val result = badgeRequests.awaitAll()
+        // キャッシュに保存（1時間）
+        try { cache.setCachedBadgeInfo(pubkeyHex, json.encodeToString(result)) } catch (_: Exception) {}
+        result
     }
 
     suspend fun fetchAwardedBadges(pubkeyHex: String, currentBadgeRefs: Set<String>): List<BadgeInfo> = coroutineScope {
@@ -940,7 +956,9 @@ class NostrRepository(
                 }
             }
         }
-        badgeRequests.awaitAll()
+        val result = badgeRequests.awaitAll()
+        try { cache.setCachedAwardedBadges(pubkeyHex, json.encodeToString(result)) } catch (_: Exception) {}
+        result
     }
 
     suspend fun updateProfileBadges(pubkeyHex: String, badges: List<BadgeInfo>): Boolean {
@@ -2000,6 +2018,55 @@ class NostrRepository(
         } catch (e: Exception) {
             android.util.Log.w("NostrRepository", "stopLiveStream error", e)
         }
+    }
+
+    // ─── WebView / NIP-07 Bridge helpers ─────────────────────────────────────
+
+    /**
+     * WebView から渡された未署名イベント JSON に署名して返す。
+     * JS 側から `{ kind, content, tags, created_at? }` 形式で受け取る。
+     * id・pubkey・sig はサイナーが付加する。
+     */
+    suspend fun signEventForWebBridge(eventJson: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val parsed = kotlinx.serialization.json.Json.parseToJsonElement(eventJson)
+                .jsonObject
+            val kind      = parsed["kind"]?.jsonPrimitive?.intOrNull ?: return@withContext null
+            val content   = parsed["content"]?.jsonPrimitive?.content ?: ""
+            val tagsArr   = parsed["tags"]?.jsonArray
+                ?: kotlinx.serialization.json.JsonArray(emptyList())
+            val createdAt = parsed["created_at"]?.jsonPrimitive?.longOrNull
+                ?: (System.currentTimeMillis() / 1000)
+
+            // 未署名イベント（id/sig なし）を構築
+            val unsigned = buildString {
+                append("{")
+                append("\"kind\":$kind,")
+                append("\"content\":${json.encodeToString(content)},")
+                append("\"tags\":${tagsArr},")
+                append("\"created_at\":$createdAt,")
+                append("\"pubkey\":\"$myPubkeyHex\"")
+                append("}")
+            }
+            client.getSigner().signEvent(unsigned)
+        } catch (e: Exception) {
+            android.util.Log.e("NostrRepository", "signEventForWebBridge: ${e.message}")
+            null
+        }
+    }
+
+    /** NIP-04 暗号化（WebView ブリッジ用） */
+    suspend fun nip04EncryptForBridge(receiverPubkey: String, plaintext: String): String? =
+        client.encryptNip04(receiverPubkey, plaintext)
+
+    /** NIP-04 復号（WebView ブリッジ用） */
+    suspend fun nip04DecryptForBridge(senderPubkey: String, ciphertext: String): String? =
+        client.decryptNip04(senderPubkey, ciphertext)
+
+    /** リレーリストを JSON 文字列で返す（WebView ブリッジ用） */
+    fun getRelaysJson(): String {
+        val relays = prefs.relays.associateWith { mapOf("read" to true, "write" to true) }
+        return json.encodeToString(relays)
     }
 
     /** Fetch follow lists for multiple pubkeys (for 2nd-degree network) */
