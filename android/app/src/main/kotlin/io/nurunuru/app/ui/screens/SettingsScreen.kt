@@ -50,6 +50,7 @@ import io.nurunuru.app.ui.miniapps.ElevenLabsSettings
 import io.nurunuru.app.ui.miniapps.EmojiSettings
 import io.nurunuru.app.ui.miniapps.EventBackupSettings
 import io.nurunuru.app.ui.miniapps.MuteList
+import io.nurunuru.app.ui.miniapps.NostrBrowserApp
 import io.nurunuru.app.ui.miniapps.ZapSettings
 import io.nurunuru.app.ui.miniapps.SchedulerApp
 import io.nurunuru.app.ui.miniapps.VanishRequest
@@ -103,7 +104,7 @@ fun SettingsScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
     var activeCategory by remember { mutableStateOf("all") }
     var searchQuery by remember { mutableStateOf("") }
-    var selectedAppId by remember { mutableStateOf<String?>(null) }
+    var selectedApp by remember { mutableStateOf<MiniAppData?>(null) }
     var showExternalAdd by remember { mutableStateOf(false) }
 
     val npub = remember(pubkeyHex) { NostrKeyUtils.encodeNpub(pubkeyHex) ?: pubkeyHex }
@@ -133,13 +134,13 @@ fun SettingsScreen(
         }
     }
 
-    if (selectedAppId != null) {
+    if (selectedApp != null) {
         MiniAppDetailView(
-            appId = selectedAppId!!,
+            app = selectedApp!!,
             repository = repository,
             pubkeyHex = pubkeyHex,
             prefs = prefs,
-            onBack = { selectedAppId = null }
+            onBack = { selectedApp = null }
         )
         return
     }
@@ -267,7 +268,7 @@ fun SettingsScreen(
                         ) {
                             items(favoriteAppData) { app ->
                                 Column(
-                                    modifier = Modifier.width(64.dp).clickable { selectedAppId = app.id },
+                                    modifier = Modifier.width(64.dp).clickable { selectedApp = app },
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
@@ -349,7 +350,7 @@ fun SettingsScreen(
                         }
                         prefs.favoriteApps = favorites.toList()
                     },
-                    onClick = { selectedAppId = app.id }
+                    onClick = { selectedApp = app }
                 )
             }
 
@@ -624,14 +625,14 @@ private fun MiniAppRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MiniAppDetailView(
-    appId: String,
+    app: MiniAppData,
     repository: NostrRepository,
     pubkeyHex: String,
     prefs: AppPreferences,
     onBack: () -> Unit
 ) {
     val nuruColors = LocalNuruColors.current
-    val title = when(appId) {
+    val title = when(app.id) {
         "zap" -> "Zap設定"
         "relay" -> "リレー設定"
         "upload" -> "アップロード設定"
@@ -641,7 +642,19 @@ private fun MiniAppDetailView(
         "elevenlabs" -> "音声入力設定"
         "backup" -> "バックアップ"
         "vanish" -> "削除リクエスト"
-        else -> "ミニアプリ"
+        else -> app.name
+    }
+
+    // 外部アプリはトップバーなしでフルスクリーンWebViewで表示
+    if (app.type == "external" && app.url != null) {
+        NostrBrowserApp(
+            appName = app.name,
+            pubkey = pubkeyHex,
+            repository = repository,
+            initialUrl = app.url,
+            onBack = onBack
+        )
+        return
     }
 
     Scaffold(
@@ -659,7 +672,7 @@ private fun MiniAppDetailView(
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            when (appId) {
+            when (app.id) {
                 "zap" -> ZapSettings(prefs = prefs)
                 "relay" -> RelaySettingsViewContent(prefs = prefs, repository = repository)
                 "upload" -> UploadSettingsView(prefs = prefs)

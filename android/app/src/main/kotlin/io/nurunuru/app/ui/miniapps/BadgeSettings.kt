@@ -44,6 +44,19 @@ fun BadgeSettings(
     var addingBadgeRef by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(pubkey) {
+        // Phase 1: キャッシュから即時表示
+        val cachedProfile = repository.getCachedProfileBadges(pubkey)
+        val cachedAwarded = repository.getCachedAwardedBadgesList(pubkey)
+        if (cachedProfile.isNotEmpty()) {
+            profileBadges = cachedProfile
+            isLoadingCurrent = false
+        }
+        if (cachedAwarded.isNotEmpty()) {
+            awardedBadges = cachedAwarded
+            isLoadingAwarded = false
+        }
+
+        // Phase 2: リレーから最新を並列取得
         scope.launch {
             isLoadingCurrent = true
             try {
@@ -58,8 +71,6 @@ fun BadgeSettings(
         scope.launch {
             isLoadingAwarded = true
             try {
-                // We need profileBadges to filter, but we can also just fetch all and filter in UI or after both finish
-                // For better UX, we fetch awarded badges independently
                 val current = repository.fetchProfileBadgesInfo(pubkey)
                 awardedBadges = repository.fetchAwardedBadges(pubkey, current.map { it.ref }.toSet())
             } catch (e: Exception) {

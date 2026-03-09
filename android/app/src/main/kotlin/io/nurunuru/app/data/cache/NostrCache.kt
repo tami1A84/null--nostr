@@ -140,6 +140,20 @@ class NostrCache(context: Context) {
 
     fun clearCachedEmoji(pubkey: String) { removeRaw("emoji_$pubkey") }
 
+    // ─── Badge Cache (1 hour) ────────────────────────────────────────────────
+
+    fun getCachedBadgeInfo(pubkey: String): String? = getRaw("badge_info_$pubkey")
+
+    fun setCachedBadgeInfo(pubkey: String, dataJson: String) {
+        setRaw("badge_info_$pubkey", dataJson, 3_600_000L)
+    }
+
+    fun getCachedAwardedBadges(pubkey: String): String? = getRaw("badge_awarded_$pubkey")
+
+    fun setCachedAwardedBadges(pubkey: String, dataJson: String) {
+        setRaw("badge_awarded_$pubkey", dataJson, 3_600_000L)
+    }
+
     // ─── User Notes / Likes Cache ────────────────────────────────────────────
 
     fun getCachedUserNotes(pubkey: String): String? = getRaw("user_notes_$pubkey")
