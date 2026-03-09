@@ -32,7 +32,8 @@ fun PostItem(
     onNotInterested: (() -> Unit)? = null,
     isOwnPost: Boolean = false,
     isVerified: Boolean = false,
-    birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList()
+    birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList(),
+    onHashtagClick: ((String) -> Unit)? = null
 ) {
     val nuruColors = LocalNuruColors.current
     val profile = post.profile
@@ -108,7 +109,8 @@ fun PostItem(
                             post = post,
                             repository = repository,
                             onProfileClick = onProfileClick,
-                            overrideContent = post.event.content.take(140) + "..."
+                            overrideContent = post.event.content.take(140) + "...",
+                            onHashtagClick = onHashtagClick
                         )
                         PostMedia(post = post, overrideContent = post.event.content.take(140))
                         Text(
@@ -121,7 +123,7 @@ fun PostItem(
                                 .padding(vertical = 4.dp)
                         )
                     } else {
-                        PostContent(post = post, repository = repository, onProfileClick = onProfileClick)
+                        PostContent(post = post, repository = repository, onProfileClick = onProfileClick, onHashtagClick = onHashtagClick)
                         PostMedia(post = post)
                         if (shouldCollapse && isExpanded) {
                             Text(

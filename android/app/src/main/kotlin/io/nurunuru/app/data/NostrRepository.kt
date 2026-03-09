@@ -36,6 +36,7 @@ class NostrRepository(
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     private fun getOneHourAgo(): Long = System.currentTimeMillis() / 1000 - Constants.Time.HOUR_SECS
+    private fun getOneDayAgo(): Long = System.currentTimeMillis() / 1000 - Constants.Time.DAY_SECS
 
     // ─── External Signer helpers ──────────────────────────────────────────────
 
@@ -82,33 +83,128 @@ class NostrRepository(
         return client.fetchEvents(filter, timeoutMs)
     }
 
-    suspend fun fetchRecommendedTimeline(limit: Int = 50): List<ScoredPost> {
-        if (useRustCore) {
-            val rustClient = client.getRustClient()
-            if (rustClient != null) {
-                return withContext(Dispatchers.IO) {
-                    try {
-                        val eventsJson = rustClient.fetchRecommendedTimeline(
-                            limit.toUInt(), prefs.userGeohash
-                        )
-                        android.util.Log.d("NostrRepository",
-                            "Rust fetchRecommendedTimeline: ${eventsJson.size} ranked events")
-                        if (eventsJson.isEmpty()) return@withContext fetchGlobalTimelineLegacy(limit)
-                        val events = eventsJson.mapNotNull { json ->
-                            try { Json.decodeFromString<NostrEvent>(json) }
-                            catch (e: Exception) { null }
-                        }
-                        if (events.isEmpty()) return@withContext fetchGlobalTimelineLegacy(limit)
-                        enrichPosts(events)
-                    } catch (e: Exception) {
-                        android.util.Log.e("NostrRepository",
-                            "Rust fetchRecommendedTimeline failed, falling back to legacy", e)
-                        fetchGlobalTimelineLegacy(limit)
-                    }
-                }
+    suspend fun fetchRecommendedTimeline(limit: Int = 50): List<ScoredPost> =
+        withContext(Dispatchers.IO) {
+            try {
+                fetchRecommendedFromMainRelay(limit)
+            } catch (e: Exception) {
+                android.util.Log.e("NostrRepository", "fetchRecommendedTimeline failed: ${e.message}", e)
+                emptyList()
             }
         }
-        return fetchGlobalTimelineLegacy(limit)
+
+    /**
+     * メインリレー1台のみからイベントを取得し、Kotlinアルゴリズム＋ミュートフィルタを適用する。
+     * Web版の getDefaultRelay() 相当の動作。
+     */
+    private suspend fun fetchRecommendedFromMainRelay(limit: Int): List<ScoredPost> {
+        val mainRelay = prefs.mainRelay
+        val myPubkey = prefs.publicKeyHex ?: ""
+        val oneHourAgo = getOneHourAgo()
+        val threeHoursAgo = System.currentTimeMillis() / 1000 - 10800
+
+        android.util.Log.d("NostrRepository",
+            "fetchRecommendedTimeline: mainRelay=$mainRelay (always fresh, no cache)")
+
+        // 改善1: メインリレー障害時フォールバック
+        val relaysToTry = listOf(mainRelay) +
+            io.nurunuru.app.data.models.DEFAULT_RELAYS.filter { it != mainRelay }.take(2)
+
+        // 1. メインリレー（障害時はフォールバック）並列フェッチ
+        val (allEvents, followList, secondDegreeFollows) = coroutineScope {
+            val viralJob = async {
+                var events = emptyList<NostrEvent>()
+                for (relay in relaysToTry) {
+                    events = try {
+                        client.fetchEventsFrom(
+                            listOf(relay),
+                            NostrClient.Filter(
+                                kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
+                                limit = 100,
+                                since = oneHourAgo
+                            ), timeoutMs = 5_000
+                        )
+                    } catch (_: Exception) { emptyList() }
+                    if (events.isNotEmpty()) {
+                        if (relay != mainRelay) android.util.Log.w("NostrRepository",
+                            "Main relay $mainRelay failed, using fallback $relay")
+                        break
+                    }
+                }
+                events
+            }
+            val followListJob = async { fetchFollowList(myPubkey) }
+
+            val viral = viralJob.await()
+            val follows = followListJob.await()
+
+            // 改善3: 2次度サンプリングを動的調整（フォロー数の1/3、最低30人）
+            val secondDegree = if (follows.isNotEmpty()) {
+                val sampleSize = maxOf(30, follows.size / 3)
+                val sampleFollows = follows.shuffled().take(sampleSize)
+                val followsOfFollows = fetchFollowListsBatch(sampleFollows)
+                RecommendationEngine.extract2ndDegreeNetwork(follows, followsOfFollows)
+            } else emptySet()
+
+            val activeRelay = if (viral.isNotEmpty()) mainRelay else relaysToTry.first()
+            val secondDegreePosts = if (secondDegree.isNotEmpty()) {
+                client.fetchEventsFrom(
+                    listOf(activeRelay),
+                    NostrClient.Filter(
+                        kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
+                        authors = secondDegree.take(50).toList(),
+                        limit = 50,
+                        since = threeHoursAgo
+                    ), timeoutMs = 4_000
+                )
+            } else emptyList()
+
+            Triple(
+                // リプライ除外: e タグあり = 他投稿へのリプライ
+                (viral + secondDegreePosts)
+                    .distinctBy { it.id }
+                    .filter { it.getTagValues("e").isEmpty() },
+                follows.toSet(),
+                secondDegree
+            )
+        }
+
+        // 2. プロフィール・エンゲージメントでエンリッチ
+        val enriched = enrichPosts(allEvents)
+
+        // 3. 推薦アルゴリズムでスコアリング
+        val profileMap = enriched.associate { it.event.pubkey to (it.profile ?: UserProfile(it.event.pubkey)) }
+        val engagements = enriched.associate { it.event.id to RecommendationEngine.EngagementCounts(
+            likes = it.likeCount,
+            reposts = it.repostCount,
+            replies = it.replyCount,
+            // 改善2: Zap対数スケール（999sat=0問題を修正）
+            zaps = if (it.zapAmount <= 0) 0
+                   else (kotlin.math.ln(it.zapAmount.toDouble() / 1000.0 + 1.0) * 10).toInt().coerceAtLeast(1)
+        ) }
+        val scoringCtx = RecommendationEngine.ScoringContext(
+            followList = followList,
+            secondDegreeFollows = secondDegreeFollows,
+            engagements = engagements,
+            profiles = profileMap,
+            userGeohash = prefs.userGeohash,
+            mutedPubkeys = getCachedMuteList(myPubkey)?.pubkeys?.toSet() ?: emptySet()
+        )
+        val scored = recommendationEngine.getRecommendedPosts(enriched, scoringCtx, limit)
+
+        // 4. ミュートフィルタ（pubkey + eventId）
+        val muteData = getCachedMuteList(myPubkeyHex)
+        if (muteData != null &&
+            (muteData.pubkeys.isNotEmpty() || muteData.eventIds.isNotEmpty())
+        ) {
+            val mutedPks = muteData.pubkeys.toSet()
+            val mutedIds = muteData.eventIds.toSet()
+            return scored.filter { it.event.pubkey !in mutedPks && it.event.id !in mutedIds }
+                .also { android.util.Log.d("NostrRepository",
+                    "Recommended[$mainRelay]: ${scored.size} -> ${it.size} after mute filter") }
+        }
+        android.util.Log.d("NostrRepository", "Recommended[$mainRelay]: ${scored.size} posts")
+        return scored
     }
 
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
@@ -172,9 +268,10 @@ class NostrRepository(
             val recent = recentJob.await()
             val follows = followListJob.await()
 
-            // Build 2nd-degree network (friends of friends)
+            // Build 2nd-degree network (friends of friends) — 改善3: dynamic sampling
             val secondDegree = if (follows.isNotEmpty()) {
-                val sampleFollows = follows.shuffled().take(30)
+                val sampleSize = maxOf(30, follows.size / 3)
+                val sampleFollows = follows.shuffled().take(sampleSize)
                 val followsOfFollows = fetchFollowListsBatch(sampleFollows)
                 RecommendationEngine.extract2ndDegreeNetwork(follows, followsOfFollows)
             } else emptySet()
@@ -205,7 +302,9 @@ class NostrRepository(
             likes = it.likeCount,
             reposts = it.repostCount,
             replies = it.replyCount,
-            zaps = (it.zapAmount / 1000).toInt() // Approximate sats
+            // 改善2: Zap対数スケール
+            zaps = if (it.zapAmount <= 0) 0
+                   else (kotlin.math.ln(it.zapAmount.toDouble() / 1000.0 + 1.0) * 10).toInt().coerceAtLeast(1)
         ) }
 
         val context = RecommendationEngine.ScoringContext(
@@ -318,15 +417,26 @@ class NostrRepository(
 
     // ─── Notifications ─────────────────────────────────────────────────────────
 
-    /** Fetch notifications (reactions + zaps targeting the user). */
+    /** Fetch notifications (reactions + zaps targeting the user). Cache-first, 1-day window. */
     suspend fun fetchNotifications(pubkeyHex: String, limit: Int = 50): NotificationResult {
-        val oneHourAgo = getOneHourAgo()
+        // キャッシュヒット時は即返す
+        cache.getCachedNotifications(pubkeyHex)?.let { cached ->
+            try {
+                val result = json.decodeFromString<NotificationResult>(cached)
+                if (result.items.isNotEmpty()) {
+                    android.util.Log.d("NostrRepository", "notifications cache hit: ${result.items.size}")
+                    return result
+                }
+            } catch (_: Exception) { }
+        }
+
+        val oneDayAgo = System.currentTimeMillis() / 1000 - Constants.Time.DAY_SECS
 
         // 1. Fetch reactions (#p tag targeting me)
         val reactionFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.REACTION),
             tags = mapOf("p" to listOf(pubkeyHex)),
-            since = oneHourAgo,
+            since = oneDayAgo,
             limit = limit
         )
 
@@ -334,7 +444,7 @@ class NostrRepository(
         val zapFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.ZAP_RECEIPT),
             tags = mapOf("p" to listOf(pubkeyHex)),
-            since = oneHourAgo,
+            since = oneDayAgo,
             limit = limit
         )
 
@@ -425,7 +535,14 @@ class NostrRepository(
         // 6. Sort by time descending
         val sorted = notificationItems.sortedByDescending { it.createdAt }
 
-        return NotificationResult(sorted, profiles, originalPosts)
+        val result = NotificationResult(sorted, profiles, originalPosts)
+
+        // 7. キャッシュに保存（1日有効）
+        try {
+            cache.setCachedNotifications(pubkeyHex, json.encodeToString(NotificationResult.serializer(), result))
+        } catch (_: Exception) { }
+
+        return result
     }
 
     companion object {
@@ -607,34 +724,83 @@ class NostrRepository(
 
     // ─── User Notes ───────────────────────────────────────────────────────────
 
+    /** キャッシュのみ読む（ネットワーク不使用）。初回表示の即時描画に使う。 */
+    fun getCachedUserNotesPosts(pubkeyHex: String): List<ScoredPost> {
+        val raw = cache.getCachedUserNotes(pubkeyHex) ?: return emptyList()
+        return try {
+            json.decodeFromString<List<ScoredPost>>(raw).also {
+                android.util.Log.d("NostrRepository", "user_notes cache-only: ${it.size}")
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    /** キャッシュのみ読む（ネットワーク不使用）。初回表示の即時描画に使う。 */
+    fun getCachedUserLikesPosts(pubkeyHex: String): List<ScoredPost> {
+        val raw = cache.getCachedUserLikes(pubkeyHex) ?: return emptyList()
+        return try {
+            json.decodeFromString<List<ScoredPost>>(raw).also {
+                android.util.Log.d("NostrRepository", "user_likes cache-only: ${it.size}")
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    /**
+     * 常にリレーから最新を取得し、取得後にキャッシュを更新する。
+     * キャッシュからの読み出しは行わない（getCachedUserNotesPosts を使うこと）。
+     */
     suspend fun fetchUserNotes(pubkeyHex: String, limit: Int = 30): List<ScoredPost> {
+        // nostrdb のローカルキャッシュから即時表示用データを取得（kind-1のみ）
+        val rustClient = client.getRustClient()
+        val nostrdbPosts = if (rustClient != null) {
+            try {
+                val eventsJson = rustClient.queryLocal(listOf(pubkeyHex), limit.toUInt())
+                eventsJson.mapNotNull { j -> try { Json.decodeFromString<NostrEvent>(j) } catch (_: Exception) { null } }
+            } catch (_: Exception) { emptyList() }
+        } else emptyList()
+
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.LONG_FORM, NostrKind.VIDEO_LOOP, NostrKind.REPOST),
             authors = listOf(pubkeyHex),
             limit = limit,
-            since = getOneHourAgo()
+            since = getOneDayAgo()
         )
-        val events = client.fetchEvents(filter, timeoutMs = 5_000)
-        return enrichPosts(events)
+        val relayEvents = client.fetchEvents(filter, 6_000)
+        // リレーからのイベントがあればそちらを優先、なければ nostrdb フォールバック
+        val allEvents = (relayEvents + nostrdbPosts).distinctBy { it.id }
+            .sortedByDescending { it.createdAt }
+            .take(limit)
+        val posts = enrichPosts(allEvents)
+        try {
+            cache.setCachedUserNotes(pubkeyHex,
+                json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ScoredPost.serializer()), posts))
+        } catch (_: Exception) { }
+        android.util.Log.d("NostrRepository",
+            "fetchUserNotes: relay=${relayEvents.size} nostrdb=${nostrdbPosts.size} merged=${posts.size}")
+        return posts
     }
 
+    /**
+     * 常にリレーから最新のいいねを取得し、取得後にキャッシュを更新する。
+     */
     suspend fun fetchUserLikes(pubkeyHex: String, limit: Int = 30): List<ScoredPost> {
-        val oneHourAgo = getOneHourAgo()
         val reactionFilter = NostrClient.Filter(
             kinds = listOf(NostrKind.REACTION),
             authors = listOf(pubkeyHex),
             limit = limit,
-            since = oneHourAgo
+            since = getOneDayAgo()
         )
-        val reactions = client.fetchEvents(reactionFilter, timeoutMs = 4_000)
+        val reactions = client.fetchEvents(reactionFilter, timeoutMs = 5_000)
         val eventIds = reactions.mapNotNull { it.getTagValue("e") }.distinct()
         if (eventIds.isEmpty()) return emptyList()
 
-        val eventsFilter = NostrClient.Filter(
-            ids = eventIds
-        )
-        val events = client.fetchEvents(eventsFilter, timeoutMs = 5_000)
-        return enrichPosts(events.sortedByDescending { it.createdAt })
+        val eventsFilter = NostrClient.Filter(ids = eventIds)
+        val posts = enrichPosts(client.fetchEvents(eventsFilter, timeoutMs = 6_000).sortedByDescending { it.createdAt })
+        try {
+            cache.setCachedUserLikes(pubkeyHex,
+                json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ScoredPost.serializer()), posts))
+        } catch (_: Exception) { }
+        android.util.Log.d("NostrRepository", "fetchUserLikes: ${posts.size} liked posts")
+        return posts
     }
 
     suspend fun fetchBadges(pubkeyHex: String): List<NostrEvent> {
@@ -1319,6 +1485,26 @@ class NostrRepository(
         }
 
         return getCachedMuteList(pubkeyHex) ?: MuteListData()
+    }
+
+    suspend fun fetchNip65WriteRelays(pubkeyHex: String): List<String> {
+        return try {
+            OutboxModel(client).fetchUserRelayList(pubkeyHex).write
+        } catch (_: Exception) { emptyList() }
+    }
+
+    /**
+     * NIP-65 kind 10002 から最寄りリレーを取得し、mainRelay に保存する。
+     * Web版の nurunuru_default_relay に相当する概念。
+     * おすすめタイムラインはこの1リレーのみを使用する（全writeリレーではない）。
+     */
+    suspend fun syncNip65Relays(pubkeyHex: String) {
+        val writeRelays = fetchNip65WriteRelays(pubkeyHex)
+        val main = writeRelays.firstOrNull() ?: return
+        if (main != prefs.mainRelay) {
+            prefs.mainRelay = main
+            android.util.Log.d("NostrRepository", "NIP-65 main relay synced: $main")
+        }
     }
 
     suspend fun removeFromMuteList(pubkeyHex: String, type: String, value: String): Boolean {

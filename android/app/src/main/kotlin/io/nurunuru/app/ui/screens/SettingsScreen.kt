@@ -781,6 +781,7 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
     var nearestRelays by remember { mutableStateOf<List<RelayInfoWithDistance>>(emptyList()) }
     var detectingLocation by remember { mutableStateOf(false) }
     var publishingNip65 by remember { mutableStateOf(false) }
+    var mainRelayState by remember { mutableStateOf(prefs.mainRelay) }
 
     val selectedRegion = remember(selectedRegionId) {
         RelayDiscovery.REGION_COORDINATES.find { it.id == selectedRegionId }
@@ -822,10 +823,14 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                             prefs.userGeohash = geohash
                             prefs.selectedRegionId = null
                             prefs.nip65Relays = config.combined
+                            val newMain = config.combined.firstOrNull { it.read && it.write }?.url
+                                ?: config.combined.firstOrNull()?.url ?: "wss://yabu.me"
+                            prefs.mainRelay = newMain
 
                             userGeohash = geohash
                             selectedRegionId = null
                             currentRelays = config.combined
+                            mainRelayState = newMain
                             nearestRelays = config.outbox
                         }
                     } else {
@@ -870,10 +875,14 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
         prefs.userLon = region.lon
         prefs.userGeohash = if (regionId == "global") "global" else GeohashUtils.encodeGeohash(region.lat, region.lon)
         prefs.nip65Relays = config.combined
+        val newMain = config.combined.firstOrNull { it.read && it.write }?.url
+            ?: config.combined.firstOrNull()?.url ?: "wss://yabu.me"
+        prefs.mainRelay = newMain
 
         selectedRegionId = regionId
         userGeohash = prefs.userGeohash
         currentRelays = config.combined
+        mainRelayState = newMain
         nearestRelays = config.outbox
     }
 
@@ -927,14 +936,12 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                                 fontWeight = FontWeight.Medium,
                                 color = nuruColors.textPrimary
                             )
-                            if (currentRelays.isNotEmpty()) {
-                                Text(
-                                    "メインリレー: ${currentRelays.first().url.replace("wss://", "")}",
-                                    fontSize = 10.sp,
-                                    color = nuruColors.textTertiary,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                            }
+                            Text(
+                                "おすすめリレー: ${mainRelayState.replace("wss://", "")}",
+                                fontSize = 10.sp,
+                                color = nuruColors.textTertiary,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
                         }
                     }
 
@@ -1014,38 +1021,84 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                     if (nearestRelays.isNotEmpty()) {
                         Column(modifier = Modifier.padding(top = 16.dp)) {
                             HorizontalDivider(color = nuruColors.border, modifier = Modifier.padding(vertical = 12.dp))
-                            Text("最寄りのリレー:", fontSize = 10.sp, color = nuruColors.textTertiary, modifier = Modifier.padding(bottom = 8.dp))
+                            // ヘッダー行
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("最寄りのリレー", fontSize = 10.sp, color = nuruColors.textTertiary)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("おすすめ", fontSize = 10.sp, color = LineGreen)
+                                    Text("NIP-65", fontSize = 10.sp, color = nuruColors.textTertiary)
+                                }
+                            }
 
                             nearestRelays.take(5).forEach { relay ->
-                                val isSelected = currentRelays.any { it.url == relay.info.url }
+                                val isMain = relay.info.url == mainRelayState
+                                val isInNip65 = currentRelays.any { it.url == relay.info.url }
                                 Surface(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable {
-                                        val newRelay = Nip65Relay(relay.info.url, true, true)
-                                        val newList = listOf(newRelay) + currentRelays.filter { it.url != relay.info.url }.take(4)
-                                        currentRelays = newList
-                                        prefs.nip65Relays = newList
-                                    },
-                                    color = if (isSelected) LineGreen else nuruColors.bgTertiary,
-                                    shape = RoundedCornerShape(12.dp)
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                    color = if (isMain) LineGreen.copy(alpha = 0.12f) else nuruColors.bgTertiary,
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = if (isMain) androidx.compose.foundation.BorderStroke(1.dp, LineGreen) else null
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                        modifier = Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            "${relay.info.name} (${relay.info.region})",
-                                            fontSize = 12.sp,
-                                            color = if (isSelected) Color.White else nuruColors.textPrimary
+                                        // ラジオボタン: おすすめタイムライン用メインリレー選択
+                                        androidx.compose.material3.RadioButton(
+                                            selected = isMain,
+                                            onClick = {
+                                                prefs.mainRelay = relay.info.url
+                                                mainRelayState = relay.info.url
+                                                android.util.Log.d("SettingsScreen",
+                                                    "mainRelay set: ${relay.info.url}")
+                                            },
+                                            colors = androidx.compose.material3.RadioButtonDefaults.colors(
+                                                selectedColor = LineGreen
+                                            )
                                         )
-                                        Text(
-                                            RelayDiscovery.formatDistance(relay.distance),
-                                            fontSize = 10.sp,
-                                            color = if (isSelected) Color.White.copy(alpha = 0.7f) else nuruColors.textTertiary
+                                        // リレー名・距離
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                relay.info.name,
+                                                fontSize = 12.sp,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                                                color = if (isMain) LineGreen else nuruColors.textPrimary
+                                            )
+                                            Text(
+                                                "${relay.info.region} · ${RelayDiscovery.formatDistance(relay.distance)}",
+                                                fontSize = 10.sp,
+                                                color = nuruColors.textTertiary
+                                            )
+                                        }
+                                        // チェックボックス: NIP-65リストへの追加
+                                        androidx.compose.material3.Checkbox(
+                                            checked = isInNip65,
+                                            onCheckedChange = { checked ->
+                                                val newList = if (checked) {
+                                                    val newRelay = Nip65Relay(relay.info.url, true, true)
+                                                    (listOf(newRelay) + currentRelays.filter { it.url != relay.info.url }).take(5)
+                                                } else {
+                                                    currentRelays.filter { it.url != relay.info.url }
+                                                }
+                                                currentRelays = newList
+                                                prefs.nip65Relays = newList
+                                            },
+                                            colors = androidx.compose.material3.CheckboxDefaults.colors(
+                                                checkedColor = nuruColors.textSecondary.copy(alpha = 0.8f)
+                                            )
                                         )
                                     }
                                 }
                             }
+                            Text(
+                                "ラジオ=おすすめタイムライン用、チェック=NIP-65リレーリスト",
+                                fontSize = 9.sp,
+                                color = nuruColors.textTertiary,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
                         }
                     }
 

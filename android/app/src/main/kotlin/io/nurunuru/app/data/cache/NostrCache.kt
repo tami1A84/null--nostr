@@ -140,6 +140,20 @@ class NostrCache(context: Context) {
 
     fun clearCachedEmoji(pubkey: String) { removeRaw("emoji_$pubkey") }
 
+    // ─── User Notes / Likes Cache ────────────────────────────────────────────
+
+    fun getCachedUserNotes(pubkey: String): String? = getRaw("user_notes_$pubkey")
+
+    fun setCachedUserNotes(pubkey: String, json: String) {
+        setRaw("user_notes_$pubkey", json, Constants.CacheDuration.NOTIFICATION) // 1 day
+    }
+
+    fun getCachedUserLikes(pubkey: String): String? = getRaw("user_likes_$pubkey")
+
+    fun setCachedUserLikes(pubkey: String, json: String) {
+        setRaw("user_likes_$pubkey", json, Constants.CacheDuration.NOTIFICATION) // 1 day
+    }
+
     // ─── Timeline Cache ──────────────────────────────────────────────────────
 
     fun getCachedTimeline(): String? {
@@ -150,6 +164,14 @@ class NostrCache(context: Context) {
     fun setCachedTimeline(eventsJson: String) {
         timelineCache.set("events", eventsJson)
         setRaw("timeline_events", eventsJson, Constants.CacheDuration.TIMELINE)
+    }
+
+    // ─── Notification Cache (1 day) ──────────────────────────────────────────
+
+    fun getCachedNotifications(pubkey: String): String? = getRaw("notifications_$pubkey")
+
+    fun setCachedNotifications(pubkey: String, json: String) {
+        setRaw("notifications_$pubkey", json, Constants.CacheDuration.NOTIFICATION)
     }
 
     // ─── Relay List Cache (NIP-65) ───────────────────────────────────────────

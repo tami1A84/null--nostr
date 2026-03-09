@@ -42,7 +42,8 @@ fun LongFormPostItem(
     onBirdwatch: ((String, String, String) -> Unit)? = null,
     onNotInterested: (() -> Unit)? = null,
     isOwnPost: Boolean = false,
-    birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList()
+    birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList(),
+    onHashtagClick: ((String) -> Unit)? = null
 ) {
     val nuruColors = LocalNuruColors.current
     val profile = post.profile

@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import io.nurunuru.app.NuruNuruApp
 import io.nurunuru.app.data.NostrClient
 import io.nurunuru.app.data.NostrRepository
@@ -98,6 +99,14 @@ fun MainScreen(
     val homeState by homeVM.uiState.collectAsState()
     val myProfile = homeState.profile
 
+    // ── バックグラウンドプリフェッチ ─────────────────────────────────────────
+    // タイムライン表示中に他タブのデータをバックグラウンドで取得しておく。
+    // 各 ViewModel は内部でキャッシュファーストのため、タブ切り替えが瞬時になる。
+    LaunchedEffect(pubkeyHex) {
+        launch { homeVM.loadMyProfile() }
+        launch { talkVM.loadConversations() }
+    }
+
     // Disconnect on dispose
     DisposableEffect(nostrClient) {
         onDispose { nostrClient.disconnect() }
@@ -171,18 +180,49 @@ fun MainScreen(
         },
         containerColor = Color.Black
     ) { paddingValues ->
+        // 3タブ（HOME・TALK・TIMELINE）は常時コンポーズして状態（スクロール位置等）を保持する。
+        // AnimatedVisibility は非表示時もコンポジションツリーに残るため ViewModel 状態が失われない。
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            when (activeTab) {
-                BottomTab.HOME -> HomeScreen(viewModel = homeVM, repository = repository)
-                BottomTab.TALK -> TalkScreen(viewModel = talkVM)
-                BottomTab.TIMELINE -> TimelineScreen(
+
+            // ── TIMELINE ──────────────────────────────────────────────────────
+            androidx.compose.animation.AnimatedVisibility(
+                visible = activeTab == BottomTab.TIMELINE,
+                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(120)),
+                exit  = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                TimelineScreen(
                     viewModel = timelineVM,
                     repository = repository,
                     myPubkey = pubkeyHex,
                     myPictureUrl = myProfile?.picture,
                     myDisplayName = myProfile?.displayedName ?: ""
                 )
-                BottomTab.MINIAPP -> SettingsScreen(
+            }
+
+            // ── HOME ──────────────────────────────────────────────────────────
+            androidx.compose.animation.AnimatedVisibility(
+                visible = activeTab == BottomTab.HOME,
+                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(120)),
+                exit  = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                HomeScreen(viewModel = homeVM, repository = repository)
+            }
+
+            // ── TALK ──────────────────────────────────────────────────────────
+            androidx.compose.animation.AnimatedVisibility(
+                visible = activeTab == BottomTab.TALK,
+                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(120)),
+                exit  = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                TalkScreen(viewModel = talkVM)
+            }
+
+            // ── MINIAPP (Settings) — 軽量なため都度レンダリングで問題なし ────
+            if (activeTab == BottomTab.MINIAPP) {
+                SettingsScreen(
                     authViewModel = authViewModel,
                     repository = repository,
                     prefs = app.prefs,

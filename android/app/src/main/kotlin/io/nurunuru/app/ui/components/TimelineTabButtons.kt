@@ -46,7 +46,7 @@ fun TimelineTabButton(
                 modifier = Modifier
                     .size(10.dp)
                     .offset(x = 2.dp, y = (-2).dp)
-                    .background(Color.Red, CircleShape)
+                    .background(LineGreen, CircleShape)
                     .border(2.dp, nuruColors.bgSecondary, CircleShape)
             )
         }

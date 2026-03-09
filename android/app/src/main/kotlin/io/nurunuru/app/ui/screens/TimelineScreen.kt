@@ -1,7 +1,12 @@
 package io.nurunuru.app.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -74,6 +79,7 @@ fun TimelineScreen(
                     feedType = uiState.feedType,
                     onFeedTypeChange = { viewModel.switchFeed(it) },
                     showRecommendedDot = uiState.hasNewRecommendations,
+                    showFollowingDot = uiState.hasNewFollowing,
                     onSearchClick = { showSearchModal = true },
                     onNotificationsClick = { showNotificationsModal = true }
                 )
@@ -102,6 +108,10 @@ fun TimelineScreen(
                     repository = repository,
                     feedType = if (page == 0) FeedType.GLOBAL else FeedType.FOLLOWING,
                     onProfileClick = { viewingPubkey = it },
+                    onHashtagClick = { tag ->
+                        showSearchModal = true
+                        viewModel.search(tag)
+                    },
                     myPubkey = myPubkey
                 )
             }
@@ -162,11 +172,13 @@ private fun TimelineContent(
     repository: io.nurunuru.app.data.NostrRepository,
     feedType: FeedType,
     onProfileClick: (String) -> Unit,
+    onHashtagClick: (String) -> Unit,
     myPubkey: String
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
     val pullRefreshState = rememberPullToRefreshState()
     if (pullRefreshState.isRefreshing) {
@@ -186,6 +198,7 @@ private fun TimelineContent(
             .background(nuruColors.bgPrimary)
     ) {
         val displayPosts = if (feedType == FeedType.GLOBAL) uiState.globalPosts else uiState.followingPosts
+        val pendingPosts = if (feedType == FeedType.GLOBAL) uiState.pendingGlobalPosts else uiState.pendingFollowingPosts
 
         val isLoading = if (feedType == FeedType.GLOBAL) uiState.isGlobalLoading else uiState.isFollowingLoading
         val error = if (feedType == FeedType.GLOBAL) uiState.globalError else uiState.followingError
@@ -229,7 +242,8 @@ private fun TimelineContent(
                                 onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
                                 onNotInterested = notInterestedCallback,
                                 birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
-                                isOwnPost = post.event.pubkey == myPubkey
+                                isOwnPost = post.event.pubkey == myPubkey,
+                                onHashtagClick = onHashtagClick
                             )
                         } else {
                             PostItem(
@@ -244,7 +258,8 @@ private fun TimelineContent(
                                 onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
                                 onNotInterested = notInterestedCallback,
                                 birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
-                                isOwnPost = post.event.pubkey == myPubkey
+                                isOwnPost = post.event.pubkey == myPubkey,
+                                onHashtagClick = onHashtagClick
                             )
                         }
                     }
@@ -258,5 +273,23 @@ private fun TimelineContent(
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = LineGreen
         )
+
+        // 新着投稿ピル通知
+        AnimatedVisibility(
+            visible = pendingPosts.isNotEmpty(),
+            enter = fadeIn() + slideInVertically { -it },
+            exit = fadeOut() + slideOutVertically { -it },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 8.dp)
+        ) {
+            NewPostsPill(
+                pendingPosts = pendingPosts,
+                onClick = {
+                    viewModel.flushPendingPosts(feedType)
+                    coroutineScope.launch { listState.animateScrollToItem(0) }
+                }
+            )
+        }
     }
 }
