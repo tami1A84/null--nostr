@@ -172,12 +172,20 @@ class NostrCache(context: Context) {
 
     fun getCachedTimeline(): String? {
         timelineCache.get("events")?.let { return it }
-        return getRaw("timeline_events")
+        // TTL チェックをスキップして生データを読む。
+        // タイムラインキャッシュは「フレッシュなデータが届くまでの表示用」なので
+        // 期限切れでも古いポストを見せることに問題はなく、
+        // fetchFollowTimeline() が成功するたびに常に上書きされる。
+        val raw = prefs.getString(prefix + "timeline_events", null) ?: return null
+        return try {
+            json.decodeFromString<CacheEntry>(raw).data
+        } catch (_: Exception) { null }
     }
 
     fun setCachedTimeline(eventsJson: String) {
         timelineCache.set("events", eventsJson)
-        setRaw("timeline_events", eventsJson, Constants.CacheDuration.TIMELINE)
+        // TTL は実質不要だが既存の CacheEntry 形式に合わせて 30 日で保持する。
+        setRaw("timeline_events", eventsJson, 30L * 24 * 60 * 60 * 1000)
     }
 
     // ─── Notification Cache (1 day) ──────────────────────────────────────────

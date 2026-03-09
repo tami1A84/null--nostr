@@ -23,6 +23,13 @@ class NostrRepository(
     /** Toggle for using the Rust core for heavy operations. */
     private var useRustCore: Boolean = true
 
+    /**
+     * 直近の fetchRecommendedFromMainRelay で構築したスコアリングコンテキストをキャッシュ。
+     * ライブ新着投稿のスコアリングに再利用することで、リレーへの追加フェッチを避ける。
+     */
+    @Volatile
+    private var cachedScoringContext: RecommendationEngine.ScoringContext? = null
+
     fun setUseRustCore(enabled: Boolean) {
         useRustCore = enabled
     }
@@ -191,6 +198,8 @@ class NostrRepository(
             userGeohash = prefs.userGeohash,
             mutedPubkeys = getCachedMuteList(myPubkey)?.pubkeys?.toSet() ?: emptySet()
         )
+        // ライブ新着投稿の即時スコアリングに再利用するためキャッシュ
+        cachedScoringContext = scoringCtx
         val scored = recommendationEngine.getRecommendedPosts(enriched, scoringCtx, limit)
 
         // 4. ミュートフィルタ（pubkey + eventId）
@@ -231,7 +240,7 @@ class NostrRepository(
                             android.util.Log.w("NostrRepository", "Event parse failed: ${e.message}")
                             null
                         }
-                    }
+                    }.distinctBy { it.id }
                     enrichPosts(events)
                 } catch (e: Exception) {
                     android.util.Log.e("NostrRepository", "Rust fetchGlobalTimeline failed, falling back", e)
@@ -335,7 +344,7 @@ class NostrRepository(
                 if (eventsJson.isEmpty()) return@withContext emptyList()
                 val events = eventsJson.mapNotNull { json ->
                     try { Json.decodeFromString<NostrEvent>(json) } catch (_: Exception) { null }
-                }
+                }.distinctBy { it.id }
                 android.util.Log.d("NostrRepository", "nostrdb cache-first: ${events.size} events")
                 enrichPosts(events)
             } catch (e: Exception) {
@@ -377,7 +386,7 @@ class NostrRepository(
                             android.util.Log.w("NostrRepository", "Event parse failed: ${e.message}")
                             null
                         }
-                    }
+                    }.distinctBy { it.id }
                     enrichPosts(events)
                 } catch (e: Exception) {
                     android.util.Log.e("NostrRepository", "Rust fetchFollowTimeline failed, falling back", e)
@@ -398,7 +407,7 @@ class NostrRepository(
             limit = limit,
             since = getOneHourAgo()
         )
-        val events = client.fetchEvents(filter, timeoutMs = 6_000)
+        val events = client.fetchEvents(filter, timeoutMs = 6_000).distinctBy { it.id }
         return enrichPosts(events)
     }
 
@@ -795,7 +804,7 @@ class NostrRepository(
         if (eventIds.isEmpty()) return emptyList()
 
         val eventsFilter = NostrClient.Filter(ids = eventIds)
-        val posts = enrichPosts(client.fetchEvents(eventsFilter, timeoutMs = 6_000).sortedByDescending { it.createdAt })
+        val posts = enrichPosts(client.fetchEvents(eventsFilter, timeoutMs = 6_000).distinctBy { it.id }.sortedByDescending { it.createdAt })
         try {
             cache.setCachedUserLikes(pubkeyHex,
                 json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ScoredPost.serializer()), posts))
@@ -1812,6 +1821,62 @@ class NostrRepository(
 
     /** Public entry point for live-stream enrichment from ViewModels. */
     suspend fun enrichPostsDirect(events: List<NostrEvent>): List<ScoredPost> = enrichPosts(events)
+
+    /**
+     * おすすめタイムライン用フルスコアリング・フィルタリングをライブ投稿に適用する。
+     *
+     * 直近の fetchRecommendedFromMainRelay で構築した ScoringContext を再利用するため
+     * 追加のリレーフェッチは発生しない。コンテキスト未構築時は最低限のキャッシュデータで代替。
+     *
+     * 適用されるフィルター・アルゴリズム:
+     *   - ミュートフィルター (pubkey + eventId)
+     *   - プロフィール品質フィルター (アイコン・名前なし除外)
+     *   - not-interested 除外
+     *   - RecommendationEngine スコアリング (エンゲージメント・ソーシャルブースト・時間減衰)
+     *   - 言語ブースト (ジオハッシュ由来の期待言語とのマッチ)
+     *   - リプライ除外 (e タグあり)
+     */
+    fun scoreForRecommended(posts: List<ScoredPost>): List<ScoredPost> {
+        if (posts.isEmpty()) return emptyList()
+
+        // キャッシュ済みコンテキストを使用。未構築ならキャッシュから最低限のコンテキストを組み立てる
+        val ctx = cachedScoringContext ?: run {
+            val myPubkey = prefs.publicKeyHex ?: return emptyList()
+            RecommendationEngine.ScoringContext(
+                followList = getCachedFollowList(myPubkey)?.toSet() ?: emptySet(),
+                mutedPubkeys = getCachedMuteList(myPubkey)?.pubkeys?.toSet() ?: emptySet(),
+                userGeohash = prefs.userGeohash
+            )
+        }
+
+        // ライブ投稿はエンゲージメントデータがまだ存在しないため post 内の値を使う
+        val engagements = posts.associate { it.event.id to RecommendationEngine.EngagementCounts(
+            likes = it.likeCount,
+            reposts = it.repostCount,
+            replies = it.replyCount,
+            zaps = if (it.zapAmount <= 0) 0
+                   else (kotlin.math.ln(it.zapAmount.toDouble() / 1000.0 + 1.0) * 10).toInt().coerceAtLeast(1)
+        ) }
+        val profileMap = posts.mapNotNull { it.profile?.let { p -> p.pubkey to p } }.toMap()
+
+        val enrichedCtx = ctx.copy(
+            engagements = ctx.engagements + engagements,
+            profiles = ctx.profiles + profileMap
+        )
+
+        // mutedIds はコンテキストに含まれないので再取得
+        val mutedIds = getCachedMuteList(prefs.publicKeyHex ?: "")?.eventIds?.toSet() ?: emptySet()
+
+        return posts
+            .filter { it.event.getTagValues("e").isEmpty() }  // リプライ除外
+            .filter { it.event.id !in mutedIds }               // ミュート eventId
+            .map { post ->
+                val score = recommendationEngine.calculateScore(post.event, enrichedCtx)
+                post.copy(score = score)
+            }
+            .filter { it.score > 0 }                           // ミュート pubkey・not-interested・品質フィルタ適用済み
+            .sortedByDescending { it.score }
+    }
 
     private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> = coroutineScope {
         if (events.isEmpty()) return@coroutineScope emptyList()

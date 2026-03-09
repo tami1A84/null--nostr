@@ -148,13 +148,86 @@ class RecommendationEngine(context: Context) {
         // Geohash proximity boost
         val geohashBoost = calculateGeohashBoost(context.userGeohash, profile)
 
+        // Regional language boost: prefer content in the language expected for the user's region
+        val languageBoost = calculateLanguageBoost(context.userGeohash, post.content)
+
         // Author modifier from feedback history
         val authorModifier = tracker.getAuthorScore(authorPubkey)
 
         // Time decay
         val timeDecay = calculateTimeDecay(post.createdAt)
 
-        return engagementScore * socialBoost * authorQuality * geohashBoost * authorModifier * timeDecay
+        return engagementScore * socialBoost * authorQuality * geohashBoost * languageBoost * authorModifier * timeDecay
+    }
+
+    // ─── Language Boost ──────────────────────────────────────────────────────
+
+    /**
+     * Detect the dominant script family in a text snippet.
+     * Returns "ja" if Japanese characters (hiragana/katakana/kanji) dominate,
+     * "ko" if Hangul dominates, "zh" if CJK-only (no kana) dominates,
+     * or "other" for Latin/mixed/unknown content.
+     */
+    private fun detectScript(content: String): String {
+        var japanese = 0   // hiragana + katakana + CJK (used in ja context)
+        var hangul = 0
+        var latin = 0
+        var kana = 0       // hiragana or katakana only (strong ja signal)
+
+        for (ch in content) {
+            val code = ch.code
+            when {
+                code in 0x3040..0x309F || code in 0x30A0..0x30FF -> { japanese++; kana++ } // hiragana / katakana
+                code in 0x4E00..0x9FFF || code in 0x3400..0x4DBF -> japanese++ // CJK unified ideographs
+                code in 0xAC00..0xD7AF || code in 0x1100..0x11FF -> hangul++   // Hangul
+                code in 0x41..0x5A || code in 0x61..0x7A -> latin++            // Latin A-Z
+            }
+        }
+
+        val total = japanese + hangul + latin
+        if (total < 5) return "other" // too short to judge
+
+        return when {
+            kana >= 2 -> "ja"                           // any kana = definitely Japanese
+            japanese > 0 && japanese >= latin / 2 -> "ja" // CJK-heavy, probably Japanese
+            hangul > japanese && hangul > latin -> "ko"
+            latin > japanese * 2 && latin > hangul * 2 -> "other" // clearly Latin
+            else -> "other"
+        }
+    }
+
+    /**
+     * Infer the expected script for a user's geohash region.
+     * Japan spans geohash prefixes xn (Honshu/Kyushu), xp (Hokkaido/Tohoku),
+     * xm (Kyushu/Okinawa-adjacent), and wm (southern islands).
+     * Returns null for regions without a clear single-language expectation.
+     */
+    private fun expectedScriptFromGeohash(geohash: String?): String? {
+        if (geohash.isNullOrBlank()) return null
+        val prefix2 = geohash.take(2).lowercase()
+        return when (prefix2) {
+            "xn", "xp", "xm" -> "ja" // Japan
+            "wm", "wn" -> "ja"        // Ryukyu / southern Japan
+            else -> null              // Neutral: no language expectation imposed
+        }
+    }
+
+    /**
+     * Soft-boost posts whose script matches the language expected in the user's region.
+     * - Match (e.g. user in Japan, post in Japanese): 1.5×
+     * - No regional expectation or ambiguous content: 1.0 (neutral)
+     * - Clear mismatch (user in Japan, post is all-Latin): 0.7×
+     */
+    private fun calculateLanguageBoost(userGeohash: String?, content: String): Double {
+        val expected = expectedScriptFromGeohash(userGeohash) ?: return 1.0
+        if (content.isBlank()) return 1.0
+
+        val detected = detectScript(content)
+        return when {
+            detected == expected -> 1.5
+            detected == "other" -> 1.0  // Mixed / code / URLs — keep neutral
+            else -> 0.7                 // Clear script mismatch
+        }
     }
 
     private fun calculateGeohashBoost(userGeohash: String?, profile: UserProfile?): Double {

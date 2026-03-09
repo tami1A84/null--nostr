@@ -197,7 +197,10 @@ private fun TimelineContent(
             .nestedScroll(pullRefreshState.nestedScrollConnection)
             .background(nuruColors.bgPrimary)
     ) {
-        val displayPosts = if (feedType == FeedType.GLOBAL) uiState.globalPosts else uiState.followingPosts
+        // distinctBy は ViewModel 側で保証済みだが、非同期 state 更新の
+        // フレーム境界で重複が紛れ込んだ場合の最終防衛として残す。
+        val displayPosts = (if (feedType == FeedType.GLOBAL) uiState.globalPosts else uiState.followingPosts)
+            .distinctBy { it.event.id }
         val pendingPosts = if (feedType == FeedType.GLOBAL) uiState.pendingGlobalPosts else uiState.pendingFollowingPosts
 
         val isLoading = if (feedType == FeedType.GLOBAL) uiState.isGlobalLoading else uiState.isFollowingLoading

@@ -147,38 +147,16 @@ fun NotificationRow(
             .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Avatar and Type Icon
-        Box(contentAlignment = Alignment.BottomEnd) {
-            AsyncImage(
-                model = profile?.picture,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(nuruColors.bgTertiary)
-                    .clickable { onProfileClick(notification.pubkey) },
-                contentScale = ContentScale.Crop
-            )
-
-            val iconBg = when (notification.type) {
-                "reaction" -> Color(0xFFE91E63)
-                "zap" -> Color(0xFFFFC107)
-                else -> Color(0xFFEF5350)
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(16.dp)
-                    .offset(x = 2.dp, y = 2.dp)
-                    .background(iconBg, CircleShape)
-                    .background(nuruColors.bgPrimary, CircleShape) // pseudo-border
-                    .padding(2.dp)
-                    .background(iconBg, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                // Icons could be added here
-            }
-        }
+        AsyncImage(
+            model = profile?.picture,
+            contentDescription = null,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(nuruColors.bgTertiary)
+                .clickable { onProfileClick(notification.pubkey) },
+            contentScale = ContentScale.Crop
+        )
 
         Column(modifier = Modifier.weight(1f)) {
             Row(

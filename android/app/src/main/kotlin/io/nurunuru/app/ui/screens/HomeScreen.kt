@@ -144,7 +144,8 @@ fun HomeScreen(
                             }
                         }
                     } else {
-                        val displayPosts = if (uiState.activeTab == 0) uiState.posts else uiState.likedPosts
+                        val displayPosts = (if (uiState.activeTab == 0) uiState.posts else uiState.likedPosts)
+                            .distinctBy { it.event.id }
                         if (displayPosts.isEmpty()) {
                             item {
                                 EmptyState(

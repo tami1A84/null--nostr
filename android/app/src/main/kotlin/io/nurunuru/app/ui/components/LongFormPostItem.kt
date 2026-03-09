@@ -384,12 +384,10 @@ fun ArticleReaderModal(
                     HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
                     Spacer(Modifier.height(20.dp))
 
-                    // Content
-                    Text(
-                        text = post.event.content,
-                        style = MaterialTheme.typography.bodyMedium,
-                        lineHeight = 24.sp,
-                        color = nuruColors.textPrimary
+                    // Markdown content
+                    MarkdownContent(
+                        content = post.event.content,
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     Spacer(Modifier.height(40.dp))

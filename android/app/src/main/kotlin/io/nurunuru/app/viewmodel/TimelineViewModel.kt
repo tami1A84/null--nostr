@@ -57,8 +57,17 @@ class TimelineViewModel(
     private var liveSubId: String? = null
     private var livePollingJob: Job? = null
 
-    /** IDs of posts already in the timeline, used to deduplicate live events. */
-    private val seenEventIds = mutableSetOf<String>()
+    /**
+     * IDs of events already processed by the live stream.
+     * Uses ConcurrentHashMap.newKeySet() for thread safety — the live polling
+     * loop runs on Dispatchers.IO while loadFollowingTimeline/loadGlobalTimeline
+     * add to this set on Dispatchers.Main after suspension.
+     */
+    private val seenEventIds: MutableSet<String> =
+        java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** Deduplicates a post list by event ID, keeping the first occurrence. */
+    private fun List<ScoredPost>.deduped() = distinctBy { it.event.id }
 
     init {
         loadData()
@@ -101,17 +110,18 @@ class TimelineViewModel(
                     val posts = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
                         .decodeFromString<List<io.nurunuru.app.data.models.ScoredPost>>(cachedFollowing)
                     if (posts.isNotEmpty()) {
-                        seenEventIds.addAll(posts.map { it.event.id })
-                        _uiState.update { it.copy(followingPosts = posts, isFollowingLoading = false) }
+                        val deduped = posts.deduped()
+                        seenEventIds.addAll(deduped.map { it.event.id })
+                        _uiState.update { it.copy(followingPosts = deduped, isFollowingLoading = false) }
                         cacheShown = true
-                        android.util.Log.d("TimelineViewModel", "JSON cache: ${posts.size} posts shown")
+                        android.util.Log.d("TimelineViewModel", "JSON cache: ${deduped.size} posts shown")
                     }
                 } catch (_: Exception) { }
             }
 
             // Cache-first step 2: Fall back to nostrdb queryLocal if JSON cache unavailable
             if (!cacheShown) {
-                val nostrdbPosts = repository.fetchCachedFollowTimeline(pubkeyHex, 50)
+                val nostrdbPosts = repository.fetchCachedFollowTimeline(pubkeyHex, 50).deduped()
                 if (nostrdbPosts.isNotEmpty()) {
                     seenEventIds.addAll(nostrdbPosts.map { it.event.id })
                     _uiState.update { it.copy(followingPosts = nostrdbPosts, isFollowingLoading = false) }
@@ -140,6 +150,9 @@ class TimelineViewModel(
         seenEventIds.clear()
         seenEventIds.addAll(state.globalPosts.map { it.event.id })
         seenEventIds.addAll(state.followingPosts.map { it.event.id })
+
+        // おすすめタブ用の内部バッファ。50件たまったらピルを表示する。
+        val liveGlobalBuffer = mutableListOf<ScoredPost>()
 
         // Subscribe globally so both tabs receive all new events in real time.
         // Using an empty authors list sends a REQ with no author filter, which
@@ -172,31 +185,49 @@ class TimelineViewModel(
                     val enriched = repository.enrichPostsDirect(fresh)
                     if (enriched.isEmpty()) continue
 
+                    // おすすめタブ: フルアルゴリズム適用（ミュート・品質・言語ブースト・スコアリング）
+                    val scoredForGlobal = repository.scoreForRecommended(enriched)
+
+                    // フォロータブ: ミュートフィルターのみ適用（IO スレッド上、cheap）
+                    val mutedPubkeys = repository.getCachedMuteList(pubkeyHex)
+                        ?.pubkeys?.toSet() ?: emptySet()
+
+                    // おすすめタブ: 表示済みでない投稿のみバッファに追加
+                    val existingGlobalIds = _uiState.value.globalPosts.mapTo(HashSet()) { it.event.id }
+                    val newGlobal = scoredForGlobal.filter { it.event.id !in existingGlobalIds }
+                    liveGlobalBuffer.addAll(newGlobal)
+
                     withContext(Dispatchers.Main) {
                         val followSet = _uiState.value.followList.toSet()
                         _uiState.update { state ->
-                            val existingGlobalIds = state.globalPosts.mapTo(HashSet()) { it.event.id }
-                            val pendingGlobalIds = state.pendingGlobalPosts.mapTo(HashSet()) { it.event.id }
                             val existingFollowIds = state.followingPosts.mapTo(HashSet()) { it.event.id }
                             val pendingFollowIds = state.pendingFollowingPosts.mapTo(HashSet()) { it.event.id }
 
-                            // おすすめタブにはリプライ（e タグあり）を追加しない
-                            val newGlobal = enriched.filter {
-                                it.event.id !in existingGlobalIds &&
-                                it.event.id !in pendingGlobalIds &&
-                                it.event.getTagValues("e").isEmpty()
-                            }
                             val newFollow = enriched.filter {
                                 followSet.contains(it.event.pubkey) &&
                                 it.event.id !in existingFollowIds &&
-                                it.event.id !in pendingFollowIds
+                                it.event.id !in pendingFollowIds &&
+                                it.event.pubkey !in mutedPubkeys
                             }
-                            state.copy(
-                                pendingGlobalPosts = newGlobal + state.pendingGlobalPosts,
-                                pendingFollowingPosts = newFollow + state.pendingFollowingPosts,
-                                hasNewFollowing = state.hasNewFollowing ||
-                                    (state.feedType != FeedType.FOLLOWING && newFollow.isNotEmpty())
-                            )
+
+                            // おすすめタブ: 50件たまったらピルを表示してバッファをクリア
+                            val showGlobalPill = liveGlobalBuffer.size >= 50
+                            if (showGlobalPill) {
+                                val buffered = liveGlobalBuffer.deduped()
+                                liveGlobalBuffer.clear()
+                                state.copy(
+                                    pendingGlobalPosts = (buffered + state.pendingGlobalPosts).deduped(),
+                                    pendingFollowingPosts = (newFollow + state.pendingFollowingPosts).deduped(),
+                                    hasNewFollowing = state.hasNewFollowing ||
+                                        (state.feedType != FeedType.FOLLOWING && newFollow.isNotEmpty())
+                                )
+                            } else {
+                                state.copy(
+                                    pendingFollowingPosts = (newFollow + state.pendingFollowingPosts).deduped(),
+                                    hasNewFollowing = state.hasNewFollowing ||
+                                        (state.feedType != FeedType.FOLLOWING && newFollow.isNotEmpty())
+                                )
+                            }
                         }
                     }
                 }
@@ -239,7 +270,7 @@ class TimelineViewModel(
                 else it.copy(isGlobalLoading = true, globalError = null)
             }
             try {
-                val posts = repository.fetchRecommendedTimeline(50)
+                val posts = repository.fetchRecommendedTimeline(50).deduped()
                 seenEventIds.addAll(posts.map { it.event.id })
                 _uiState.update { state ->
                     state.copy(
@@ -292,7 +323,7 @@ class TimelineViewModel(
                 )
             }
             try {
-                val posts = repository.fetchFollowTimeline(pubkeyHex, 50)
+                val posts = repository.fetchFollowTimeline(pubkeyHex, 50).deduped()
                 seenEventIds.addAll(posts.map { it.event.id })
                 _uiState.update { state ->
                     state.copy(
@@ -334,16 +365,24 @@ class TimelineViewModel(
         }
     }
 
-    /** Flush pending posts into the visible timeline for the given feed. */
+    /**
+     * 新着ピルのタップ処理。
+     *
+     * おすすめタブ: pending を破棄して fetchRecommendedTimeline() を再実行する。
+     *   エンゲージメントデータ込みのフルアルゴリズムでフィードを置き換えるため、
+     *   pending を単純に prepend するより質の高い結果になる。
+     *
+     * フォロータブ: 新着を先頭に prepend（タイムライン感を維持）。
+     */
     fun flushPendingPosts(feedType: FeedType = _uiState.value.feedType) {
-        _uiState.update { state ->
-            when (feedType) {
-                FeedType.GLOBAL -> state.copy(
-                    globalPosts = state.pendingGlobalPosts + state.globalPosts,
-                    pendingGlobalPosts = emptyList()
-                )
-                FeedType.FOLLOWING -> state.copy(
-                    followingPosts = state.pendingFollowingPosts + state.followingPosts,
+        when (feedType) {
+            FeedType.GLOBAL -> {
+                _uiState.update { it.copy(pendingGlobalPosts = emptyList()) }
+                loadGlobalTimeline(isRefresh = true)
+            }
+            FeedType.FOLLOWING -> _uiState.update { state ->
+                state.copy(
+                    followingPosts = (state.pendingFollowingPosts + state.followingPosts).deduped(),
                     pendingFollowingPosts = emptyList()
                 )
             }

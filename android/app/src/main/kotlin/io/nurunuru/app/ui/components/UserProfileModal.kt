@@ -261,9 +261,10 @@ fun UserProfileModal(
                             }
                         }
 
-                        val displayPosts = if (uiState.searchResults.isNotEmpty()) uiState.searchResults
+                        val displayPosts = (if (uiState.searchResults.isNotEmpty()) uiState.searchResults
                                           else if (uiState.activeTab == 0) uiState.posts
-                                          else uiState.likedPosts
+                                          else uiState.likedPosts)
+                            .distinctBy { it.event.id }
 
                         items(displayPosts, key = { (if (uiState.searchResults.isNotEmpty()) "search_" else "") + it.event.id }) { post ->
                             if (post.event.kind == 30023) {
