@@ -48,7 +48,8 @@ fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
-        if (uiState.profile == null) {
+        // MainScreen のバックグラウンドプリフェッチで既にロード中なら二重呼び出しを防ぐ
+        if (uiState.profile == null && !uiState.isLoading) {
             viewModel.loadMyProfile()
         }
     }

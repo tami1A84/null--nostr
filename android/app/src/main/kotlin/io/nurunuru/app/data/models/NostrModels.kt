@@ -100,6 +100,7 @@ data class ImportResult(
     val skipped: Int
 )
 
+@Serializable
 data class NotificationItem(
     val id: String,
     val pubkey: String,
@@ -111,6 +112,7 @@ data class NotificationItem(
     val emojiUrl: String? = null
 )
 
+@Serializable
 data class NotificationResult(
     val items: List<NotificationItem>,
     val profiles: Map<String, UserProfile>,

@@ -109,6 +109,11 @@ class AppPreferences(context: Context) {
         get() = prefs.getFloat(KEY_USER_LON, 0.0f).toDouble()
         set(value) = prefs.edit().putFloat(KEY_USER_LON, value.toFloat()).apply()
 
+    /** おすすめタイムラインに使うメインリレー（最寄りリレーリストから選択した1つ）。Web版の nurunuru_default_relay に相当。 */
+    var mainRelay: String
+        get() = prefs.getString(KEY_MAIN_RELAY, DEFAULT_RELAYS.first()) ?: DEFAULT_RELAYS.first()
+        set(value) = prefs.edit().putString(KEY_MAIN_RELAY, value).apply()
+
     var nip65Relays: List<io.nurunuru.app.data.models.Nip65Relay>
         get() {
             val jsonStr = prefs.getString(KEY_NIP65_RELAYS, "[]") ?: "[]"
@@ -176,5 +181,6 @@ class AppPreferences(context: Context) {
         private const val KEY_USER_LAT = "user_lat"
         private const val KEY_USER_LON = "user_lon"
         private const val KEY_NIP65_RELAYS = "nip65_relays"
+        private const val KEY_MAIN_RELAY = "main_relay"
     }
 }

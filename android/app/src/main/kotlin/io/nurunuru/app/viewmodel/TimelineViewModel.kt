@@ -19,6 +19,8 @@ sealed class SearchNavigationEvent {
 data class TimelineUiState(
     val globalPosts: List<ScoredPost> = emptyList(),
     val followingPosts: List<ScoredPost> = emptyList(),
+    val pendingGlobalPosts: List<ScoredPost> = emptyList(),
+    val pendingFollowingPosts: List<ScoredPost> = emptyList(),
     val isGlobalLoading: Boolean = false,
     val isFollowingLoading: Boolean = false,
     val isGlobalRefreshing: Boolean = false,
@@ -31,6 +33,7 @@ data class TimelineUiState(
     val isSearching: Boolean = false,
     val recentSearches: List<String> = emptyList(),
     val hasNewRecommendations: Boolean = false,
+    val hasNewFollowing: Boolean = false,
     val followList: List<String> = emptyList(),
     val birdwatchNotes: Map<String, List<io.nurunuru.app.data.models.NostrEvent>> = emptyMap()
 )
@@ -68,6 +71,27 @@ class TimelineViewModel(
             // Parallel load to speed up initial state
             val followListJob = launch { loadFollowList() }
             val globalJob = launch { loadGlobalTimeline() }
+
+            // バックグラウンドで設定をプリフェッチ（UIをブロックしない）
+            launch(Dispatchers.IO) {
+                val pk = pubkeyHex.ifEmpty { return@launch }
+                listOf(
+                    suspend { repository.fetchMuteList(pk) },
+                    suspend { repository.fetchEmojiList(pk) },
+                    suspend { repository.fetchProfileBadgesInfo(pk) }
+                ).forEach { fetch ->
+                    try { fetch() }
+                    catch (e: Exception) {
+                        android.util.Log.w("TimelineViewModel", "Settings prefetch failed: ${e.message}")
+                    }
+                }
+                // NIP-65リレー同期
+                try {
+                    repository.syncNip65Relays(pk)
+                } catch (e: Exception) {
+                    android.util.Log.w("TimelineViewModel", "NIP-65 relay sync failed: ${e.message}")
+                }
+            }
 
             // Cache-first step 1: Try JSON cache (fully-enriched, instant decode)
             var cacheShown = false
@@ -144,23 +168,34 @@ class TimelineViewModel(
                     android.util.Log.d("TimelineViewModel",
                         "Live: ${fresh.size} new event(s) received")
 
-                    // Enrich with profile + engagement data on IO, then push to UI.
+                    // Enrich with profile + engagement data on IO, then push to pending buffer.
                     val enriched = repository.enrichPostsDirect(fresh)
                     if (enriched.isEmpty()) continue
 
                     withContext(Dispatchers.Main) {
                         val followSet = _uiState.value.followList.toSet()
                         _uiState.update { state ->
-                            // Deduplicate against the current lists to guard against
-                            // posts added after seenEventIds was seeded (e.g. relay
-                            // fetch completing after live stream started).
                             val existingGlobalIds = state.globalPosts.mapTo(HashSet()) { it.event.id }
+                            val pendingGlobalIds = state.pendingGlobalPosts.mapTo(HashSet()) { it.event.id }
                             val existingFollowIds = state.followingPosts.mapTo(HashSet()) { it.event.id }
+                            val pendingFollowIds = state.pendingFollowingPosts.mapTo(HashSet()) { it.event.id }
+
+                            // おすすめタブにはリプライ（e タグあり）を追加しない
+                            val newGlobal = enriched.filter {
+                                it.event.id !in existingGlobalIds &&
+                                it.event.id !in pendingGlobalIds &&
+                                it.event.getTagValues("e").isEmpty()
+                            }
+                            val newFollow = enriched.filter {
+                                followSet.contains(it.event.pubkey) &&
+                                it.event.id !in existingFollowIds &&
+                                it.event.id !in pendingFollowIds
+                            }
                             state.copy(
-                                globalPosts = enriched.filter { it.event.id !in existingGlobalIds } + state.globalPosts,
-                                followingPosts = enriched.filter {
-                                    followSet.contains(it.event.pubkey) && it.event.id !in existingFollowIds
-                                } + state.followingPosts
+                                pendingGlobalPosts = newGlobal + state.pendingGlobalPosts,
+                                pendingFollowingPosts = newFollow + state.pendingFollowingPosts,
+                                hasNewFollowing = state.hasNewFollowing ||
+                                    (state.feedType != FeedType.FOLLOWING && newFollow.isNotEmpty())
                             )
                         }
                     }
@@ -259,11 +294,14 @@ class TimelineViewModel(
             try {
                 val posts = repository.fetchFollowTimeline(pubkeyHex, 50)
                 seenEventIds.addAll(posts.map { it.event.id })
-                _uiState.update { it.copy(
-                    followingPosts = posts,
-                    isFollowingLoading = false,
-                    isFollowingRefreshing = false
-                ) }
+                _uiState.update { state ->
+                    state.copy(
+                        followingPosts = posts,
+                        isFollowingLoading = false,
+                        isFollowingRefreshing = false,
+                        hasNewFollowing = state.feedType != FeedType.FOLLOWING && posts.isNotEmpty()
+                    )
+                }
                 // Persist to cache
                 try {
                     val json = kotlinx.serialization.json.Json { encodeDefaults = true }
@@ -285,8 +323,30 @@ class TimelineViewModel(
 
     fun refresh() {
         when (_uiState.value.feedType) {
-            FeedType.GLOBAL -> loadGlobalTimeline(isRefresh = true)
-            FeedType.FOLLOWING -> loadFollowingTimeline(isRefresh = true)
+            FeedType.GLOBAL -> {
+                _uiState.update { it.copy(pendingGlobalPosts = emptyList()) }
+                loadGlobalTimeline(isRefresh = true)
+            }
+            FeedType.FOLLOWING -> {
+                _uiState.update { it.copy(pendingFollowingPosts = emptyList()) }
+                loadFollowingTimeline(isRefresh = true)
+            }
+        }
+    }
+
+    /** Flush pending posts into the visible timeline for the given feed. */
+    fun flushPendingPosts(feedType: FeedType = _uiState.value.feedType) {
+        _uiState.update { state ->
+            when (feedType) {
+                FeedType.GLOBAL -> state.copy(
+                    globalPosts = state.pendingGlobalPosts + state.globalPosts,
+                    pendingGlobalPosts = emptyList()
+                )
+                FeedType.FOLLOWING -> state.copy(
+                    followingPosts = state.pendingFollowingPosts + state.followingPosts,
+                    pendingFollowingPosts = emptyList()
+                )
+            }
         }
     }
 
@@ -310,7 +370,8 @@ class TimelineViewModel(
         _uiState.update {
             it.copy(
                 feedType = feedType,
-                hasNewRecommendations = if (feedType == FeedType.GLOBAL) false else it.hasNewRecommendations
+                hasNewRecommendations = if (feedType == FeedType.GLOBAL) false else it.hasNewRecommendations,
+                hasNewFollowing = if (feedType == FeedType.FOLLOWING) false else it.hasNewFollowing
             )
         }
         if (feedType == FeedType.GLOBAL && _uiState.value.globalPosts.isEmpty()) {

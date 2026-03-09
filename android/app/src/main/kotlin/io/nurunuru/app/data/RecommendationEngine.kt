@@ -164,8 +164,9 @@ class RecommendationEngine(context: Context) {
         val authorG = profile!!.geohash!!
 
         // Prefix matching for proximity (geohash length defines resolution)
-        // 4 chars ~= 20km, 3 chars ~= 150km
+        // 5 chars ~= 5km, 4 chars ~= 20km, 3 chars ~= 150km
         return when {
+            userG.take(5) == authorG.take(5) -> 3.0
             userG.take(4) == authorG.take(4) -> 2.0
             userG.take(3) == authorG.take(3) -> 1.5
             userG.take(2) == authorG.take(2) -> 1.2
@@ -316,10 +317,10 @@ class EngagementTracker(context: Context) {
         }
         prefs.edit().putString(KEY_NOT_INTERESTED, json.encodeToString(posts)).apply()
 
-        // Reduce author score by 30%
+        // 改善5: 線形減衰（複合乗算による飽和を防ぐ）
         val scores = getAuthorScoresMap().toMutableMap()
         val currentScore = scores[authorPubkey] ?: 1.0
-        scores[authorPubkey] = max(0.1, currentScore * 0.7)
+        scores[authorPubkey] = max(0.0, currentScore - 0.15)
 
         // Keep max 200 authors
         if (scores.size > 200) {

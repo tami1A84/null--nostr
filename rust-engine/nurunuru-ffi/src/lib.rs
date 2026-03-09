@@ -379,9 +379,18 @@ impl NuruNuruClient {
             .filter_map(|h| nostr::PublicKey::from_hex(h).ok())
             .collect();
 
+        let since_24h = nostr::Timestamp::from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+                .saturating_sub(86_400),
+        );
+
         let filter = nostr::Filter::new()
             .authors(pubkeys)
             .kind(nostr::Kind::TextNote)
+            .since(since_24h)
             .limit(limit as usize);
 
         let events = self
@@ -405,8 +414,17 @@ impl NuruNuruClient {
         &self,
         limit: u32,
     ) -> Result<Vec<String>, NuruNuruFfiError> {
+        let since_24h = nostr::Timestamp::from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+                .saturating_sub(86_400),
+        );
+
         let filter = nostr::Filter::new()
             .kind(nostr::Kind::TextNote)
+            .since(since_24h)
             .limit(limit as usize);
 
         let events = self

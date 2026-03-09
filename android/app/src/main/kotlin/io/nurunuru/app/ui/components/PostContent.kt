@@ -2,6 +2,7 @@ package io.nurunuru.app.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.style.TextOverflow
@@ -248,7 +250,8 @@ fun PostContent(
     post: ScoredPost,
     repository: io.nurunuru.app.data.NostrRepository,
     onProfileClick: (String) -> Unit,
-    overrideContent: String? = null
+    overrideContent: String? = null,
+    onHashtagClick: ((String) -> Unit)? = null
 ) {
     val nuruColors = LocalNuruColors.current
     val content = overrideContent ?: post.event.content
@@ -290,7 +293,15 @@ fun PostContent(
         parts.forEach { part ->
             when (part) {
                 is ContentPart.Text -> append(part.text)
-                is ContentPart.Hashtag -> withStyle(SpanStyle(color = nuruColors.lineGreen, fontWeight = FontWeight.Medium)) { append(part.tag) }
+                is ContentPart.Hashtag -> {
+                    if (onHashtagClick != null) {
+                        pushStringAnnotation("hashtag", part.tag)
+                    }
+                    withStyle(SpanStyle(color = nuruColors.lineGreen, fontWeight = FontWeight.Medium)) {
+                        append(part.tag)
+                    }
+                    if (onHashtagClick != null) pop()
+                }
                 is ContentPart.Emoji -> {
                     val shortcode = part.code.removeSurrounding(":")
                     val url = emojis[shortcode]
@@ -312,13 +323,27 @@ fun PostContent(
         }
     }
 
+    var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+
     Column {
         Text(
             text = annotated,
             inlineContent = inlineContent,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground,
-            lineHeight = 22.sp
+            lineHeight = 22.sp,
+            onTextLayout = { textLayoutResult = it },
+            modifier = if (onHashtagClick != null) Modifier.pointerInput(annotated) {
+                detectTapGestures { offset ->
+                    textLayoutResult?.let { layout ->
+                        val position = layout.getOffsetForPosition(offset)
+                        annotated.getStringAnnotations("hashtag", position, position)
+                            .firstOrNull()?.let { annotation ->
+                                onHashtagClick(annotation.item)
+                            }
+                    }
+                }
+            } else Modifier
         )
 
         // Render URL previews and embedded notes
@@ -492,8 +517,12 @@ fun PostMedia(post: ScoredPost, overrideContent: String? = null) {
     } else {
         extractPostImages(content).let { images ->
             if (images.isNotEmpty()) {
+                var selectedImageUrl by remember { mutableStateOf<String?>(null) }
                 Spacer(modifier = Modifier.height(8.dp))
-                PostImageGrid(images = images)
+                PostImageGrid(images = images, onImageClick = { selectedImageUrl = it })
+                selectedImageUrl?.let { url ->
+                    ImageViewerDialog(imageUrl = url, onDismiss = { selectedImageUrl = null })
+                }
             }
         }
     }
@@ -501,8 +530,7 @@ fun PostMedia(post: ScoredPost, overrideContent: String? = null) {
 
 
 @Composable
-fun PostImageGrid(images: List<String>) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+fun PostImageGrid(images: List<String>, onImageClick: ((String) -> Unit)? = null) {
     var showAll by remember { mutableStateOf(false) }
     val maxVisible = 4
     val visibleImages = if (showAll) images else images.take(maxVisible)
@@ -518,10 +546,7 @@ fun PostImageGrid(images: List<String>) {
                     .fillMaxWidth()
                     .heightIn(max = 360.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable {
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(images[0]))
-                        context.startActivity(intent)
-                    }
+                    .clickable { onImageClick?.invoke(images[0]) }
             )
         } else {
             val rows = (visibleImages.size + 1) / 2
@@ -544,12 +569,8 @@ fun PostImageGrid(images: List<String>) {
                                             .height(if (images.size == 3 && index == 0) 244.dp else 120.dp)
                                             .clip(RoundedCornerShape(8.dp))
                                             .clickable {
-                                                if (index == maxVisible - 1 && hiddenCount > 0) {
-                                                    showAll = true
-                                                } else {
-                                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(visibleImages[index]))
-                                                    context.startActivity(intent)
-                                                }
+                                                if (index == maxVisible - 1 && hiddenCount > 0) showAll = true
+                                                else onImageClick?.invoke(visibleImages[index])
                                             }
                                     )
                                     if (index == maxVisible - 1 && hiddenCount > 0) {

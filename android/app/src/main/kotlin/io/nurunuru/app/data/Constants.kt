@@ -34,6 +34,7 @@ object Constants {
         const val SHORT = 60_000L
         const val NIP05 = 300_000L
         const val RELAY_INFO = 3_600_000L
+        const val NOTIFICATION = 86_400_000L  // 1 day
     }
 
     object CacheMaxEntries {
