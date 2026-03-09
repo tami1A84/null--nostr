@@ -480,11 +480,16 @@ impl NuruNuruEngine {
 
     // ─── Recommended Feed ──────────────────────────────────────
 
-    /// Get a recommended feed using the X-algorithm-inspired ranking.
-    pub async fn get_recommended_feed(
+    /// Shared recommendation pipeline.
+    ///
+    /// Returns a map of `event_id → Event` (for later resolution) and
+    /// the scored+ranked posts.  Used by both the metadata API and the
+    /// timeline API so the heavy fetch logic lives in one place.
+    async fn build_recommendation_candidates(
         &self,
         limit: usize,
-    ) -> Result<Vec<ScoredPost>> {
+        user_geohash: Option<&str>,
+    ) -> Result<(HashMap<String, Event>, Vec<ScoredPost>)> {
         let follow_list = self.follow_list.read().await.clone();
         let muted = self.muted_pubkeys.read().await.clone();
         let second_degree = self.second_degree_follows.read().await.clone();
@@ -492,59 +497,118 @@ impl NuruNuruEngine {
         let not_interested = self.not_interested_posts.read().await.clone();
         let author_scores = self.author_scores.read().await.clone();
 
-        // Fetch from follow list + 2nd degree
-        let mut author_pks: Vec<PublicKey> = Vec::new();
-        for hex in follow_list.iter().chain(second_degree.iter()).take(200) {
-            if let Ok(pk) = PublicKey::from_hex(hex) {
-                author_pks.push(pk);
+        // Build author list for network fetch (follow + 2nd-degree, capped at 200)
+        let author_pks: Vec<PublicKey> = follow_list
+            .iter()
+            .chain(second_degree.iter())
+            .take(200)
+            .filter_map(|hex| PublicKey::from_hex(hex).ok())
+            .collect();
+
+        let since_48h = filters::since_hours_ago(48);
+        let since_1h = filters::since_hours_ago(1);
+
+        // Parallel fetch: network candidates (follow+2nd-degree, 48h) and
+        // out-of-network viral candidates (global, last 1h).
+        let (network_result, viral_result) = tokio::join!(
+            self.fetch_timeline(
+                if author_pks.is_empty() { None } else { Some(&author_pks) },
+                Some(since_48h),
+                limit * 2,
+            ),
+            self.fetch_timeline(None, Some(since_1h), limit),
+        );
+
+        let network_events = network_result.unwrap_or_default();
+        let viral_events = viral_result.unwrap_or_default();
+
+        // Merge and deduplicate by event ID
+        let mut seen_ids: HashSet<EventId> = HashSet::new();
+        let mut all_events: Vec<Event> = Vec::with_capacity(network_events.len() + viral_events.len());
+        for event in network_events.into_iter().chain(viral_events.into_iter()) {
+            if seen_ids.insert(event.id) {
+                all_events.push(event);
             }
         }
 
-        let since = filters::since_hours_ago(48);
-        let events = self
-            .fetch_timeline(
-                if author_pks.is_empty() {
-                    None
-                } else {
-                    Some(&author_pks)
-                },
-                Some(since),
-                limit * 3, // fetch more than needed for ranking
-            )
-            .await?;
+        // Collect unique authors for profile batch fetch
+        let unique_authors: Vec<PublicKey> = all_events
+            .iter()
+            .map(|e| e.pubkey)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
 
-        // Collect event IDs for engagement data
-        let event_ids: Vec<EventId> = events.iter().map(|e| e.id).collect();
-        let engagements = self.fetch_engagement_data(&event_ids).await?;
+        // Parallel: engagement data + author profiles
+        let event_ids: Vec<EventId> = all_events.iter().map(|e| e.id).collect();
+        let (engagements_result, profiles_result) = tokio::join!(
+            self.fetch_engagement_data(&event_ids),
+            self.fetch_profiles(&unique_authors),
+        );
+        let engagements = engagements_result.unwrap_or_default();
+        let profiles = profiles_result.unwrap_or_default();
 
-        // Build posts tuples
-        let posts: Vec<(String, String, u64)> = events
+        // Build event map (event_id hex → Event) for resolution after scoring
+        let event_map: HashMap<String, Event> = all_events
+            .iter()
+            .map(|e| (e.id.to_hex(), e.clone()))
+            .collect();
+
+        let posts: Vec<(String, String, u64)> = all_events
             .iter()
             .map(|e| (e.id.to_hex(), e.pubkey.to_hex(), e.created_at.as_secs()))
             .collect();
 
-        // Empty stats for now (could be populated from profile metadata)
         let author_stats: HashMap<String, u64> = HashMap::new();
-
-        let user_geohash: Option<String> = None; // TODO: load from settings
 
         let scored = self.recommendation.rank_feed(
             &posts,
             &engagements,
             &follow_list,
             &second_degree,
-            &HashSet::new(), // followers — would need separate fetch
+            &HashSet::new(),
             &engagement_history,
-            &HashMap::new(), // profiles — could cache
+            &profiles,
             &muted,
             &not_interested,
             &author_scores,
-            user_geohash.as_deref(),
+            user_geohash,
             &author_stats,
             limit,
         );
 
+        Ok((event_map, scored))
+    }
+
+    /// Get a recommended feed using the X-algorithm-inspired ranking.
+    /// Returns scored post metadata (event_id, pubkey, score, created_at).
+    pub async fn get_recommended_feed(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<ScoredPost>> {
+        let (_, scored) = self.build_recommendation_candidates(limit, None).await?;
         Ok(scored)
+    }
+
+    /// Get full Event objects ordered by recommendation score.
+    ///
+    /// `user_geohash` — the user's geohash from app settings (e.g. `"xn76u"`).
+    /// Pass `None` to skip proximity boosting.
+    pub async fn get_recommended_events_ordered(
+        &self,
+        limit: usize,
+        user_geohash: Option<String>,
+    ) -> Result<Vec<Event>> {
+        let (event_map, scored) = self
+            .build_recommendation_candidates(limit, user_geohash.as_deref())
+            .await?;
+
+        let ordered = scored
+            .into_iter()
+            .filter_map(|sp| event_map.get(&sp.event_id).cloned())
+            .collect();
+
+        Ok(ordered)
     }
 
     // ─── DMs (NIP-17) ──────────────────────────────────────────
