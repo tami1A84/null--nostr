@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-03-11
+
+### Added (Android)
+- 動画タップでミュート解除: フィードの動画をタップで音声ON/OFF切り替え（右下に🔇/🔊アイコン）
+- ProofModeバッジ: フィードの動画右上にレベル別バッジを表示
+  - 🛡 ProofMode（青）= `verified_mobile`、✓ ProofMode（緑）= `verified_web`
+- ミニアプリに「その他」カテゴリ追加: 外部ミニアプリを分類
+- DivineVideoRecorder・ProofModeManager に MPL-2.0 ライセンス表記追加
+
+### Fixed (Android)
+- 動画に音声が録音されない問題を修正: `withAudioEnabled()` を常に有効化
+- 投稿画面のツールバーがキーボードに隠れる問題を修正 (`imePadding` をツールバー直接に適用)
+- ミニアプリのURL入力フォームがキーボードに隠れる問題を修正
+- フィードの動画秒数表示: ハードコードの "6.3s" から `duration` タグの実際の値に変更
+- ProofMode verificationタグ名の誤り修正 (`verification-level` → `verification`)
+- Kind 34236 投稿成功時に "POST_FAILED" と表示されていたバグを修正
+
 ## [1.3.1] - 2026-03-10
 
 ### Fixed (Android)
