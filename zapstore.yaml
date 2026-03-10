@@ -14,7 +14,17 @@ description: |
   📱 タイムライン
   - 推奨フィード: アルゴリズムによる「おすすめ」と「フォロー中」の切り替え。
   - Birdwatch: コミュニティによるコンテキスト追加と評価 (NIP-32)。
-  - リッチメディア: 画像、カスタム絵文字、ループ動画 (Divine) に対応。
+  - リッチメディア: 画像、カスタム絵文字、ループ動画 (NIP-71) に対応。
+
+  🎥 動画投稿 (NIP-71 / Kind 34236)
+  - 最大6.3秒のループ動画を撮影・投稿。
+  - タップでミュート解除、フィードで音声再生。
+  - ProofModeバッジ: verified_web (PGP署名 + フレームハッシュ) で動画の真正性を証明。
+
+  🛡 ProofMode
+  - PGP署名 (Bouncy Castle Ed25519) による動画認証。
+  - フレームSHA-256ハッシュ + センサーデータで改ざん検出。
+  - 将来的にverified_mobile (Play Integrity API) に対応予定。
 
   💬 トーク
   - 安全なDM: NIP-17/44/59 に基づく暗号化されたプライベートメッセージ。
@@ -23,28 +33,42 @@ description: |
   🔒 セキュリティ
   - パスキー対応: パスワード不要の安全なログイン。
   - セキュアな鍵管理: 秘密鍵は安全に保護され、外部に露出しません。
-  - PWA対応
+  - 外部署名 (Amber等) 対応。
+
+  🧩 ミニアプリ
+  - エンタメ: カスタム絵文字、プロフィールバッジ、調整くん。
+  - ツール: ミュートリスト、Zap設定、リレー設定、バックアップなど。
+  - その他: 外部WebアプリをNostrセッション付きで起動。
 
   ## 対応NIP
   NIP-01, NIP-02, NIP-05, NIP-07, NIP-09, NIP-11, NIP-17, NIP-19,
   NIP-25, NIP-27, NIP-30, NIP-32, NIP-42, NIP-44, NIP-46, NIP-50, NIP-51,
-  NIP-57, NIP-58, NIP-59, NIP-62, NIP-65, NIP-70, NIP-98
+  NIP-57, NIP-58, NIP-59, NIP-62, NIP-65, NIP-70, NIP-71, NIP-98
 
 repository: https://github.com/tami1A84/null--nostr
-homepage: 
-license: Unlicense license 
+homepage:
+license: Unlicense
 tags:
   - nostr
   - social
   - messaging
   - line
   - japan
+  - video
+  - proofmode
 
 icon: public/favicon-512.png
 changelog: CHANGELOG.md
 
-# Assets from GitHub releases (regex pattern)
-# After tagging v1.0.0, the workflow creates nurunuru-1.0.0-arm64-v8a.apk
+screenshots:
+  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/1_timeline.png
+  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/3_timeline_feed.png
+  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/4_miniapp.png
+  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/5_post.png
+  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/6_post_keyboard.png
+  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/2_talk.png
+
+# Assets from GitHub releases
 assets:
   - nurunuru-.*-arm64-v8a.apk
 
