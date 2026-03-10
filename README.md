@@ -1,111 +1,141 @@
-# ぬるぬる (null--nostr)
+# ぬるぬる — null--nostr
 
-[English follows Japanese]
+<p align="center">
+  <img src="public/favicon-512.png" width="96" alt="ぬるぬる" />
+</p>
+
+<p align="center">
+  LINE風のデザインで使えるNostrクライアント
+  <br />
+  <a href="https://github.com/tami1A84/null--nostr/releases/latest">
+    <img src="https://img.shields.io/github/v/release/tami1A84/null--nostr?label=Android&color=4CAF50" alt="Latest Release" />
+  </a>
+  <img src="https://img.shields.io/badge/license-Unlicense%20%2F%20MPL--2.0-blue" alt="License" />
+  <img src="https://img.shields.io/badge/platform-Android%20%7C%20Web-lightgrey" alt="Platform" />
+</p>
 
 ---
 
-**LINE風のNostrクライアント** — シンプルで可愛い、みんなのためのNostr
+## 日本語
 
-## 🌟 概要
+### ぬるぬるとは
 
-「ぬるぬる」は、親しみやすいチャット風インターフェースを備えた、ユーザーフレンドリーなNostrクライアントです。パフォーマンス、セキュリティ、そして心地よいユーザー体験に重点を置いて開発されています。
+「ぬるぬる」はNostrプロトコル向けのクライアントアプリです。LINEのような使い慣れたチャット画面で、分散型ソーシャルネットワーク「Nostr」を体験できます。
 
-## ✨ 特徴
+Nostrは、特定の企業やサーバーに依存しない自由なSNSプロトコルです。アカウントは暗号鍵で管理され、サービスに縛られません。ぬるぬるはその入り口を、できるだけシンプルにすることを目指しています。
 
-### 📱 タイムライン
-- **推奨フィード**: アルゴリズムによる「おすすめ」と「フォロー中」の切り替え。
-- **Birdwatch**: コミュニティによるコンテキスト追加と評価 (NIP-32)。
-- **リッチメディア**: 画像、カスタム絵文字、ループ動画 (Divine) に対応。
+### 主な機能
 
-### 💬 トーク
-- **安全なDM**: NIP-17/44/59 に基づく暗号化されたプライベートメッセージ。
-- **チャット画面**: 使い慣れた操作感のデザイン。
+**タイムライン**
+- おすすめとフォロー中を切り替えて表示
+- アルゴリズムによる推奨フィード（フォロワーネットワーク + エンゲージメント）
+- 画像・カスタム絵文字・ループ動画（NIP-71）に対応
 
-### 🔒 セキュリティ
-- **パスキー対応**: パスワード不要の安全なログイン。
-- **セキュアな鍵管理**: 秘密鍵は安全に保護され、外部に露出しません。
+**動画投稿**
+- 最大6.3秒のループ動画を撮影・投稿
+- ProofMode対応: PGP署名とフレームハッシュで動画の真正性を証明
+- タップで音声のミュート解除
 
-## 🚀 クイックスタート
+**トーク（DM）**
+- NIP-17/44/59 に基づく暗号化プライベートメッセージ
+- LINE風のチャット画面
 
-### Web
+**セキュリティ**
+- パスキーログイン（パスワード不要）
+- 外部署名アプリ（Amber等）対応
+- 秘密鍵はデバイス内に安全に保管
+
+**ミニアプリ**
+- カスタム絵文字、プロフィールバッジ、スケジュール調整など
+- 外部WebアプリをNostrセッション付きで起動
+
+### インストール
+
+**Android（推奨）**
+
+[Releases](https://github.com/tami1A84/null--nostr/releases/latest) から最新の `.apk` をダウンロードしてインストールしてください。
+
+zapstore経由でのインストールも対応しています。
+
+**Web**
+
 ```bash
 npm install
 npm run dev
 ```
-ブラウザで [http://localhost:3000](http://localhost:3000) を開きます。
 
-### Android
-`android/` ディレクトリ配下の Gradle プロジェクトを参照してください。
+ブラウザで `http://localhost:3000` を開きます。
 
-## 🛠 技術スタック
+### 対応NIP
 
-- **Frontend**: Next.js 14, React, Tailwind CSS
-- **Core**: Rust (nurunuru-core), nostr-tools, rx-nostr
-- **Native**: Kotlin (Android), Swift (iOS)
+NIP-01, 02, 05, 07, 09, 11, 17, 19, 25, 27, 30, 32, 42, 44, 46, 50, 51, 57, 58, 59, 62, 65, 70, 71, 98
 
-## 🤖 AIエージェント・開発者の方へ
+### ライセンス
 
-詳細な技術ドキュメント、アーキテクチャ、内部ガイドラインは **[AGENTS.md](./AGENTS.md)** に集約されています。AIコーディングエージェントとして作業する場合は、必ずそのファイルを参照してください。
+本プロジェクトは [Unlicense](LICENSE) のもとで公開されています。
+動画機能（`DivineVideoRecorder.kt`, `ProofModeManager.kt`）は [Mozilla Public License 2.0](https://mozilla.org/MPL/2.0/) が適用されます（[Divine](https://github.com/verse-app/divine) をベースにしています）。
 
 ---
 
-## 📄 License
+## English
 
-プロジェクトの大部分は [Unlicense](LICENSE) ですが、一部のコンポーネントは MPL-2.0 に基づいています。
+### What is null--nostr?
 
----
+null--nostr is a Nostr client with a LINE-inspired chat interface. It makes the decentralized social network Nostr accessible to everyday users through a familiar, comfortable design.
 
-# null--nostr
+Nostr is an open protocol for censorship-resistant social networking. Your account is a cryptographic key pair — no company, no central server, no lock-in. null--nostr aims to be the easiest way in.
 
-**LINE-like Nostr Client** — Simple, cute, and for everyone.
+### Features
 
-## 🌟 Overview
+**Timeline**
+- Switch between Recommended and Following feeds
+- Algorithm-driven feed (2nd-degree network + engagement scoring)
+- Images, custom emoji, and short loop videos (NIP-71)
 
-null--nostr is a user-friendly Nostr client designed with a familiar chat-like interface. It focuses on performance, security, and a pleasant user experience.
+**Video Posts**
+- Record and post loop videos up to 6.3 seconds
+- ProofMode: PGP signatures and per-frame SHA-256 hashes to verify authenticity
+- Tap to unmute audio in feed
 
-## ✨ Features
+**Talk (DMs)**
+- End-to-end encrypted messaging via NIP-17/44/59
+- LINE-style chat interface
 
-### 📱 Timeline
-- **Mixed Feed**: Smart recommendation algorithm for "Recommended" and "Following" feeds.
-- **Birdwatch**: Community-driven context and labeling (NIP-32).
-- **Rich Media**: Supports images, custom emojis, and short loop videos (Divine).
+**Security**
+- Passkey login (passwordless)
+- External signer support (Amber, NIP-55)
+- Private keys stored securely on-device, never exposed
 
-### 💬 Talk
-- **Secure DMs**: Encrypted private messaging based on NIP-17/44/59.
-- **Chat Interface**: Familiar and easy-to-use design.
+**Mini Apps**
+- Built-in tools: custom emoji, profile badges, scheduler, relay settings, backup
+- Launch external web apps with a Nostr session
 
-### 🔒 Security
-- **Passkey Support**: Secure login without passwords.
-- **Safe Key Handling**: Private keys never exposed to the global scope.
+### Installation
 
-## 🚀 Quick Start
+**Android (recommended)**
 
-### Web
+Download the latest `.apk` from [Releases](https://github.com/tami1A84/null--nostr/releases/latest) and install it directly.
+
+Also available via zapstore.
+
+**Web**
+
 ```bash
 npm install
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### Android
-Refer to the Gradle project in the `android/` directory.
+Open `http://localhost:3000` in your browser.
 
-## 🛠 Tech Stack
+### Supported NIPs
 
-- **Frontend**: Next.js 14, React, Tailwind CSS
-- **Core**: Rust (nurunuru-core), nostr-tools, rx-nostr
-- **Native**: Kotlin (Android), Swift (iOS)
+NIP-01, 02, 05, 07, 09, 11, 17, 19, 25, 27, 30, 32, 42, 44, 46, 50, 51, 57, 58, 59, 62, 65, 70, 71, 98
 
-## 🤖 For AI Agents & Developers
+### License
 
-Detailed technical documentation, architecture diagrams, and internal guidelines are located in **[AGENTS.md](./AGENTS.md)**. If you are an AI coding agent, please refer to that file for context.
+This project is released under the [Unlicense](LICENSE).
+The video components (`DivineVideoRecorder.kt`, `ProofModeManager.kt`) are licensed under the [Mozilla Public License 2.0](https://mozilla.org/MPL/2.0/), based on [Divine](https://github.com/verse-app/divine).
 
----
+### For Developers
 
-## 📄 License
-
-Most of this project is under the [Unlicense](LICENSE), with some components under MPL-2.0.
-
----
-
-Made with Nostr
+Architecture, internal guidelines, and AI agent instructions are in [AGENTS.md](./AGENTS.md).
