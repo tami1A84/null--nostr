@@ -75,15 +75,15 @@ fun URLPreview(url: String, compact: Boolean = false) {
                     if (body != null) {
                         val root = json.parseToJsonElement(body).jsonObject
                         if (root["status"]?.jsonPrimitive?.content == "success") {
-                            val d = root["data"]?.jsonObject
+                            val d = root["data"] as? JsonObject
                             if (d != null) {
                                 val preview = PreviewData(
                                     url = url,
-                                    title = d["title"]?.jsonPrimitive?.content,
-                                    description = d["description"]?.jsonPrimitive?.content,
-                                    image = d["image"]?.jsonObject?.get("url")?.jsonPrimitive?.content,
-                                    siteName = d["publisher"]?.jsonPrimitive?.content,
-                                    favicon = d["logo"]?.jsonObject?.get("url")?.jsonPrimitive?.content
+                                    title = (d["title"] as? JsonPrimitive)?.content,
+                                    description = (d["description"] as? JsonPrimitive)?.content,
+                                    image = (d["image"] as? JsonObject)?.get("url")?.let { (it as? JsonPrimitive)?.content },
+                                    siteName = (d["publisher"] as? JsonPrimitive)?.content,
+                                    favicon = (d["logo"] as? JsonObject)?.get("url")?.let { (it as? JsonPrimitive)?.content }
                                 )
                                 if (preview.title != null) {
                                     ogCache[url] = preview

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-03-10
+
+### Fixed (Android)
+- 投稿時にアプリが5秒フリーズしてANR（強制終了）する問題を修正
+  - Rust FFI呼び出し（`createUnsignedEvent` / `publishRawEvent`）をIOスレッドに移動
+- URLプレビューでYouTube・Spotifyなど一部URLを開くとクラッシュする問題を修正
+  - microlink APIレスポンスの`null`フィールドを安全にパースするよう修正
+- 画像・動画アップロード処理をIOスレッドに移動、エラーハンドリング強化
+  - `PostModal` / `EditProfileModal` / `SignUpModal` / `DivineVideoRecorder`
+- OkHttpClient のタイムアウト設定を追加（接続15秒・読み込み90秒・書き込み120秒）
+- タイムラインキャッシュの読み書きをIOスレッドで実行するよう修正（ANR防止）
+
 ## [1.2.0] - 2026-03-10
 
 ### Fixed (Android)

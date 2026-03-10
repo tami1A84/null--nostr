@@ -40,8 +40,10 @@ import androidx.core.content.ContextCompat
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.theme.LocalNuruColors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.Executor
 
@@ -224,12 +226,18 @@ fun DivineVideoRecorder(
                                                     } else {
                                                         scope.launch {
                                                             isUploading = true
-                                                            val uri = Uri.fromFile(file)
-                                                            val bytes = file.readBytes()
-                                                            val url = repository.uploadImage(bytes, "video/mp4")
-                                                            if (url != null) {
-                                                                onComplete(RecordedVideo(uri, url, "video/mp4", file.length()))
-                                                            } else {
+                                                            try {
+                                                                val uri = Uri.fromFile(file)
+                                                                val bytes = withContext(Dispatchers.IO) { file.readBytes() }
+                                                                val url = repository.uploadImage(bytes, "video/mp4")
+                                                                if (url != null) {
+                                                                    onComplete(RecordedVideo(uri, url, "video/mp4", file.length()))
+                                                                } else {
+                                                                    isUploading = false
+                                                                    progress = 0f
+                                                                }
+                                                            } catch (e: Exception) {
+                                                                Log.e("DivineVideoRecorder", "Upload failed: ${e.message}")
                                                                 isUploading = false
                                                                 progress = 0f
                                                             }

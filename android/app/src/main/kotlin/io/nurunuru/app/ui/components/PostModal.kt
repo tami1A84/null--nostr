@@ -44,7 +44,9 @@ import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.theme.LocalNuruColors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val MAX_NOTE_LENGTH = 140
 
@@ -119,15 +121,24 @@ fun PostModal(
 
                 if (selectedImages.isNotEmpty() && recordedVideo == null) {
                     uploadProgress = "画像をアップロード中..."
-                    val uploadedUrls = mutableListOf<String>()
-                    selectedImages.forEachIndexed { index, uri ->
-                        uploadProgress = "画像をアップロード中... (${index + 1}/${selectedImages.size})"
-                        val bytes = context.contentResolver.openInputStream(uri)?.readBytes()
-                        if (bytes != null) {
-                            val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
-                            val url = repository.uploadImage(bytes, mimeType)
-                            if (url != null) uploadedUrls.add(url)
+                    val uploadedUrls = withContext(Dispatchers.IO) {
+                        val urls = mutableListOf<String>()
+                        selectedImages.forEachIndexed { index, uri ->
+                            withContext(Dispatchers.Main) {
+                                uploadProgress = "画像をアップロード中... (${index + 1}/${selectedImages.size})"
+                            }
+                            try {
+                                val bytes = context.contentResolver.openInputStream(uri)?.readBytes()
+                                if (bytes != null) {
+                                    val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                                    val url = repository.uploadImage(bytes, mimeType)
+                                    if (url != null) urls.add(url)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.w("PostModal", "Image upload failed: ${e.message}")
+                            }
                         }
+                        urls
                     }
                     if (uploadedUrls.isNotEmpty()) {
                         finalContent += "\n" + uploadedUrls.joinToString("\n")

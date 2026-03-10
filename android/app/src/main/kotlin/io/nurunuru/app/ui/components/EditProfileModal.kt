@@ -24,7 +24,9 @@ import androidx.compose.ui.unit.sp
 import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.ui.theme.*
 import io.nurunuru.app.viewmodel.HomeViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,10 +56,18 @@ fun EditProfileModal(
         uri?.let {
             scope.launch {
                 isUploadingPicture = true
-                val bytes = context.contentResolver.openInputStream(it)?.readBytes()
-                val url = viewModel.uploadImage(bytes ?: byteArrayOf(), context.contentResolver.getType(it) ?: "image/jpeg")
-                if (url != null) picture = url
-                isUploadingPicture = false
+                try {
+                    val (bytes, mimeType) = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(it)?.readBytes() to
+                            (context.contentResolver.getType(it) ?: "image/jpeg")
+                    }
+                    val url = viewModel.uploadImage(bytes ?: byteArrayOf(), mimeType)
+                    if (url != null) picture = url
+                } catch (e: Exception) {
+                    android.util.Log.w("EditProfileModal", "Picture upload failed: ${e.message}")
+                } finally {
+                    isUploadingPicture = false
+                }
             }
         }
     }
@@ -66,10 +76,18 @@ fun EditProfileModal(
         uri?.let {
             scope.launch {
                 isUploadingBanner = true
-                val bytes = context.contentResolver.openInputStream(it)?.readBytes()
-                val url = viewModel.uploadImage(bytes ?: byteArrayOf(), context.contentResolver.getType(it) ?: "image/jpeg")
-                if (url != null) banner = url
-                isUploadingBanner = false
+                try {
+                    val (bytes, mimeType) = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(it)?.readBytes() to
+                            (context.contentResolver.getType(it) ?: "image/jpeg")
+                    }
+                    val url = viewModel.uploadImage(bytes ?: byteArrayOf(), mimeType)
+                    if (url != null) banner = url
+                } catch (e: Exception) {
+                    android.util.Log.w("EditProfileModal", "Banner upload failed: ${e.message}")
+                } finally {
+                    isUploadingBanner = false
+                }
             }
         }
     }

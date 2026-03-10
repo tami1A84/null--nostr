@@ -8,7 +8,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -459,16 +461,22 @@ fun ProfileStep(
         uri?.let {
             coroutineScope.launch {
                 uploadingPicture = true
-                val bytes = context.contentResolver.openInputStream(it)?.readBytes()
-                if (bytes != null) {
-                    val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg", null)
-                    if (url != null) {
-                        picture = url
-                    } else {
-                        Toast.makeText(context, "画像のアップロードに失敗しました", Toast.LENGTH_SHORT).show()
+                try {
+                    val (bytes, mimeType) = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(it)?.readBytes() to
+                            (context.contentResolver.getType(it) ?: "image/jpeg")
                     }
+                    if (bytes != null) {
+                        val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, mimeType, null)
+                        if (url != null) picture = url
+                        else Toast.makeText(context, "画像のアップロードに失敗しました", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("SignUpModal", "Picture upload failed: ${e.message}")
+                    Toast.makeText(context, "画像のアップロードに失敗しました", Toast.LENGTH_SHORT).show()
+                } finally {
+                    uploadingPicture = false
                 }
-                uploadingPicture = false
             }
         }
     }
@@ -477,16 +485,22 @@ fun ProfileStep(
         uri?.let {
             coroutineScope.launch {
                 uploadingBanner = true
-                val bytes = context.contentResolver.openInputStream(it)?.readBytes()
-                if (bytes != null) {
-                    val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, context.contentResolver.getType(it) ?: "image/jpeg", null)
-                    if (url != null) {
-                        banner = url
-                    } else {
-                        Toast.makeText(context, "画像のアップロードに失敗しました", Toast.LENGTH_SHORT).show()
+                try {
+                    val (bytes, mimeType) = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(it)?.readBytes() to
+                            (context.contentResolver.getType(it) ?: "image/jpeg")
                     }
+                    if (bytes != null) {
+                        val url = io.nurunuru.app.data.ImageUploadUtils.uploadToNostrBuild(bytes, mimeType, null)
+                        if (url != null) banner = url
+                        else Toast.makeText(context, "画像のアップロードに失敗しました", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("SignUpModal", "Banner upload failed: ${e.message}")
+                    Toast.makeText(context, "画像のアップロードに失敗しました", Toast.LENGTH_SHORT).show()
+                } finally {
+                    uploadingBanner = false
                 }
-                uploadingBanner = false
             }
         }
     }

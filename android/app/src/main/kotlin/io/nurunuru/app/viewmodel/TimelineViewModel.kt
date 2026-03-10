@@ -103,12 +103,15 @@ class TimelineViewModel(
             }
 
             // Cache-first step 1: Try JSON cache (fully-enriched, instant decode)
+            // JSON decode and DB query are CPU/IO-bound — run off main thread.
             var cacheShown = false
-            val cachedFollowing = repository.getCachedTimeline()
+            val cachedFollowing = withContext(Dispatchers.IO) { repository.getCachedTimeline() }
             if (cachedFollowing != null) {
                 try {
-                    val posts = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-                        .decodeFromString<List<io.nurunuru.app.data.models.ScoredPost>>(cachedFollowing)
+                    val posts = withContext(Dispatchers.Default) {
+                        kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                            .decodeFromString<List<io.nurunuru.app.data.models.ScoredPost>>(cachedFollowing)
+                    }
                     if (posts.isNotEmpty()) {
                         val deduped = posts.deduped()
                         seenEventIds.addAll(deduped.map { it.event.id })
@@ -121,7 +124,9 @@ class TimelineViewModel(
 
             // Cache-first step 2: Fall back to nostrdb queryLocal if JSON cache unavailable
             if (!cacheShown) {
-                val nostrdbPosts = repository.fetchCachedFollowTimeline(pubkeyHex, 50).deduped()
+                val nostrdbPosts = withContext(Dispatchers.IO) {
+                    repository.fetchCachedFollowTimeline(pubkeyHex, 50)
+                }.deduped()
                 if (nostrdbPosts.isNotEmpty()) {
                     seenEventIds.addAll(nostrdbPosts.map { it.event.id })
                     _uiState.update { it.copy(followingPosts = nostrdbPosts, isFollowingLoading = false) }
@@ -333,11 +338,13 @@ class TimelineViewModel(
                         hasNewFollowing = state.feedType != FeedType.FOLLOWING && posts.isNotEmpty()
                     )
                 }
-                // Persist to cache
-                try {
-                    val json = kotlinx.serialization.json.Json { encodeDefaults = true }
-                    repository.setCachedTimeline(json.encodeToString(kotlinx.serialization.builtins.ListSerializer(io.nurunuru.app.data.models.ScoredPost.serializer()), posts))
-                } catch (e: Exception) { /* ignore */ }
+                // Persist to cache (encode and write on IO thread)
+                launch(Dispatchers.IO) {
+                    try {
+                        val json = kotlinx.serialization.json.Json { encodeDefaults = true }
+                        repository.setCachedTimeline(json.encodeToString(kotlinx.serialization.builtins.ListSerializer(io.nurunuru.app.data.models.ScoredPost.serializer()), posts))
+                    } catch (e: Exception) { /* ignore */ }
+                }
 
                 fetchBirdwatchForPosts(posts)
             } catch (e: Exception) {

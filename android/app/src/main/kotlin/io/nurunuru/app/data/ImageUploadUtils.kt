@@ -14,7 +14,11 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import rust.nostr.sdk.*
 
 object ImageUploadUtils {
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun uploadToBlossom(

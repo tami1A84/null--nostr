@@ -43,6 +43,12 @@ class NostrRepository(
     }
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
     private fun getOneHourAgo(): Long = System.currentTimeMillis() / 1000 - Constants.Time.HOUR_SECS
     private fun getOneDayAgo(): Long = System.currentTimeMillis() / 1000 - Constants.Time.DAY_SECS
 
@@ -1122,9 +1128,8 @@ class NostrRepository(
 
         return withContext(Dispatchers.IO) {
             try {
-                val okHttpClient = OkHttpClient()
                 val metaRequest = Request.Builder().url(lnurlUrl).build()
-                val metaResponse = okHttpClient.newCall(metaRequest).execute()
+                val metaResponse = httpClient.newCall(metaRequest).execute()
                 if (!metaResponse.isSuccessful) return@withContext null
 
                 val metaBody = metaResponse.body?.string() ?: return@withContext null
@@ -1145,7 +1150,7 @@ class NostrRepository(
                 }
 
                 val invRequest = Request.Builder().url(callbackUrl).build()
-                val invResponse = okHttpClient.newCall(invRequest).execute()
+                val invResponse = httpClient.newCall(invRequest).execute()
                 if (!invResponse.isSuccessful) return@withContext null
 
                 val invBody = invResponse.body?.string() ?: return@withContext null
@@ -1376,14 +1381,18 @@ class NostrRepository(
 
         if (isExternalSigner()) {
             return try {
-                val unsigned = rustClient.createUnsignedEvent(kind.toUInt(), content, tags, myPubkeyHex)
+                // createUnsignedEvent is a blocking Rust FFI call — run off main thread
+                val unsigned = withContext(Dispatchers.IO) {
+                    rustClient.createUnsignedEvent(kind.toUInt(), content, tags, myPubkeyHex)
+                }
                 android.util.Log.d("NostrRepository", "Ext publishNote: unsigned created (${unsigned.length} chars), signing...")
                 val signedJson = client.getSigner().signEvent(unsigned) ?: run {
                     android.util.Log.w("NostrRepository", "Ext publishNote: signer returned null")
                     return null
                 }
                 android.util.Log.d("NostrRepository", "Ext publishNote: signed (${signedJson.length} chars), publishing...")
-                rustClient.publishRawEvent(signedJson)
+                // publishRawEvent opens relay connections — must not block main thread
+                withContext(Dispatchers.IO) { rustClient.publishRawEvent(signedJson) }
                 android.util.Log.d("NostrRepository", "Ext publishNote OK")
                 try { json.decodeFromString<NostrEvent>(signedJson) } catch (_: Exception) { null }
             } catch (e: Exception) {
@@ -1394,12 +1403,14 @@ class NostrRepository(
 
         if (kind == NostrKind.TEXT_NOTE) {
             return try {
-                val eventId = rustClient.publishNoteWithTags(content, tags)
+                val eventId = withContext(Dispatchers.IO) { rustClient.publishNoteWithTags(content, tags) }
                 android.util.Log.d("NostrRepository", "Rust publishNote OK: $eventId")
                 // Fetch the published event back from local cache for callers that need it
-                rustClient.queryLocal(listOf(prefs.publicKeyHex ?: ""), 1u)
-                    .firstOrNull()
-                    ?.let { try { Json.decodeFromString<NostrEvent>(it) } catch (_: Exception) { null } }
+                withContext(Dispatchers.IO) {
+                    rustClient.queryLocal(listOf(prefs.publicKeyHex ?: ""), 1u)
+                        .firstOrNull()
+                        ?.let { try { Json.decodeFromString<NostrEvent>(it) } catch (_: Exception) { null } }
+                }
             } catch (e: Exception) {
                 android.util.Log.e("NostrRepository", "Rust publishNote failed: ${e.message}")
                 null
@@ -1408,7 +1419,7 @@ class NostrRepository(
 
         // Non-Kind-1: use generic publishEvent
         return try {
-            rustClient.publishEvent(kind.toUInt(), content, tags)
+            withContext(Dispatchers.IO) { rustClient.publishEvent(kind.toUInt(), content, tags) }
             android.util.Log.d("NostrRepository", "Rust publishEvent(kind=$kind) OK")
             null
         } catch (e: Exception) {
