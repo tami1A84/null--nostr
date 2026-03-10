@@ -466,7 +466,8 @@ fun PostMedia(post: ScoredPost, overrideContent: String? = null) {
     val content = overrideContent ?: post.event.content
     if (post.event.kind == NostrKind.VIDEO_LOOP) {
         val videoUrl = post.event.getTagValue("url") ?: content
-        val isVerified = post.event.getTagValue("verification-level") == "verified_web"
+        val verificationLevel = post.event.getTagValue("verification")
+        val durationSec = post.event.getTagValue("duration")?.toIntOrNull()
 
         if (videoUrl.isNotBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -479,16 +480,21 @@ fun PostMedia(post: ScoredPost, overrideContent: String? = null) {
             ) {
                 VideoPlayer(videoUrl = videoUrl, modifier = Modifier.fillMaxSize())
 
-                if (isVerified) {
+                if (verificationLevel != null) {
+                    val (badgeColor, badgeText) = when (verificationLevel) {
+                        "verified_mobile" -> Color(0xFF2196F3).copy(alpha = 0.85f) to "🛡 ProofMode"
+                        "verified_web"    -> Color(0xFF4CAF50).copy(alpha = 0.85f) to "✓ ProofMode"
+                        else              -> Color(0xFF9E9E9E).copy(alpha = 0.85f) to "ProofMode"
+                    }
                     Surface(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(8.dp),
-                        color = Color(0xFF4CAF50).copy(alpha = 0.8f),
+                        color = badgeColor,
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Text(
-                            text = "✅ WEB VERIFIED",
+                            text = badgeText,
                             color = Color.White,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -504,8 +510,9 @@ fun PostMedia(post: ScoredPost, overrideContent: String? = null) {
                     color = nuruColors.lineGreen,
                     shape = RoundedCornerShape(4.dp)
                 ) {
+                    val durationLabel = if (durationSec != null) "${durationSec}s LOOP" else "LOOP"
                     Text(
-                        text = "6.3s LOOP",
+                        text = durationLabel,
                         color = Color.White,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,

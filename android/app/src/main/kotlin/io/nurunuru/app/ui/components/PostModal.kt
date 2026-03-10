@@ -146,9 +146,18 @@ fun PostModal(
                 }
 
                 recordedVideo?.let { video ->
+                    // Kind 34236 required tags (NIP-71)
+                    val videoId = "nurunuru-${System.currentTimeMillis()}"
+                    tags.add(listOf("d", videoId))
                     tags.add(listOf("url", video.url))
                     tags.add(listOf("m", video.mimeType))
-                    tags.add(listOf("imeta", "url ${video.url}", "m ${video.mimeType}", "size ${video.size}", "dim 720x720"))
+                    tags.add(listOf("duration", video.durationSeconds.toString()))
+                    tags.add(listOf("imeta", "url ${video.url}", "m ${video.mimeType}", "size ${video.size}", "dim 720x1280"))
+                    video.thumbnailUrl?.let { tags.add(listOf("thumb", it)) }
+                    // ProofMode tags (NIP-ProofMode)
+                    tags.addAll(video.proofTags)
+                    val level = video.proofTags.find { it.getOrNull(0) == "verification" }?.getOrNull(1)
+                    android.util.Log.d("PostModal", "Video post: proofTags=${video.proofTags.size}, level=$level, d=$videoId")
                 }
 
                 if (replyToId != null) {
@@ -220,7 +229,6 @@ fun PostModal(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .imePadding()
         ) {
             PostHeader(
                 title = if (replyToId != null) "返信" else "新規投稿",
@@ -290,45 +298,48 @@ fun PostModal(
                 }
             }
 
-            HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+            // Toolbar + EmojiPicker pinned above keyboard
+            Column(modifier = Modifier.imePadding().navigationBarsPadding()) {
+                HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
 
-            PostToolbar(
-                recordedVideo = recordedVideo,
-                selectedImages = selectedImages,
-                showCWInput = showCWInput,
-                isSTTActive = isSTTActive,
-                hasMicPermission = hasMicPermission,
-                remaining = remaining,
-                onVideoClick = { showRecorder = true },
-                onImageClick = { imagePickerLauncher.launch("image/*") },
-                onCWClick = { showCWInput = !showCWInput },
-                onEmojiClick = { showEmojiPicker = !showEmojiPicker },
-                onMicClick = {
-                    if (hasMicPermission) {
-                        if (isSTTActive) speechRecognizer.stopListening()
-                        else speechRecognizer.startListening(sttIntent)
-                    } else {
-                        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                }
-            )
-
-            if (showEmojiPicker) {
-                EmojiPicker(
-                    pubkey = myPubkey,
-                    onSelect = { emoji ->
-                        val newText = text.text + ":${emoji.shortcode}:"
-                        if (newText.length <= MAX_NOTE_LENGTH) {
-                            text = TextFieldValue(newText, TextRange(newText.length))
-                            if (!selectedCustomEmojis.any { it.shortcode == emoji.shortcode }) {
-                                selectedCustomEmojis = selectedCustomEmojis + emoji
-                            }
+                PostToolbar(
+                    recordedVideo = recordedVideo,
+                    selectedImages = selectedImages,
+                    showCWInput = showCWInput,
+                    isSTTActive = isSTTActive,
+                    hasMicPermission = hasMicPermission,
+                    remaining = remaining,
+                    onVideoClick = { showRecorder = true },
+                    onImageClick = { imagePickerLauncher.launch("image/*") },
+                    onCWClick = { showCWInput = !showCWInput },
+                    onEmojiClick = { showEmojiPicker = !showEmojiPicker },
+                    onMicClick = {
+                        if (hasMicPermission) {
+                            if (isSTTActive) speechRecognizer.stopListening()
+                            else speechRecognizer.startListening(sttIntent)
+                        } else {
+                            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         }
-                        showEmojiPicker = false
-                    },
-                    onClose = { showEmojiPicker = false },
-                    repository = repository
+                    }
                 )
+
+                if (showEmojiPicker) {
+                    EmojiPicker(
+                        pubkey = myPubkey,
+                        onSelect = { emoji ->
+                            val newText = text.text + ":${emoji.shortcode}:"
+                            if (newText.length <= MAX_NOTE_LENGTH) {
+                                text = TextFieldValue(newText, TextRange(newText.length))
+                                if (!selectedCustomEmojis.any { it.shortcode == emoji.shortcode }) {
+                                    selectedCustomEmojis = selectedCustomEmojis + emoji
+                                }
+                            }
+                            showEmojiPicker = false
+                        },
+                        onClose = { showEmojiPicker = false },
+                        repository = repository
+                    )
+                }
             }
         }
     }
@@ -488,6 +499,7 @@ private fun VideoPreview(
     onRemove: () -> Unit
 ) {
     val nuruColors = LocalNuruColors.current
+    val verificationLevel = video.proofTags.find { it.getOrNull(0) == "verification" }?.getOrNull(1)
     Box(modifier = Modifier.padding(vertical = 8.dp).size(160.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black)) {
         VideoPlayer(videoUrl = video.uri.toString(), modifier = Modifier.fillMaxSize())
         IconButton(
@@ -496,12 +508,26 @@ private fun VideoPreview(
         ) {
             Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(14.dp))
         }
+        if (verificationLevel != null) {
+            val (badgeColor, badgeText) = when (verificationLevel) {
+                "verified_mobile" -> Color(0xFF2196F3).copy(alpha = 0.85f) to "🛡"
+                "verified_web"    -> Color(0xFF4CAF50).copy(alpha = 0.85f) to "✓"
+                else              -> Color(0xFF9E9E9E).copy(alpha = 0.85f) to "P"
+            }
+            Surface(
+                modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+                color = badgeColor,
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text(badgeText, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+            }
+        }
         Surface(
             modifier = Modifier.align(Alignment.BottomStart).padding(8.dp),
             color = nuruColors.lineGreen,
             shape = RoundedCornerShape(4.dp)
         ) {
-            Text("6.3s LOOP", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+            Text("${video.durationSeconds}s LOOP", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
         }
     }
 }

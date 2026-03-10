@@ -40,3 +40,11 @@
 # rust-nostr SDK (UniFFI/JNA-based — must not be obfuscated)
 -keep class rust.nostr.** { *; }
 -dontwarn rust.nostr.**
+
+# Bouncy Castle (ProofMode PGP signing)
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**
+
+# Play Integrity API (ProofMode device attestation)
+-keep class com.google.android.play.core.integrity.** { *; }
+-dontwarn com.google.android.play.core.integrity.**

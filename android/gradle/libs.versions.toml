@@ -22,6 +22,8 @@ credentials = "1.2.2"
 credentials-play-services-auth = "1.2.2"
 browser = "1.8.0"
 biometric = "1.1.0"
+playIntegrity = "1.3.0"
+bouncycastle = "1.78.1"
 
 [libraries]
 androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
@@ -58,6 +60,8 @@ rust-nostr-signer-proxy = { group = "org.rust-nostr", name = "android-signer-pro
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+play-integrity = { group = "com.google.android.play", name = "integrity", version.ref = "playIntegrity" }
+bouncycastle-pgp = { group = "org.bouncycastle", name = "bcpg-jdk15to18", version.ref = "bouncycastle" }
 
 [plugins]
 paparazzi = { id = "app.cash.paparazzi", version = "1.3.4" }

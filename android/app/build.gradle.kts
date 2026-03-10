@@ -33,8 +33,8 @@ android {
         applicationId = "io.nurunuru.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.3.1"
+        versionCode = 5
+        versionName = "1.3.2"
     }
 
     buildTypes {
@@ -100,6 +100,12 @@ dependencies {
     // Media playback (Kind 34236)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
+
+    // ProofMode: Play Integrity (verified_mobile device attestation)
+    implementation(libs.play.integrity)
+
+    // ProofMode: Bouncy Castle PGP (Ed25519 signing)
+    implementation(libs.bouncycastle.pgp)
 
     // Testing
     testImplementation("junit:junit:4.13.2")

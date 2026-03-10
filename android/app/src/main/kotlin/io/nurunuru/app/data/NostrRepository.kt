@@ -1419,9 +1419,10 @@ class NostrRepository(
 
         // Non-Kind-1: use generic publishEvent
         return try {
-            withContext(Dispatchers.IO) { rustClient.publishEvent(kind.toUInt(), content, tags) }
-            android.util.Log.d("NostrRepository", "Rust publishEvent(kind=$kind) OK")
-            null
+            val eventId = withContext(Dispatchers.IO) { rustClient.publishEvent(kind.toUInt(), content, tags) }
+            android.util.Log.d("NostrRepository", "Rust publishEvent(kind=$kind) OK id=$eventId tags=${tags.size}")
+            // Return a minimal NostrEvent so callers can detect success
+            NostrEvent(id = eventId, kind = kind, tags = tags, content = content)
         } catch (e: Exception) {
             android.util.Log.e("NostrRepository", "Rust publishEvent(kind=$kind) failed: ${e.message}")
             null

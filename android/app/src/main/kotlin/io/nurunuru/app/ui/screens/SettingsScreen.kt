@@ -167,7 +167,8 @@ fun SettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .imePadding(),
             contentPadding = PaddingValues(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
@@ -304,7 +305,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        listOf("all" to "すべて", "entertainment" to "エンタメ", "tools" to "ツール").forEach { (id, label) ->
+                        listOf("all" to "すべて", "entertainment" to "エンタメ", "tools" to "ツール", "others" to "その他").forEach { (id, label) ->
                             val isSelected = activeCategory == id
                             Column(
                                 modifier = Modifier
@@ -388,7 +389,7 @@ fun SettingsScreen(
                                                 id = "external_${System.currentTimeMillis()}",
                                                 name = externalName.ifBlank { try { java.net.URL(externalUrl).host } catch(e:Exception) { "外部アプリ" } },
                                                 description = "外部ミニアプリ",
-                                                category = "tools",
+                                                category = "others",
                                                 type = "external",
                                                 url = externalUrl
                                             )
@@ -597,15 +598,17 @@ private fun MiniAppRow(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(app.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                Surface(
-                    color = if (app.category == "entertainment") Color(0xFFE1BEE7).copy(alpha = 0.2f) else Color(0xFFBBDEFB).copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(100.dp)
-                ) {
+                val (badgeBg, badgeText, badgeFg) = when (app.category) {
+                    "entertainment" -> Triple(Color(0xFFE1BEE7).copy(alpha = 0.2f), "エンタメ", Color(0xFF9C27B0))
+                    "others"        -> Triple(Color(0xFFFFE0B2).copy(alpha = 0.2f), "その他",  Color(0xFFE65100))
+                    else            -> Triple(Color(0xFFBBDEFB).copy(alpha = 0.2f), "ツール",   Color(0xFF2196F3))
+                }
+                Surface(color = badgeBg, shape = RoundedCornerShape(100.dp)) {
                     Text(
-                        if (app.category == "entertainment") "エンタメ" else "ツール",
+                        badgeText,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         fontSize = 10.sp,
-                        color = if (app.category == "entertainment") Color(0xFF9C27B0) else Color(0xFF2196F3)
+                        color = badgeFg
                     )
                 }
             }
