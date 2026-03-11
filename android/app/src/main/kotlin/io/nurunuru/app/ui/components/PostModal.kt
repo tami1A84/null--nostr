@@ -44,6 +44,7 @@ import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.theme.LocalNuruColors
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -120,25 +121,32 @@ fun PostModal(
                 val tags = mutableListOf<List<String>>()
 
                 if (selectedImages.isNotEmpty() && recordedVideo == null) {
-                    uploadProgress = "画像をアップロード中..."
+                    uploadProgress = "画像をアップロード中... (0/${selectedImages.size})"
                     val uploadedUrls = withContext(Dispatchers.IO) {
-                        val urls = mutableListOf<String>()
-                        selectedImages.forEachIndexed { index, uri ->
-                            withContext(Dispatchers.Main) {
-                                uploadProgress = "画像をアップロード中... (${index + 1}/${selectedImages.size})"
-                            }
-                            try {
-                                val bytes = context.contentResolver.openInputStream(uri)?.readBytes()
-                                if (bytes != null) {
-                                    val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
-                                    val url = repository.uploadImage(bytes, mimeType)
-                                    if (url != null) urls.add(url)
+                        // Parallel uploads (web 版と同じ挙動)
+                        val deferreds = selectedImages.mapIndexed { index, uri ->
+                            async {
+                                try {
+                                    val bytes = context.contentResolver.openInputStream(uri)?.readBytes()
+                                    if (bytes != null) {
+                                        val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                                        repository.uploadImage(bytes, mimeType)
+                                    } else null
+                                } catch (e: Exception) {
+                                    android.util.Log.w("PostModal", "Image upload failed [${index}]: ${e.message}")
+                                    null
                                 }
-                            } catch (e: Exception) {
-                                android.util.Log.w("PostModal", "Image upload failed: ${e.message}")
                             }
                         }
-                        urls
+                        var completed = 0
+                        deferreds.mapNotNull { deferred ->
+                            deferred.await().also {
+                                completed++
+                                withContext(Dispatchers.Main) {
+                                    uploadProgress = "画像をアップロード中... ($completed/${selectedImages.size})"
+                                }
+                            }
+                        }
                     }
                     if (uploadedUrls.isNotEmpty()) {
                         finalContent += "\n" + uploadedUrls.joinToString("\n")

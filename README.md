@@ -14,6 +14,11 @@
   <img src="https://img.shields.io/badge/platform-Android%20%7C%20Web-lightgrey" alt="Platform" />
 </p>
 
+<p align="center">
+  <a href="#日本語">🇯🇵 日本語</a> &nbsp;·&nbsp;
+  <a href="#english">🇬🇧 English</a>
+</p>
+
 ---
 
 ## 日本語
@@ -30,6 +35,17 @@ Nostrは、特定の企業やサーバーに依存しない自由なSNSプロト
 - おすすめとフォロー中を切り替えて表示
 - アルゴリズムによる推奨フィード（フォロワーネットワーク + エンゲージメント）
 - 画像・カスタム絵文字・ループ動画（NIP-71）に対応
+- 複数画像をスワイプで閲覧（ピンチ / ダブルタップでズーム）
+- nevent / nprofile リンクをインラインカードとして表示
+
+**いいね・リアクション**
+- 2回目のタップでいいね・リポストを取り消し（NIP-09）
+- カスタム絵文字でリアクション（NIP-25）
+
+**通知**
+- リアクション・Zap・リポスト・返信・メンションを一覧表示
+- リアルタイム更新：新着を上部ピルで通知
+- 種別アイコンバッジ付きの見やすいデザイン
 
 **動画投稿**
 - 最大6.3秒のループ動画を撮影・投稿
@@ -91,6 +107,17 @@ Nostr is an open protocol for censorship-resistant social networking. Your accou
 - Switch between Recommended and Following feeds
 - Algorithm-driven feed (2nd-degree network + engagement scoring)
 - Images, custom emoji, and short loop videos (NIP-71)
+- Swipe through multiple images (pinch / double-tap to zoom)
+- nevent / nprofile links rendered as inline embedded cards
+
+**Likes & Reactions**
+- Second tap cancels a like or repost (NIP-09 deletion)
+- Custom emoji reactions (NIP-25)
+
+**Notifications**
+- Reactions, Zaps, reposts, replies, and mentions in one list
+- Real-time updates: new items announced via animated pill banner
+- Per-type icon badges for at-a-glance clarity
 
 **Video Posts**
 - Record and post loop videos up to 6.3 seconds

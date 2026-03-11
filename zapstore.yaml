@@ -61,12 +61,9 @@ icon: public/favicon-512.png
 changelog: CHANGELOG.md
 
 screenshots:
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/1_timeline.png
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/3_timeline_feed.png
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/4_miniapp.png
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/5_post.png
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/6_post_keyboard.png
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/2_talk.png
+  - https://blossom.primal.net/e20e63f7656c4d01697bb70fbe7f679d479d622f3ca00e02fc1810e3019e22fc.png
+  - https://blossom.primal.net/f714eea43fba17315e96d4f95569a3453978da703be7cfae5caa0236eea0110b.png
+  - https://blossom.primal.net/38568769dae9cbb93f56f2b04e7b8df226f13c54680e9d4c8507f31648e65827.png
 
 # Assets from GitHub releases
 assets:

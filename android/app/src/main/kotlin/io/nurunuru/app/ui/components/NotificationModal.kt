@@ -1,23 +1,31 @@
 package io.nurunuru.app.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -29,8 +37,37 @@ import io.nurunuru.app.data.models.NotificationItem
 import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+// ───────────────────────────────────────────────────────────────────────────
+// 通知タイプごとの見た目設定
+// ───────────────────────────────────────────────────────────────────────────
+private data class NotifStyle(
+    val icon: ImageVector,
+    val color: Color,
+    val label: String
+)
+
+private val reactionStyle = NotifStyle(Icons.Default.Favorite, Color(0xFFEF5350), "リアクション")
+private val zapStyle      = NotifStyle(Icons.Default.ElectricBolt, Color(0xFFFFC107), "Zap")
+private val repostStyle   = NotifStyle(Icons.Default.Repeat, Color(0xFF26A69A), "リポスト")
+private val replyStyle    = NotifStyle(Icons.AutoMirrored.Filled.Reply, LineGreen, "返信")
+private val mentionStyle  = NotifStyle(Icons.Default.AlternateEmail, Color(0xFF42A5F5), "メンション")
+private val birthdayStyle = NotifStyle(Icons.Default.Cake, Color(0xFFAB47BC), "誕生日")
+
+private fun styleFor(type: String) = when (type) {
+    "reaction" -> reactionStyle
+    "zap"      -> zapStyle
+    "repost"   -> repostStyle
+    "reply"    -> replyStyle
+    "mention"  -> mentionStyle
+    else       -> birthdayStyle
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// メインモーダル
+// ───────────────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationModal(
@@ -41,23 +78,39 @@ fun NotificationModal(
 ) {
     val nuruColors = LocalNuruColors.current
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
 
     var notifications by remember { mutableStateOf<List<NotificationItem>>(emptyList()) }
     var profiles by remember { mutableStateOf<Map<String, UserProfile>>(emptyMap()) }
     var originalPosts by remember { mutableStateOf<Map<String, NostrEvent>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
+    var pendingNew by remember { mutableStateOf<List<NotificationItem>>(emptyList()) }
 
+    // 初回フェッチ
     LaunchedEffect(Unit) {
-        scope.launch {
+        try {
+            val result = repository.fetchNotifications(myPubkey)
+            notifications = result.items
+            profiles = result.profiles
+            originalPosts = result.originalPosts
+        } catch (e: Exception) {
+            android.util.Log.w("NotificationModal", "fetch failed: ${e.message}")
+        }
+        loading = false
+
+        // バックグラウンドポーリング（30秒ごと）
+        while (true) {
+            delay(30_000)
             try {
-                val result = repository.fetchNotifications(myPubkey)
-                notifications = result.items
-                profiles = result.profiles
-                originalPosts = result.originalPosts
-            } catch (e: Exception) {
-                android.util.Log.w("NotificationModal", "Failed to fetch notifications: ${e.message}")
-            }
-            loading = false
+                val fresh = repository.fetchNotifications(myPubkey)
+                val existingIds = notifications.map { it.id }.toSet()
+                val newItems = fresh.items.filter { it.id !in existingIds }
+                if (newItems.isNotEmpty()) {
+                    pendingNew = newItems
+                    profiles = fresh.profiles
+                    originalPosts = fresh.originalPosts
+                }
+            } catch (_: Exception) { }
         }
     }
 
@@ -70,59 +123,134 @@ fun NotificationModal(
             color = nuruColors.bgPrimary
         ) {
             Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-                // Header
+                // ─── ヘッダー ───────────────────────────────────────────
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
                         .padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.Default.Close, contentDescription = "閉じる", tint = MaterialTheme.colorScheme.onBackground)
+                        Icon(Icons.Default.Close, "閉じる", tint = MaterialTheme.colorScheme.onBackground)
                     }
-                    Text("通知", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onBackground)
-                    Box(Modifier.width(48.dp)) // Spacer
+                    Text(
+                        "通知",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f).padding(start = 4.dp)
+                    )
                 }
-
                 HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
 
-                // Content
-                if (loading) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = LineGreen)
-                    }
-                } else if (notifications.isEmpty()) {
-                    Column(
-                        modifier = Modifier.fillMaxSize().padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .background(nuruColors.bgSecondary, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(32.dp), tint = nuruColors.textTertiary)
+                // ─── コンテンツ ─────────────────────────────────────────
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when {
+                        loading -> {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = LineGreen)
+                            }
                         }
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "通知はまだありません",
-                            color = nuruColors.textSecondary,
-                            fontSize = 14.sp
-                        )
+                        notifications.isEmpty() -> {
+                            Column(
+                                modifier = Modifier.fillMaxSize().padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(72.dp)
+                                        .background(nuruColors.bgSecondary, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Notifications,
+                                        null,
+                                        modifier = Modifier.size(36.dp),
+                                        tint = nuruColors.textTertiary
+                                    )
+                                }
+                                Spacer(Modifier.height(16.dp))
+                                Text("通知はまだありません", color = nuruColors.textSecondary, fontSize = 15.sp)
+                                Text(
+                                    "リアクションや返信が届くとここに表示されます",
+                                    color = nuruColors.textTertiary,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
+                        }
+                        else -> {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                items(notifications, key = { it.id }) { notification ->
+                                    NotificationRow(
+                                        notification = notification,
+                                        profile = profiles[notification.pubkey],
+                                        originalPost = originalPosts[notification.targetEventId],
+                                        onProfileClick = onProfileClick
+                                    )
+                                }
+                            }
+                        }
                     }
-                } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(notifications, key = { it.id }) { notification ->
-                            NotificationRow(
-                                notification = notification,
-                                profile = profiles[notification.pubkey],
-                                originalPost = originalPosts[notification.targetEventId],
-                                onProfileClick = onProfileClick
-                            )
+
+                    // ─── 新着ピル ───────────────────────────────────────
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        AnimatedVisibility(
+                            visible = pendingNew.isNotEmpty(),
+                            enter = fadeIn() + slideInVertically { -it },
+                            exit = fadeOut() + slideOutVertically { -it }
+                        ) {
+                            Surface(
+                                onClick = {
+                                    notifications = (pendingNew + notifications).distinctBy { it.id }
+                                    pendingNew = emptyList()
+                                    scope.launch { listState.animateScrollToItem(0) }
+                                },
+                                shape = RoundedCornerShape(20.dp),
+                                color = LineGreen,
+                                shadowElevation = 8.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    val avatarUrls = pendingNew
+                                        .mapNotNull { profiles[it.pubkey]?.picture }
+                                        .distinct()
+                                        .take(3)
+                                    if (avatarUrls.isNotEmpty()) {
+                                        Box(Modifier.height(22.dp).width((avatarUrls.size * 16 + 6).dp)) {
+                                            avatarUrls.forEachIndexed { i, url ->
+                                                UserAvatar(
+                                                    pictureUrl = url,
+                                                    displayName = "",
+                                                    size = 22.dp,
+                                                    modifier = Modifier.offset(x = (i * 16).dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Icon(Icons.Default.Notifications, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                    Text(
+                                        "新着 ${pendingNew.size} 件",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Icon(Icons.Default.KeyboardArrowUp, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                }
+                            }
                         }
                     }
                 }
@@ -131,6 +259,9 @@ fun NotificationModal(
     }
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// 各通知行
+// ───────────────────────────────────────────────────────────────────────────
 @Composable
 fun NotificationRow(
     notification: NotificationItem,
@@ -139,95 +270,164 @@ fun NotificationRow(
     onProfileClick: (String) -> Unit
 ) {
     val nuruColors = LocalNuruColors.current
+    val style = styleFor(notification.type)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* Handle click */ }
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+            .clickable { onProfileClick(notification.pubkey) }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
     ) {
-        AsyncImage(
-            model = profile?.picture,
-            contentDescription = null,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(nuruColors.bgTertiary)
-                .clickable { onProfileClick(notification.pubkey) },
-            contentScale = ContentScale.Crop
-        )
+        // ─── 左カラム: アイコン付きアバター ───────────────────────────
+        Box(modifier = Modifier.size(46.dp)) {
+            AsyncImage(
+                model = profile?.picture,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(nuruColors.bgTertiary)
+                    .clickable { onProfileClick(notification.pubkey) },
+                contentScale = ContentScale.Crop
+            )
+            // タイプアイコンバッジ（右下）
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .align(Alignment.BottomEnd)
+                    .background(style.color, CircleShape)
+                    .clip(CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                if (notification.type == "reaction" && notification.emojiUrl != null) {
+                    AsyncImage(
+                        model = notification.emojiUrl,
+                        contentDescription = null,
+                        modifier = Modifier.size(13.dp)
+                    )
+                } else {
+                    Icon(
+                        imageVector = style.icon,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(11.dp)
+                    )
+                }
+            }
+        }
 
+        // ─── 右カラム: テキスト内容 ───────────────────────────────────
         Column(modifier = Modifier.weight(1f)) {
+            // 名前 + 相対時刻
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    profile?.displayedName ?: "Unknown",
-                    fontWeight = FontWeight.Bold,
+                    text = profile?.displayedName ?: "Unknown",
+                    fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onBackground
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
                 )
-                // Add relative time here if available
+                Text(
+                    text = formatPostTimestamp(notification.createdAt),
+                    fontSize = 11.sp,
+                    color = nuruColors.textTertiary,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
             }
 
+            Spacer(Modifier.height(3.dp))
+
+            // アクション説明
             when (notification.type) {
                 "reaction" -> {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("リアクションしました", fontSize = 13.sp, color = nuruColors.textSecondary)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         if (notification.emojiUrl != null) {
                             AsyncImage(
                                 model = notification.emojiUrl,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(18.dp)
+                            )
+                        } else {
+                            Text(
+                                text = when (notification.reactionEmoji) {
+                                    "+", null -> "👍"
+                                    "-" -> "👎"
+                                    else -> notification.reactionEmoji!!
+                                },
+                                fontSize = 15.sp
                             )
                         }
+                        Text(style.label, fontSize = 13.sp, color = nuruColors.textSecondary)
                     }
                 }
                 "zap" -> {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("⚡ ${notification.amount} sats", fontWeight = FontWeight.Bold, color = Color(0xFFFFC107), fontSize = 13.sp)
-                            Text("Zapしました", fontSize = 13.sp, color = nuruColors.textSecondary)
-                        }
-                        if (!notification.comment.isNullOrBlank()) {
-                            Text(
-                                notification.comment,
-                                modifier = Modifier
-                                    .padding(top = 4.dp)
-                                    .background(nuruColors.bgSecondary, RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "⚡ ${notification.amount ?: 0} sats",
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFC107),
+                            fontSize = 13.sp
+                        )
+                        Text("Zap", fontSize = 13.sp, color = nuruColors.textSecondary)
+                    }
+                    if (!notification.comment.isNullOrBlank()) {
+                        Text(
+                            notification.comment,
+                            fontSize = 12.sp,
+                            color = nuruColors.textSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 3.dp)
+                        )
                     }
                 }
-                "birthday" -> {
+                "reply", "mention" -> {
+                    Text(style.label, fontSize = 13.sp, color = nuruColors.textSecondary)
+                    if (!notification.comment.isNullOrBlank()) {
+                        Text(
+                            notification.comment,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 3.dp)
+                        )
+                    }
+                }
+                else -> Text(style.label, fontSize = 13.sp, color = nuruColors.textSecondary)
+            }
+
+            // 対象投稿プレビュー（返信/リアクション/リポスト用）
+            if (originalPost != null && notification.type in listOf("reaction", "repost", "zap")) {
+                val previewText = removeImageUrls(originalPost.content).take(80).trim()
+                if (previewText.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
                     Text(
-                        "今日は誕生美です。一緒にお祝いしましょう。",
-                        fontSize = 13.sp,
-                        color = nuruColors.textSecondary
+                        previewText,
+                        fontSize = 12.sp,
+                        color = nuruColors.textTertiary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(nuruColors.bgSecondary, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
                     )
                 }
             }
-
-            if (originalPost != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    originalPost.content,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(nuruColors.bgSecondary.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                        .padding(8.dp),
-                    fontSize = 12.sp,
-                    color = nuruColors.textTertiary,
-                    maxLines = 2
-                )
-            }
         }
     }
-    HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+    HorizontalDivider(
+        color = nuruColors.border.copy(alpha = 0.5f),
+        thickness = 0.5.dp,
+        modifier = Modifier.padding(start = 74.dp)
+    )
 }

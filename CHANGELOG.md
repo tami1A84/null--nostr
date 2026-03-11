@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-03-12
+
+### Added (Android)
+- いいね・リポストの取り消し: 2回目のタップで Kind 5 (NIP-09) 削除イベントを送信し、ボタン状態と件数を即時更新
+- 通知モーダル リニューアル: アバター右下に種別バッジ（❤️ リアクション / ⚡ Zap / 🔁 リポスト / 返信 / メンション）
+- 通知の新着ピル: バックグラウンド30秒ポーリングで新着を検知、上から滑り込むアニメーション付きピル
+- 通知にリポスト(Kind 6)・返信/メンション(Kind 1 #p) を追加
+- 複数画像フルスクリーンビューア: スワイプでページ切り替え、ピンチ/ダブルタップズーム、ドット+枚数インジケーター
+- nostr: bech32 リンク (nevent/nprofile) をカード表示 — 本文中の生テキストを非表示に
+- カスタム絵文字ピッカー キャッシュファースト: 5分 TTL のインメモリキャッシュ、EmojiPicker / ReactionEmojiPicker で共有
+- 画像複数枚投稿を並列アップロードに変更 (web版と同期)
+- 3枚画像グリッドのレイアウト修正: 左1枚フル高さ + 右2枚スタック
+
+### Fixed (Android)
+- nevent カードの角が切れる問題: `Surface(shape=…)` に統一し `Modifier.clip` を削除
+- 引用投稿でテキストとカードの間に大きな空白が生じる問題: 末尾の余分な改行をトリム
+- nevent カードタップでプロフィール画面に遷移してしまう問題: カード全体のクリックを削除、著者行のみプロフィール遷移
+- カスタム絵文字リアクションを通知一覧でも画像表示に統一
+
 ## [1.3.2] - 2026-03-11
 
 ### Added (Android)

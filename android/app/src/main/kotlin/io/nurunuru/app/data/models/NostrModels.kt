@@ -59,7 +59,10 @@ data class ScoredPost(
     // QuotedPost is omitted from serialization to avoid deep recursion in cache
     @kotlinx.serialization.Transient val quotedPost: ScoredPost? = null,
     val repostedBy: UserProfile? = null,
-    val repostTime: Long? = null
+    val repostTime: Long? = null,
+    // Event IDs of my own reaction/repost, used for toggle (unlike/unrepost via Kind 5)
+    val myLikeEventId: String? = null,
+    val myRepostEventId: String? = null
 )
 
 data class DmConversation(
@@ -104,12 +107,13 @@ data class ImportResult(
 data class NotificationItem(
     val id: String,
     val pubkey: String,
-    val type: String, // "reaction", "zap", "birthday"
+    val type: String, // "reaction", "zap", "repost", "reply", "mention", "birthday"
     val createdAt: Long,
     val amount: Long? = null,
     val comment: String? = null,
     val targetEventId: String? = null,
-    val emojiUrl: String? = null
+    val emojiUrl: String? = null,
+    val reactionEmoji: String? = null  // "+", "-", or custom ":shortcode:"
 )
 
 @Serializable

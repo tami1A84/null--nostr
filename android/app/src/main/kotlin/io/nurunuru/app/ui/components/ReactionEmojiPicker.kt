@@ -66,8 +66,17 @@ fun ReactionEmojiPicker(
     var searchQuery by remember { mutableStateOf("") }
     var activeTab by remember { mutableStateOf("all") }
 
-    // Load custom emojis
+    // Load custom emojis (キャッシュファースト: EmojiPickerCache を共有)
     LaunchedEffect(pubkey) {
+        val cached = EmojiPickerCache.get(pubkey)
+        if (cached != null) {
+            emojis = cached.emojis.map { EmojiWithSource(it.shortcode, it.url, it.source) }
+            emojiSets = cached.sets.map { set ->
+                EmojiSetData(set.name, set.emojis.map { EmojiWithSource(it.shortcode, it.url, it.source) }, set.pointer)
+            }
+            loading = false
+            return@LaunchedEffect
+        }
         scope.launch {
             loading = true
             try {
@@ -124,6 +133,12 @@ fun ReactionEmojiPicker(
 
                 emojis = individualEmojis
                 emojiSets = loadedSets
+                // EmojiPickerCache に保存（EmojiPicker と共有）
+                EmojiPickerCache.put(
+                    pubkey,
+                    individualEmojis.map { CustomEmoji(it.shortcode, it.url, it.source) },
+                    loadedSets.map { set -> EmojiSet(set.name, set.emojis.map { CustomEmoji(it.shortcode, it.url, it.source) }, set.pointer) }
+                )
             } catch (_: Exception) { }
             loading = false
         }

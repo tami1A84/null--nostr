@@ -38,6 +38,26 @@ data class EmojiSet(
     val pointer: String
 )
 
+// In-memory cache shared across EmojiPicker and ReactionEmojiPicker (survives recomposition)
+internal object EmojiPickerCache {
+    data class CachedData(
+        val emojis: List<CustomEmoji>,
+        val sets: List<EmojiSet>,
+        val fetchedAt: Long
+    )
+    private val ttlMs = 5 * 60 * 1000L // 5 minutes
+    private val store = java.util.concurrent.ConcurrentHashMap<String, CachedData>()
+
+    fun get(pubkey: String): CachedData? {
+        val entry = store[pubkey] ?: return null
+        return if (System.currentTimeMillis() - entry.fetchedAt < ttlMs) entry else null
+    }
+
+    fun put(pubkey: String, emojis: List<CustomEmoji>, sets: List<EmojiSet>) {
+        store[pubkey] = CachedData(emojis, sets, System.currentTimeMillis())
+    }
+}
+
 @Composable
 fun EmojiPicker(
     pubkey: String,
@@ -54,6 +74,14 @@ fun EmojiPicker(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(pubkey) {
+        // キャッシュヒット時は即表示（リレーフェッチなし）
+        val cached = EmojiPickerCache.get(pubkey)
+        if (cached != null) {
+            emojis = cached.emojis
+            emojiSets = cached.sets
+            loading = false
+            return@LaunchedEffect
+        }
         scope.launch {
             loading = true
             try {
@@ -63,7 +91,7 @@ fun EmojiPicker(
                     authors = listOf(pubkey),
                     limit = 1
                 )
-                val events = repository.fetchEvents(filter) // Assuming fetchEvents exists or I need to add it
+                val events = repository.fetchEvents(filter)
 
                 val individualEmojis = mutableListOf<CustomEmoji>()
                 val setPointers = mutableListOf<String>()
@@ -108,6 +136,7 @@ fun EmojiPicker(
 
                 emojis = individualEmojis
                 emojiSets = loadedSets
+                EmojiPickerCache.put(pubkey, individualEmojis, loadedSets)
             } catch (e: Exception) {
                 // Handle error
             } finally {

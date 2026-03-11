@@ -503,6 +503,13 @@ class TimelineViewModel(
         viewModelScope.launch {
             val post = (_uiState.value.globalPosts + _uiState.value.followingPosts)
                 .firstOrNull { it.event.id == eventId }
+            // Toggle: if already liked, unlike (delete reaction event)
+            if (post?.isLiked == true) {
+                val reactionEventId = post.myLikeEventId ?: return@launch
+                val success = repository.deleteEvent(reactionEventId)
+                if (success) updatePostInteraction(eventId, isLike = true, undo = true)
+                return@launch
+            }
             val authorPubkey = post?.event?.pubkey ?: ""
             val success = repository.likePost(eventId, authorPubkey, emoji, customTags)
             if (success) {
@@ -516,6 +523,13 @@ class TimelineViewModel(
         viewModelScope.launch {
             val post = (_uiState.value.globalPosts + _uiState.value.followingPosts)
                 .firstOrNull { it.event.id == eventId }
+            // Toggle: if already reposted, unrepost (delete repost event)
+            if (post?.isReposted == true) {
+                val repostEventId = post.myRepostEventId ?: return@launch
+                val success = repository.deleteEvent(repostEventId)
+                if (success) updatePostInteraction(eventId, isLike = false, undo = true)
+                return@launch
+            }
             val eventJson = post?.event?.let {
                 try { kotlinx.serialization.json.Json { encodeDefaults = true }.encodeToString(
                     io.nurunuru.app.data.models.NostrEvent.serializer(), it)
@@ -530,12 +544,17 @@ class TimelineViewModel(
         }
     }
 
-    private fun updatePostInteraction(eventId: String, isLike: Boolean) {
+    private fun updatePostInteraction(eventId: String, isLike: Boolean, undo: Boolean = false) {
         _uiState.update { state ->
             val updateFunc: (ScoredPost) -> ScoredPost = { post ->
                 if (post.event.id == eventId) {
-                    if (isLike) post.copy(isLiked = true, likeCount = post.likeCount + 1)
-                    else post.copy(isReposted = true, repostCount = post.repostCount + 1)
+                    if (isLike) {
+                        if (undo) post.copy(isLiked = false, likeCount = maxOf(0, post.likeCount - 1), myLikeEventId = null)
+                        else post.copy(isLiked = true, likeCount = post.likeCount + 1)
+                    } else {
+                        if (undo) post.copy(isReposted = false, repostCount = maxOf(0, post.repostCount - 1), myRepostEventId = null)
+                        else post.copy(isReposted = true, repostCount = post.repostCount + 1)
+                    }
                 } else post
             }
             state.copy(

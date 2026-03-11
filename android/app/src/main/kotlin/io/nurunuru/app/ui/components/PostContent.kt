@@ -289,6 +289,8 @@ fun PostContent(
         parts.add(ContentPart.Text(cleanContent.substring(lastIdx)))
     }
 
+    val hasCards = parts.any { it is ContentPart.Nostr || it is ContentPart.Link }
+
     val annotated = buildAnnotatedString {
         parts.forEach { part ->
             when (part) {
@@ -318,16 +320,18 @@ fun PostContent(
                     }
                 }
                 is ContentPart.Link -> withStyle(SpanStyle(color = nuruColors.lineGreen)) { append(part.url.take(40) + if (part.url.length > 40) "..." else "") }
-                is ContentPart.Nostr -> withStyle(SpanStyle(color = nuruColors.lineGreen)) { append(part.link.take(30) + "...") }
+                is ContentPart.Nostr -> { /* nostr: リンクはカードとして描画するためテキスト出力しない */ }
             }
         }
     }
+    // カード表示の前に末尾の余分な空白・改行を除去してすき間をなくす
+    val displayAnnotated = if (hasCards) annotated.subSequence(0, annotated.text.trimEnd().length) else annotated
 
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
 
     Column {
-        Text(
-            text = annotated,
+        if (displayAnnotated.isNotBlank()) Text(
+            text = displayAnnotated,
             inlineContent = inlineContent,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground,
@@ -402,9 +406,8 @@ fun EmbeddedNostrContent(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { onProfileClick(note!!.event.pubkey) },
+                .padding(vertical = 6.dp),
+            shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
             border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
@@ -425,9 +428,9 @@ fun EmbeddedNostrContent(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .padding(vertical = 6.dp)
                 .clickable { onProfileClick(profilePubkey!!) },
+            shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
             border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
@@ -524,11 +527,15 @@ fun PostMedia(post: ScoredPost, overrideContent: String? = null) {
     } else {
         extractPostImages(content).let { images ->
             if (images.isNotEmpty()) {
-                var selectedImageUrl by remember { mutableStateOf<String?>(null) }
+                var selectedImageIndex by remember { mutableStateOf<Int?>(null) }
                 Spacer(modifier = Modifier.height(8.dp))
-                PostImageGrid(images = images, onImageClick = { selectedImageUrl = it })
-                selectedImageUrl?.let { url ->
-                    ImageViewerDialog(imageUrl = url, onDismiss = { selectedImageUrl = null })
+                PostImageGrid(images = images, onImageClick = { idx -> selectedImageIndex = idx })
+                selectedImageIndex?.let { idx ->
+                    ImageViewerDialog(
+                        images = images,
+                        initialIndex = idx,
+                        onDismiss = { selectedImageIndex = null }
+                    )
                 }
             }
         }
@@ -537,77 +544,121 @@ fun PostMedia(post: ScoredPost, overrideContent: String? = null) {
 
 
 @Composable
-fun PostImageGrid(images: List<String>, onImageClick: ((String) -> Unit)? = null) {
+fun PostImageGrid(images: List<String>, onImageClick: ((Int) -> Unit)? = null) {
     var showAll by remember { mutableStateOf(false) }
     val maxVisible = 4
-    val visibleImages = if (showAll) images else images.take(maxVisible)
+    val displayImages = if (showAll) images else images.take(maxVisible)
     val hiddenCount = if (images.size > maxVisible && !showAll) images.size - maxVisible else 0
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (images.size == 1) {
-            AsyncImage(
-                model = images[0],
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 360.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable { onImageClick?.invoke(images[0]) }
-            )
-        } else {
-            val rows = (visibleImages.size + 1) / 2
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                for (r in 0 until rows) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.fillMaxWidth()
+        when {
+            // 1 image: full width
+            images.size == 1 -> {
+                AsyncImage(
+                    model = images[0],
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onImageClick?.invoke(0) }
+                )
+            }
+            // 3 images: left = image[0] spanning full height, right = image[1] + image[2] stacked
+            images.size == 3 && !showAll -> {
+                val gridHeight = 240.dp
+                val halfHeight = (gridHeight - 4.dp) / 2
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth().height(gridHeight)
+                ) {
+                    AsyncImage(
+                        model = images[0],
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onImageClick?.invoke(0) }
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        for (c in 0 until 2) {
-                            val index = r * 2 + c
-                            if (index < visibleImages.size) {
-                                Box(modifier = Modifier.weight(1f)) {
-                                    AsyncImage(
-                                        model = visibleImages[index],
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(if (images.size == 3 && index == 0) 244.dp else 120.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable {
-                                                if (index == maxVisible - 1 && hiddenCount > 0) showAll = true
-                                                else onImageClick?.invoke(visibleImages[index])
-                                            }
-                                    )
-                                    if (index == maxVisible - 1 && hiddenCount > 0) {
-                                        Box(
-                                            modifier = Modifier
-                                                .matchParentSize()
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(Color.Black.copy(alpha = 0.6f))
-                                                .clickable { showAll = true },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = "+$hiddenCount",
-                                                color = Color.White,
-                                                fontSize = 20.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                            } else {
-                                Spacer(modifier = Modifier.weight(1f))
-                            }
+                        listOf(1, 2).forEach { idx ->
+                            AsyncImage(
+                                model = images[idx],
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(halfHeight)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onImageClick?.invoke(idx) }
+                            )
                         }
                     }
                 }
             }
-            if (showAll) {
-                TextButton(onClick = { showAll = false }) {
-                    Text("閉じる", color = io.nurunuru.app.ui.theme.LineGreen, fontSize = 12.sp)
+            // 2 or 4+ images: 2-column grid
+            else -> {
+                val rows = (displayImages.size + 1) / 2
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    for (r in 0 until rows) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            for (c in 0 until 2) {
+                                val index = r * 2 + c
+                                // displayImages[index] の元のインデックス（showAll 時は index そのまま）
+                                val originalIndex = if (showAll) index else index
+                                if (index < displayImages.size) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        AsyncImage(
+                                            model = displayImages[index],
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(120.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable {
+                                                    if (index == maxVisible - 1 && hiddenCount > 0) showAll = true
+                                                    else onImageClick?.invoke(originalIndex)
+                                                }
+                                        )
+                                        if (index == maxVisible - 1 && hiddenCount > 0) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .matchParentSize()
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(Color.Black.copy(alpha = 0.6f))
+                                                    .clickable { showAll = true },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "+$hiddenCount",
+                                                    color = Color.White,
+                                                    fontSize = 20.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+                if (showAll) {
+                    TextButton(onClick = { showAll = false }) {
+                        Text("閉じる", color = io.nurunuru.app.ui.theme.LineGreen, fontSize = 12.sp)
+                    }
                 }
             }
         }

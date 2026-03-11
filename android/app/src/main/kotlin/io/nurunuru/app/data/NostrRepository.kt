@@ -464,10 +464,28 @@ class NostrRepository(
             limit = limit
         )
 
+        // 3. Fetch reposts of my posts (Kind 6 #p tag)
+        val repostFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.REPOST),
+            tags = mapOf("p" to listOf(pubkeyHex)),
+            since = oneDayAgo,
+            limit = limit
+        )
+
+        // 4. Fetch replies to my posts (Kind 1 #p tag)
+        val replyFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.TEXT_NOTE),
+            tags = mapOf("p" to listOf(pubkeyHex)),
+            since = oneDayAgo,
+            limit = limit
+        )
+
         val reactions = client.fetchEvents(reactionFilter, timeoutMs = 5_000)
         val zaps = client.fetchEvents(zapFilter, timeoutMs = 5_000)
+        val reposts = client.fetchEvents(repostFilter, timeoutMs = 5_000)
+        val mentions = client.fetchEvents(replyFilter, timeoutMs = 5_000)
 
-        // 3. Build notification items
+        // 5. Build notification items
         val notificationItems = mutableListOf<NotificationItem>()
         val targetEventIds = mutableSetOf<String>()
         val notifierPubkeys = mutableSetOf<String>()
@@ -489,8 +507,9 @@ class NostrRepository(
                     type = "reaction",
                     createdAt = event.createdAt,
                     targetEventId = targetEvent,
-                    comment = event.content.takeIf { it != "+" },
-                    emojiUrl = emojiUrl
+                    comment = event.content.takeIf { it != "+" && it.isNotBlank() },
+                    emojiUrl = emojiUrl,
+                    reactionEmoji = event.content.ifBlank { "+" }
                 )
             )
         }
@@ -531,6 +550,43 @@ class NostrRepository(
                     amount = amount,
                     comment = comment,
                     targetEventId = targetEvent
+                )
+            )
+        }
+
+        for (event in reposts) {
+            if (event.pubkey == pubkeyHex) continue
+            val targetEvent = event.getTagValue("e")
+            targetEvent?.let { targetEventIds.add(it) }
+            notifierPubkeys.add(event.pubkey)
+
+            notificationItems.add(
+                NotificationItem(
+                    id = event.id,
+                    pubkey = event.pubkey,
+                    type = "repost",
+                    createdAt = event.createdAt,
+                    targetEventId = targetEvent
+                )
+            )
+        }
+
+        for (event in mentions) {
+            if (event.pubkey == pubkeyHex) continue
+            // Distinguish reply (has "e" tag) vs plain mention (only "p" tag)
+            val targetEvent = event.getTagValue("e")
+            targetEvent?.let { targetEventIds.add(it) }
+            notifierPubkeys.add(event.pubkey)
+
+            val type = if (targetEvent != null) "reply" else "mention"
+            notificationItems.add(
+                NotificationItem(
+                    id = event.id,
+                    pubkey = event.pubkey,
+                    type = type,
+                    createdAt = event.createdAt,
+                    targetEventId = targetEvent, // null for plain mentions; reply→ shows replied post
+                    comment = event.content.take(100).ifBlank { null }
                 )
             )
         }
@@ -1940,10 +1996,14 @@ class NostrRepository(
         val zaps = zapsDeferred.await()
 
         val reactionCounts = reactionEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
-        val myLikes = if (myPubkey != null) reactionEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
+        val myReactionEvents = if (myPubkey != null) reactionEvents.filter { it.pubkey == myPubkey }
+            .mapNotNull { ev -> ev.getTagValue("e")?.let { targetId -> targetId to ev.id } }.toMap() else emptyMap()
+        val myLikes = myReactionEvents.keys
 
         val repostCounts = repostEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
-        val myReposts = if (myPubkey != null) repostEvents.filter { it.pubkey == myPubkey }.mapNotNull { it.getTagValue("e") }.toSet() else emptySet()
+        val myRepostEventMap = if (myPubkey != null) repostEvents.filter { it.pubkey == myPubkey }
+            .mapNotNull { ev -> ev.getTagValue("e")?.let { targetId -> targetId to ev.id } }.toMap() else emptyMap()
+        val myReposts = myRepostEventMap.keys
 
         val replyCounts = replyEvents.groupBy { it.getTagValue("e") ?: "" }.mapValues { it.value.size }
 
@@ -1988,6 +2048,8 @@ class NostrRepository(
                 score = engagementScore * timeMultiplier,
                 isLiked = myLikes.contains(event.id),
                 isReposted = myReposts.contains(event.id),
+                myLikeEventId = myReactionEvents[event.id],
+                myRepostEventId = myRepostEventMap[event.id],
                 isVerified = isVerified,
                 repostedBy = if (repost != null) profiles[repost.pubkey] else null,
                 repostTime = repost?.createdAt

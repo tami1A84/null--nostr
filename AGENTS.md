@@ -99,13 +99,17 @@ Android entry point: `NostrRepository.fetchRecommendedTimeline()` → `TimelineV
 
 | File | Purpose |
 |---|---|
-| `ui/components/PostModal.kt` | Post composer (text, images, video). Kind 34236 tag assembly. |
+| `ui/components/PostModal.kt` | Post composer (text, images, video). Kind 34236 tag assembly. Parallel image uploads via `async { }`. |
 | `ui/components/DivineVideoRecorder.kt` | CameraX video recorder, 6.3s loop. MPL-2.0. |
 | `data/ProofModeManager.kt` | ProofMode: PGP signing (Bouncy Castle), frame hashes, Play Integrity. MPL-2.0. |
 | `ui/components/VideoPlayer.kt` | ExoPlayer/Media3 video player with tap-to-unmute. |
-| `ui/components/PostContent.kt` | Feed post rendering, Kind 34236 video display + ProofMode badge. |
+| `ui/components/PostContent.kt` | Feed post rendering. `EmbeddedNostrContent` for nostr: bech32 cards. `PostImageGrid` for 1/2/3/4+ layouts. |
+| `ui/components/ImageViewerDialog.kt` | Fullscreen pager viewer (`HorizontalPager`). Custom gesture handler: pinch=zoom, 1-finger-at-scale1=pass-to-pager. |
+| `ui/components/NotificationModal.kt` | Notification list. `NotifStyle` per type. 30s background polling. Animated new-item pill (`Column > AnimatedVisibility`). |
+| `ui/components/EmojiPicker.kt` | Custom emoji picker. Defines `EmojiPickerCache` (5-min TTL `ConcurrentHashMap`, `internal object`). |
+| `ui/components/ReactionEmojiPicker.kt` | Reaction picker (NIP-25). Uses shared `EmojiPickerCache` from `EmojiPicker.kt`. |
 | `ui/screens/SettingsScreen.kt` | Mini-app hub (エンタメ / ツール / その他 categories). |
-| `data/NostrRepository.kt` | All Nostr I/O. `publishNote()` handles Kind 1 and Kind 34236. |
+| `data/NostrRepository.kt` | All Nostr I/O. Notifications include Kind 6 (repost) and Kind 1 #p (reply/mention). `enrichPosts()` tracks `myLikeEventId`/`myRepostEventId` for toggle-undo. |
 | `ui/screens/MainScreen.kt` | Root navigation (ホーム / トーク / タイムライン / ミニアプリ). |
 
 ### Web
@@ -130,6 +134,11 @@ Android entry point: `NostrRepository.fetchRecommendedTimeline()` → `TimelineV
 - **IO operations**: All Rust FFI calls, file I/O, and uploads must run on `Dispatchers.IO`.
 - **Video recording**: `pointerInput` key must include permission state so the lambda re-creates after permission grant.
 - **Kind 34236 required tags**: `d` (unique ID), `url`, `m`, `duration`, `imeta`, `thumb`, `x`, `verification`, `proofmode`.
+- **AnimatedVisibility inside Box inside Column**: Kotlin resolves `ColumnScope.AnimatedVisibility` (outer receiver) over the top-level overload. Fix: wrap the call site in a `Column { }` to explicitly bring `ColumnScope` into scope, or extract to a standalone composable function.
+- **Surface rounded corners**: Always pass `shape = RoundedCornerShape(…)` to `Surface` directly. Using only `Modifier.clip(shape)` causes the border to be drawn as a rectangle before clipping, cutting the corners visually.
+- **Toggle like/repost**: `ScoredPost` carries `myLikeEventId`/`myRepostEventId`. On second tap, `TimelineViewModel` calls `repository.deleteEvent(eventId)` and decrements the counter.
+- **Image uploads**: Use `async { }` inside `withContext(Dispatchers.IO)` for parallel uploads; collect with `awaitAll()`.
+- **Zoom + pager gesture conflict**: In `ImageViewerDialog`, do NOT use `Modifier.transformable` — it consumes single-finger drags at `scale==1f`, blocking the `HorizontalPager`. Use `awaitEachGesture` with manual pointer-count branching instead.
 
 ---
 
