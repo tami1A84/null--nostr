@@ -2,6 +2,7 @@ package io.nurunuru.app.data.prefs
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import io.nurunuru.app.data.models.DEFAULT_RELAYS
@@ -15,7 +16,8 @@ class AppPreferences(context: Context) {
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
         .build()
 
-    private val prefs: SharedPreferences = EncryptedSharedPreferences.create(
+    // 機密データ専用（秘密鍵、公開鍵、外部署名フラグ、APIキー）
+    private val securePrefs: SharedPreferences = EncryptedSharedPreferences.create(
         context,
         "nurunuru_secure_prefs",
         masterKey,
@@ -23,51 +25,121 @@ class AppPreferences(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
+    // 非機密データ（設定値、外部アプリリスト等）— 更新時も消えない
+    private val plainPrefs: SharedPreferences =
+        context.getSharedPreferences("nurunuru_prefs", Context.MODE_PRIVATE)
+
+    init {
+        migratePlainPrefsIfNeeded()
+    }
+
+    /**
+     * 旧バージョンで securePrefs に保存されていた非機密データを plainPrefs へ移行する。
+     * 移行済みフラグがあればスキップ。
+     */
+    private fun migratePlainPrefsIfNeeded() {
+        if (plainPrefs.getBoolean(KEY_PLAIN_MIGRATED, false)) return
+        try {
+            val editor = plainPrefs.edit()
+            // relays
+            val relaySet = securePrefs.getStringSet(KEY_RELAYS, null)
+            if (relaySet != null) editor.putStringSet(KEY_RELAYS, relaySet)
+            // uploadServer
+            val upload = securePrefs.getString(KEY_UPLOAD_SERVER, null)
+            if (upload != null) editor.putString(KEY_UPLOAD_SERVER, upload)
+            // blossomUrl
+            val blossom = securePrefs.getString(KEY_BLOSSOM_URL, null)
+            if (blossom != null) editor.putString(KEY_BLOSSOM_URL, blossom)
+            // recentSearches
+            val searches = securePrefs.getString(KEY_RECENT_SEARCHES, null)
+            if (searches != null) editor.putString(KEY_RECENT_SEARCHES, searches)
+            // favoriteApps
+            val favApps = securePrefs.getString(KEY_FAVORITE_APPS, null)
+            if (favApps != null) editor.putString(KEY_FAVORITE_APPS, favApps)
+            // externalApps
+            val extApps = securePrefs.getString(KEY_EXTERNAL_APPS, null)
+            if (extApps != null) editor.putString(KEY_EXTERNAL_APPS, extApps)
+            // defaultZapAmount
+            if (securePrefs.contains(KEY_DEFAULT_ZAP_AMOUNT))
+                editor.putInt(KEY_DEFAULT_ZAP_AMOUNT, securePrefs.getInt(KEY_DEFAULT_ZAP_AMOUNT, 21))
+            // autoSignEnabled
+            if (securePrefs.contains(KEY_AUTO_SIGN_ENABLED))
+                editor.putBoolean(KEY_AUTO_SIGN_ENABLED, securePrefs.getBoolean(KEY_AUTO_SIGN_ENABLED, true))
+            // elevenLabsLanguage
+            val lang = securePrefs.getString(KEY_ELEVENLABS_LANGUAGE, null)
+            if (lang != null) editor.putString(KEY_ELEVENLABS_LANGUAGE, lang)
+            // selectedRegionId
+            val region = securePrefs.getString(KEY_SELECTED_REGION_ID, null)
+            if (region != null) editor.putString(KEY_SELECTED_REGION_ID, region)
+            // userGeohash
+            val geohash = securePrefs.getString(KEY_USER_GEOHASH, null)
+            if (geohash != null) editor.putString(KEY_USER_GEOHASH, geohash)
+            // userLat / userLon
+            if (securePrefs.contains(KEY_USER_LAT))
+                editor.putFloat(KEY_USER_LAT, securePrefs.getFloat(KEY_USER_LAT, 0.0f))
+            if (securePrefs.contains(KEY_USER_LON))
+                editor.putFloat(KEY_USER_LON, securePrefs.getFloat(KEY_USER_LON, 0.0f))
+            // mainRelay
+            val mainRelay = securePrefs.getString(KEY_MAIN_RELAY, null)
+            if (mainRelay != null) editor.putString(KEY_MAIN_RELAY, mainRelay)
+            // nip65Relays
+            val nip65 = securePrefs.getString(KEY_NIP65_RELAYS, null)
+            if (nip65 != null) editor.putString(KEY_NIP65_RELAYS, nip65)
+
+            editor.putBoolean(KEY_PLAIN_MIGRATED, true)
+            editor.apply()
+            Log.d("AppPreferences", "Migrated non-sensitive prefs to plainPrefs")
+        } catch (e: Exception) {
+            Log.w("AppPreferences", "Migration failed (non-fatal): ${e.message}")
+            plainPrefs.edit().putBoolean(KEY_PLAIN_MIGRATED, true).apply()
+        }
+    }
+
     /**
      * @deprecated SecureKeyManager に移行済み。マイグレーション専用。
      * 新規コードでは SecureKeyManager を使うこと。
      */
     @Deprecated("Use SecureKeyManager instead", level = DeprecationLevel.WARNING)
     var privateKeyHex: String?
-        get() = prefs.getString(KEY_PRIVATE_KEY_HEX, null)
+        get() = securePrefs.getString(KEY_PRIVATE_KEY_HEX, null)
         set(value) {
-            if (value == null) prefs.edit().remove(KEY_PRIVATE_KEY_HEX).apply()
-            else prefs.edit().putString(KEY_PRIVATE_KEY_HEX, value).apply()
+            if (value == null) securePrefs.edit().remove(KEY_PRIVATE_KEY_HEX).apply()
+            else securePrefs.edit().putString(KEY_PRIVATE_KEY_HEX, value).apply()
         }
 
     /**
      * マイグレーション後に旧秘密鍵データを削除する。
      */
     fun clearPrivateKey() {
-        prefs.edit().remove(KEY_PRIVATE_KEY_HEX).apply()
+        securePrefs.edit().remove(KEY_PRIVATE_KEY_HEX).apply()
     }
 
     var publicKeyHex: String?
-        get() = prefs.getString(KEY_PUBLIC_KEY_HEX, null)
+        get() = securePrefs.getString(KEY_PUBLIC_KEY_HEX, null)
         set(value) {
-            if (value == null) prefs.edit().remove(KEY_PUBLIC_KEY_HEX).apply()
-            else prefs.edit().putString(KEY_PUBLIC_KEY_HEX, value).apply()
+            if (value == null) securePrefs.edit().remove(KEY_PUBLIC_KEY_HEX).apply()
+            else securePrefs.edit().putString(KEY_PUBLIC_KEY_HEX, value).apply()
         }
 
     var relays: Set<String>
-        get() = prefs.getStringSet(KEY_RELAYS, DEFAULT_RELAYS.toSet()) ?: DEFAULT_RELAYS.toSet()
-        set(value) = prefs.edit().putStringSet(KEY_RELAYS, value).apply()
+        get() = plainPrefs.getStringSet(KEY_RELAYS, DEFAULT_RELAYS.toSet()) ?: DEFAULT_RELAYS.toSet()
+        set(value) = plainPrefs.edit().putStringSet(KEY_RELAYS, value).apply()
 
     var uploadServer: String
-        get() = prefs.getString(KEY_UPLOAD_SERVER, "nostr.build") ?: "nostr.build"
-        set(value) = prefs.edit().putString(KEY_UPLOAD_SERVER, value).apply()
+        get() = plainPrefs.getString(KEY_UPLOAD_SERVER, "nostr.build") ?: "nostr.build"
+        set(value) = plainPrefs.edit().putString(KEY_UPLOAD_SERVER, value).apply()
 
     var blossomUrl: String
-        get() = prefs.getString(KEY_BLOSSOM_URL, "https://blossom.nostr.build") ?: "https://blossom.nostr.build"
-        set(value) = prefs.edit().putString(KEY_BLOSSOM_URL, value).apply()
+        get() = plainPrefs.getString(KEY_BLOSSOM_URL, "https://blossom.nostr.build") ?: "https://blossom.nostr.build"
+        set(value) = plainPrefs.edit().putString(KEY_BLOSSOM_URL, value).apply()
 
     var isExternalSigner: Boolean
-        get() = prefs.getBoolean(KEY_IS_EXTERNAL_SIGNER, false)
-        set(value) = prefs.edit().putBoolean(KEY_IS_EXTERNAL_SIGNER, value).apply()
+        get() = securePrefs.getBoolean(KEY_IS_EXTERNAL_SIGNER, false)
+        set(value) = securePrefs.edit().putBoolean(KEY_IS_EXTERNAL_SIGNER, value).apply()
 
     var recentSearches: List<String>
         get() {
-            val jsonStr = prefs.getString(KEY_RECENT_SEARCHES, "[]") ?: "[]"
+            val jsonStr = plainPrefs.getString(KEY_RECENT_SEARCHES, "[]") ?: "[]"
             return try {
                 Json.decodeFromString(jsonStr)
             } catch (e: Exception) {
@@ -76,12 +148,12 @@ class AppPreferences(context: Context) {
         }
         set(value) {
             val jsonStr = Json.encodeToString(value)
-            prefs.edit().putString(KEY_RECENT_SEARCHES, jsonStr).apply()
+            plainPrefs.edit().putString(KEY_RECENT_SEARCHES, jsonStr).apply()
         }
 
     var favoriteApps: List<String>
         get() {
-            val jsonStr = prefs.getString(KEY_FAVORITE_APPS, "[]") ?: "[]"
+            val jsonStr = plainPrefs.getString(KEY_FAVORITE_APPS, "[]") ?: "[]"
             return try {
                 Json.decodeFromString(jsonStr)
             } catch (e: Exception) {
@@ -90,33 +162,33 @@ class AppPreferences(context: Context) {
         }
         set(value) {
             val jsonStr = Json.encodeToString(value)
-            prefs.edit().putString(KEY_FAVORITE_APPS, jsonStr).apply()
+            plainPrefs.edit().putString(KEY_FAVORITE_APPS, jsonStr).apply()
         }
 
     var selectedRegionId: String?
-        get() = prefs.getString(KEY_SELECTED_REGION_ID, null)
-        set(value) = prefs.edit().putString(KEY_SELECTED_REGION_ID, value).apply()
+        get() = plainPrefs.getString(KEY_SELECTED_REGION_ID, null)
+        set(value) = plainPrefs.edit().putString(KEY_SELECTED_REGION_ID, value).apply()
 
     var userGeohash: String?
-        get() = prefs.getString(KEY_USER_GEOHASH, null)
-        set(value) = prefs.edit().putString(KEY_USER_GEOHASH, value).apply()
+        get() = plainPrefs.getString(KEY_USER_GEOHASH, null)
+        set(value) = plainPrefs.edit().putString(KEY_USER_GEOHASH, value).apply()
 
     var userLat: Double
-        get() = prefs.getFloat(KEY_USER_LAT, 0.0f).toDouble()
-        set(value) = prefs.edit().putFloat(KEY_USER_LAT, value.toFloat()).apply()
+        get() = plainPrefs.getFloat(KEY_USER_LAT, 0.0f).toDouble()
+        set(value) = plainPrefs.edit().putFloat(KEY_USER_LAT, value.toFloat()).apply()
 
     var userLon: Double
-        get() = prefs.getFloat(KEY_USER_LON, 0.0f).toDouble()
-        set(value) = prefs.edit().putFloat(KEY_USER_LON, value.toFloat()).apply()
+        get() = plainPrefs.getFloat(KEY_USER_LON, 0.0f).toDouble()
+        set(value) = plainPrefs.edit().putFloat(KEY_USER_LON, value.toFloat()).apply()
 
     /** おすすめタイムラインに使うメインリレー（最寄りリレーリストから選択した1つ）。Web版の nurunuru_default_relay に相当。 */
     var mainRelay: String
-        get() = prefs.getString(KEY_MAIN_RELAY, DEFAULT_RELAYS.first()) ?: DEFAULT_RELAYS.first()
-        set(value) = prefs.edit().putString(KEY_MAIN_RELAY, value).apply()
+        get() = plainPrefs.getString(KEY_MAIN_RELAY, DEFAULT_RELAYS.first()) ?: DEFAULT_RELAYS.first()
+        set(value) = plainPrefs.edit().putString(KEY_MAIN_RELAY, value).apply()
 
     var nip65Relays: List<io.nurunuru.app.data.models.Nip65Relay>
         get() {
-            val jsonStr = prefs.getString(KEY_NIP65_RELAYS, "[]") ?: "[]"
+            val jsonStr = plainPrefs.getString(KEY_NIP65_RELAYS, "[]") ?: "[]"
             return try {
                 Json.decodeFromString(jsonStr)
             } catch (e: Exception) {
@@ -125,28 +197,29 @@ class AppPreferences(context: Context) {
         }
         set(value) {
             val jsonStr = Json.encodeToString(value)
-            prefs.edit().putString(KEY_NIP65_RELAYS, jsonStr).apply()
+            plainPrefs.edit().putString(KEY_NIP65_RELAYS, jsonStr).apply()
         }
 
     var externalApps: String
-        get() = prefs.getString(KEY_EXTERNAL_APPS, "[]") ?: "[]"
-        set(value) = prefs.edit().putString(KEY_EXTERNAL_APPS, value).apply()
+        get() = plainPrefs.getString(KEY_EXTERNAL_APPS, "[]") ?: "[]"
+        set(value) = plainPrefs.edit().putString(KEY_EXTERNAL_APPS, value).apply()
 
     var defaultZapAmount: Int
-        get() = prefs.getInt(KEY_DEFAULT_ZAP_AMOUNT, 21)
-        set(value) = prefs.edit().putInt(KEY_DEFAULT_ZAP_AMOUNT, value).apply()
+        get() = plainPrefs.getInt(KEY_DEFAULT_ZAP_AMOUNT, 21)
+        set(value) = plainPrefs.edit().putInt(KEY_DEFAULT_ZAP_AMOUNT, value).apply()
 
     var autoSignEnabled: Boolean
-        get() = prefs.getBoolean(KEY_AUTO_SIGN_ENABLED, true)
-        set(value) = prefs.edit().putBoolean(KEY_AUTO_SIGN_ENABLED, value).apply()
+        get() = plainPrefs.getBoolean(KEY_AUTO_SIGN_ENABLED, true)
+        set(value) = plainPrefs.edit().putBoolean(KEY_AUTO_SIGN_ENABLED, value).apply()
 
+    // ElevenLabs APIキーは機密なので securePrefs に残す
     var elevenLabsApiKey: String
-        get() = prefs.getString(KEY_ELEVENLABS_API_KEY, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_ELEVENLABS_API_KEY, value).apply()
+        get() = securePrefs.getString(KEY_ELEVENLABS_API_KEY, "") ?: ""
+        set(value) = securePrefs.edit().putString(KEY_ELEVENLABS_API_KEY, value).apply()
 
     var elevenLabsLanguage: String
-        get() = prefs.getString(KEY_ELEVENLABS_LANGUAGE, "jpn") ?: "jpn"
-        set(value) = prefs.edit().putString(KEY_ELEVENLABS_LANGUAGE, value).apply()
+        get() = plainPrefs.getString(KEY_ELEVENLABS_LANGUAGE, "jpn") ?: "jpn"
+        set(value) = plainPrefs.edit().putString(KEY_ELEVENLABS_LANGUAGE, value).apply()
 
     /**
      * ログイン済みかどうか。
@@ -159,7 +232,8 @@ class AppPreferences(context: Context) {
     }
 
     fun clear() {
-        prefs.edit().clear().apply()
+        securePrefs.edit().clear().apply()
+        plainPrefs.edit().clear().apply()
     }
 
     companion object {
@@ -182,5 +256,6 @@ class AppPreferences(context: Context) {
         private const val KEY_USER_LON = "user_lon"
         private const val KEY_NIP65_RELAYS = "nip65_relays"
         private const val KEY_MAIN_RELAY = "main_relay"
+        private const val KEY_PLAIN_MIGRATED = "plain_migrated_v1"
     }
 }

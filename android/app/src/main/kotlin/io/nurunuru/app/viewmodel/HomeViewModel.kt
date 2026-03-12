@@ -158,15 +158,33 @@ class HomeViewModel(
             try {
                 val post = (_uiState.value.posts + _uiState.value.likedPosts)
                     .firstOrNull { it.event.id == eventId }
+                if (post?.isLiked == true) {
+                    val reactionEventId = post.myLikeEventId ?: return@launch
+                    val success = repository.deleteEvent(reactionEventId)
+                    if (success) {
+                        _uiState.update { state ->
+                            val updatePost = { p: ScoredPost ->
+                                if (p.event.id == eventId) p.copy(
+                                    isLiked = false,
+                                    likeCount = maxOf(0, p.likeCount - 1),
+                                    myLikeEventId = null
+                                ) else p
+                            }
+                            state.copy(posts = state.posts.map(updatePost), likedPosts = state.likedPosts.map(updatePost))
+                        }
+                    }
+                    return@launch
+                }
                 val authorPubkey = post?.event?.pubkey ?: ""
-                val success = repository.likePost(eventId, authorPubkey, emoji, customTags)
-                if (success) {
+                val newEventId = repository.likePost(eventId, authorPubkey, emoji, customTags)
+                if (newEventId != null) {
                     _uiState.update { state ->
-                        val updatePost = { post: ScoredPost ->
-                            if (post.event.id == eventId) post.copy(
+                        val updatePost = { p: ScoredPost ->
+                            if (p.event.id == eventId) p.copy(
                                 isLiked = true,
-                                likeCount = post.likeCount + 1
-                            ) else post
+                                likeCount = p.likeCount + 1,
+                                myLikeEventId = newEventId
+                            ) else p
                         }
                         state.copy(
                             posts = state.posts.map(updatePost),
@@ -185,19 +203,37 @@ class HomeViewModel(
             try {
                 val post = (_uiState.value.posts + _uiState.value.likedPosts)
                     .firstOrNull { it.event.id == eventId }
+                if (post?.isReposted == true) {
+                    val repostEventId = post.myRepostEventId ?: return@launch
+                    val success = repository.deleteEvent(repostEventId)
+                    if (success) {
+                        _uiState.update { state ->
+                            val updatePost = { p: ScoredPost ->
+                                if (p.event.id == eventId) p.copy(
+                                    isReposted = false,
+                                    repostCount = maxOf(0, p.repostCount - 1),
+                                    myRepostEventId = null
+                                ) else p
+                            }
+                            state.copy(posts = state.posts.map(updatePost), likedPosts = state.likedPosts.map(updatePost))
+                        }
+                    }
+                    return@launch
+                }
                 val eventJson = post?.event?.let {
                     try { kotlinx.serialization.json.Json { encodeDefaults = true }.encodeToString(
                         io.nurunuru.app.data.models.NostrEvent.serializer(), it)
                     } catch (_: Exception) { null }
                 }
-                val success = repository.repostPost(eventId, eventJson)
-                if (success) {
+                val newEventId = repository.repostPost(eventId, eventJson)
+                if (newEventId != null) {
                     _uiState.update { state ->
-                        val updatePost = { post: ScoredPost ->
-                            if (post.event.id == eventId) post.copy(
+                        val updatePost = { p: ScoredPost ->
+                            if (p.event.id == eventId) p.copy(
                                 isReposted = true,
-                                repostCount = post.repostCount + 1
-                            ) else post
+                                repostCount = p.repostCount + 1,
+                                myRepostEventId = newEventId
+                            ) else p
                         }
                         state.copy(
                             posts = state.posts.map(updatePost),

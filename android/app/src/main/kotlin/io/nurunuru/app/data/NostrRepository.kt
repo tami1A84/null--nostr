@@ -74,18 +74,23 @@ class NostrRepository(
      * Sign an unsigned event JSON via the AppSigner and broadcast via rustClient.
      * Used by all write operations when [isExternalSigner] is true.
      */
-    private suspend fun signAndPublish(unsignedJson: String): Boolean {
+    private suspend fun signAndPublish(unsignedJson: String): Boolean =
+        signAndPublishGetId(unsignedJson) != null
+
+    /** Signs, publishes, and returns the event ID on success (null on failure). */
+    private suspend fun signAndPublishGetId(unsignedJson: String): String? {
         val signedJson = client.getSigner().signEvent(unsignedJson) ?: run {
             android.util.Log.w("NostrRepository", "signAndPublish: signer returned null")
-            return false
+            return null
         }
-        val rustClient = client.getRustClient() ?: return false
+        val rustClient = client.getRustClient() ?: return null
         return try {
             rustClient.publishRawEvent(signedJson)
-            true
+            kotlinx.serialization.json.Json.parseToJsonElement(signedJson)
+                .jsonObject["id"]?.jsonPrimitive?.content
         } catch (e: Exception) {
             android.util.Log.w("NostrRepository", "signAndPublish: publish failed: ${e.message}")
-            false
+            null
         }
     }
 
@@ -1365,25 +1370,26 @@ class NostrRepository(
 
     // ─── Actions ──────────────────────────────────────────────────────────────
 
+    /** Returns the reaction event ID on success, null on failure. */
     suspend fun likePost(
         eventId: String,
         authorPubkey: String,
         emoji: String = "+",
         customTags: List<List<String>> = emptyList()
-    ): Boolean {
-        val rustClient = client.getRustClient() ?: return false
+    ): String? {
+        val rustClient = client.getRustClient() ?: return null
         return try {
             if (isExternalSigner()) {
                 val unsigned = rustClient.createUnsignedReaction(eventId, authorPubkey, emoji, myPubkeyHex)
-                signAndPublish(unsigned).also { if (it) android.util.Log.d("NostrRepository", "Ext react OK: $eventId") }
+                signAndPublishGetId(unsigned).also { if (it != null) android.util.Log.d("NostrRepository", "Ext react OK: $eventId id=$it") }
             } else {
-                rustClient.react(eventId, authorPubkey, emoji)
-                android.util.Log.d("NostrRepository", "Rust react OK: $eventId emoji=$emoji")
-                true
+                val reactionId = rustClient.react(eventId, authorPubkey, emoji)
+                android.util.Log.d("NostrRepository", "Rust react OK: $eventId emoji=$emoji id=$reactionId")
+                reactionId.ifEmpty { null }
             }
         } catch (e: Exception) {
             android.util.Log.e("NostrRepository", "Rust react failed: ${e.message}")
-            false
+            null
         }
     }
 
@@ -1392,24 +1398,25 @@ class NostrRepository(
      *
      * `eventJson` must be the full serialised Nostr event JSON (with encodeDefaults=true).
      */
-    suspend fun repostPost(eventId: String, eventJson: String? = null): Boolean {
-        val rustClient = client.getRustClient() ?: return false
+    /** Returns the repost event ID on success, null on failure. */
+    suspend fun repostPost(eventId: String, eventJson: String? = null): String? {
+        val rustClient = client.getRustClient() ?: return null
         if (eventJson == null) {
             android.util.Log.w("NostrRepository", "repostPost: eventJson is null, skipping $eventId")
-            return false
+            return null
         }
         return try {
             if (isExternalSigner()) {
                 val unsigned = rustClient.createUnsignedRepost(eventJson, myPubkeyHex)
-                signAndPublish(unsigned).also { if (it) android.util.Log.d("NostrRepository", "Ext repost OK: $eventId") }
+                signAndPublishGetId(unsigned).also { if (it != null) android.util.Log.d("NostrRepository", "Ext repost OK: $eventId id=$it") }
             } else {
-                rustClient.repost(eventJson)
-                android.util.Log.d("NostrRepository", "Rust repost OK: $eventId")
-                true
+                val repostId = rustClient.repost(eventJson)
+                android.util.Log.d("NostrRepository", "Rust repost OK: $eventId id=$repostId")
+                repostId.ifEmpty { null }
             }
         } catch (e: Exception) {
             android.util.Log.e("NostrRepository", "Rust repost failed: ${e.message}")
-            false
+            null
         }
     }
 

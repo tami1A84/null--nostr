@@ -10,7 +10,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -106,6 +108,7 @@ fun SettingsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedApp by remember { mutableStateOf<MiniAppData?>(null) }
     var showExternalAdd by remember { mutableStateOf(false) }
+    var editingApp by remember { mutableStateOf<MiniAppData?>(null) }
 
     val npub = remember(pubkeyHex) { NostrKeyUtils.encodeNpub(pubkeyHex) ?: pubkeyHex }
     val favorites = remember { mutableStateListOf<String>().apply { addAll(prefs.favoriteApps) } }
@@ -125,12 +128,10 @@ fun SettingsScreen(
         )
     }
 
-    val externalAppsJson = prefs.externalApps
-    val externalApps = remember(externalAppsJson) {
-        try {
-            Json.decodeFromString<List<MiniAppData>>(externalAppsJson)
-        } catch (e: Exception) {
-            emptyList()
+    val externalApps = remember {
+        mutableStateListOf<MiniAppData>().apply {
+            try { addAll(Json.decodeFromString<List<MiniAppData>>(prefs.externalApps)) }
+            catch (e: Exception) {}
         }
     }
 
@@ -143,6 +144,33 @@ fun SettingsScreen(
             onBack = { selectedApp = null }
         )
         return
+    }
+
+    // 外部ミニアプリ 編集・削除 BottomSheet
+    editingApp?.let { target ->
+        ExternalAppEditSheet(
+            app = target,
+            onSave = { newName, newUrl ->
+                val idx = externalApps.indexOfFirst { it.id == target.id }
+                if (idx >= 0) {
+                    externalApps[idx] = target.copy(
+                        name = newName,
+                        url = newUrl,
+                        description = "外部ミニアプリ"
+                    )
+                    prefs.externalApps = Json.encodeToString(externalApps.toList())
+                }
+                editingApp = null
+            },
+            onDelete = {
+                externalApps.removeAll { it.id == target.id }
+                favorites.remove(target.id)
+                prefs.externalApps = Json.encodeToString(externalApps.toList())
+                prefs.favoriteApps = favorites.toList()
+                editingApp = null
+            },
+            onDismiss = { editingApp = null }
+        )
     }
 
     Scaffold(
@@ -351,7 +379,8 @@ fun SettingsScreen(
                         }
                         prefs.favoriteApps = favorites.toList()
                     },
-                    onClick = { selectedApp = app }
+                    onClick = { selectedApp = app },
+                    onLongClick = if (app.type == "external") ({ editingApp = app }) else null
                 )
             }
 
@@ -393,8 +422,8 @@ fun SettingsScreen(
                                                 type = "external",
                                                 url = externalUrl
                                             )
-                                            val newList = externalApps + newApp
-                                            prefs.externalApps = Json.encodeToString(newList)
+                                            externalApps.add(newApp)
+                                            prefs.externalApps = Json.encodeToString(externalApps.toList())
                                             showExternalAdd = false
                                         }
                                     },
@@ -570,18 +599,20 @@ private fun SecuritySettingsSection(authViewModel: AuthViewModel, prefs: AppPref
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MiniAppRow(
     app: MiniAppData,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
 ) {
     val nuruColors = LocalNuruColors.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -1145,6 +1176,127 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExternalAppEditSheet(
+    app: MiniAppData,
+    onSave: (name: String, url: String) -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val nuruColors = LocalNuruColors.current
+    var name by remember(app.id) { mutableStateOf(app.name) }
+    var url by remember(app.id) { mutableStateOf(app.url ?: "") }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = nuruColors.bgPrimary,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 12.dp, bottom = 4.dp)
+                    .size(width = 32.dp, height = 4.dp)
+                    .background(nuruColors.border, RoundedCornerShape(2.dp))
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 32.dp)
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("外部ミニアプリを編集", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("アプリ名") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = LineGreen,
+                    unfocusedBorderColor = nuruColors.border
+                )
+            )
+            OutlinedTextField(
+                value = url,
+                onValueChange = { url = it },
+                label = { Text("URL") },
+                placeholder = { Text("https://...") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = LineGreen,
+                    unfocusedBorderColor = nuruColors.border
+                )
+            )
+
+            Button(
+                onClick = {
+                    val trimmedUrl = url.trim()
+                    if (trimmedUrl.startsWith("http")) {
+                        onSave(
+                            name.ifBlank { try { java.net.URL(trimmedUrl).host } catch (e: Exception) { "外部アプリ" } },
+                            trimmedUrl
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("保存", fontWeight = FontWeight.Bold)
+            }
+
+            if (showDeleteConfirm) {
+                Surface(
+                    color = Color.Red.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            "「${app.name}」を削除しますか？",
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { showDeleteConfirm = false },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) { Text("キャンセル") }
+                            Button(
+                                onClick = onDelete,
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                                shape = RoundedCornerShape(12.dp)
+                            ) { Text("削除", color = Color.White) }
+                        }
+                    }
+                }
+            } else {
+                TextButton(
+                    onClick = { showDeleteConfirm = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Delete, null, tint = Color.Red, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("このミニアプリを削除", color = Color.Red, fontSize = 14.sp)
                 }
             }
         }
