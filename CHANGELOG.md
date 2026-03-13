@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-03-13
+
+### Fixed (Android)
+- 外部ミニアプリで画像などのファイルアップロードができない問題: `WebChromeClient.onShowFileChooser()` を実装し、ファイルピッカーを起動可能に
+- 外部ミニアプリ表示中に下部タブバーが残る問題: ミニアプリオープン中はタブバーをスライドアウト非表示に
+- 外部ミニアプリ内リンク遷移後に戻れない問題: ← ボタンが WebView 内履歴を遡るように変更、✕ ボタンでいつでもミニアプリを閉じられるように追加
+
 ## [1.3.4] - 2026-03-13
 
 ### Added (Android)

@@ -1,14 +1,20 @@
 package io.nurunuru.app.ui.miniapps
 
 import android.annotation.SuppressLint
+import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -96,6 +102,21 @@ fun NostrBrowserApp(
     val webViewState = remember { mutableStateOf<WebView?>(null) }
     val permissionState = remember { mutableStateOf<PermissionRequest?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    var fileChooserCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        fileChooserCallback?.onReceiveValue(uris.toTypedArray())
+        fileChooserCallback = null
+    }
+
+    fun navigateBack() {
+        val wv = webViewState.value
+        if (wv != null && wv.canGoBack()) wv.goBack() else onBack()
+    }
+
+    BackHandler { navigateBack() }
 
     val bridge = remember {
         NostrJsBridge(
@@ -124,11 +145,10 @@ fun NostrBrowserApp(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(end = 16.dp),
+                    .height(56.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack) {
+                IconButton(onClick = { navigateBack() }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "戻る")
                 }
                 Text(
@@ -139,6 +159,9 @@ fun NostrBrowserApp(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Filled.Close, contentDescription = "閉じる")
+                }
             }
         }
 
@@ -184,7 +207,22 @@ fun NostrBrowserApp(
                         }
                     }
 
-                    webChromeClient = WebChromeClient()
+                    webChromeClient = object : WebChromeClient() {
+                        override fun onShowFileChooser(
+                            webView: WebView,
+                            filePathCallback: ValueCallback<Array<Uri>>,
+                            fileChooserParams: FileChooserParams
+                        ): Boolean {
+                            fileChooserCallback?.onReceiveValue(null)
+                            fileChooserCallback = filePathCallback
+                            val acceptTypes = fileChooserParams.acceptTypes
+                            val mime = acceptTypes
+                                ?.firstOrNull { it.isNotBlank() }
+                                ?: "*/*"
+                            filePickerLauncher.launch(mime)
+                            return true
+                        }
+                    }
 
                     loadUrl(initialUrl)
                     webViewState.value = this

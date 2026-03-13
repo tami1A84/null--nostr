@@ -55,6 +55,7 @@ fun MainScreen(
     val context = LocalContext.current
     val nuruColors = LocalNuruColors.current
     var activeTab by remember { mutableStateOf(BottomTab.TIMELINE) }
+    var isExternalAppOpen by remember { mutableStateOf(false) }
 
     // Create shared NostrClient and Repository
     val recommendationEngine = remember { io.nurunuru.app.data.RecommendationEngine(context) }
@@ -121,6 +122,13 @@ fun MainScreen(
             // but coordinate through MainScreen's contentWindowInsets.
         },
         bottomBar = {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !isExternalAppOpen,
+                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(120)) +
+                        androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(120)) { it },
+                exit  = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) +
+                        androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(120)) { it }
+            ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = Color.Black,
@@ -177,6 +185,7 @@ fun MainScreen(
                     }
                 }
             }
+            } // AnimatedVisibility
         },
         containerColor = Color.Black
     ) { paddingValues ->
@@ -227,7 +236,8 @@ fun MainScreen(
                     repository = repository,
                     prefs = app.prefs,
                     pubkeyHex = pubkeyHex,
-                    pictureUrl = myProfile?.picture
+                    pictureUrl = myProfile?.picture,
+                    onExternalAppOpenChanged = { isExternalAppOpen = it }
                 )
             }
         }

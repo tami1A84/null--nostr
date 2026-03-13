@@ -100,7 +100,8 @@ fun SettingsScreen(
     repository: NostrRepository,
     prefs: AppPreferences,
     pubkeyHex: String,
-    pictureUrl: String?
+    pictureUrl: String?,
+    onExternalAppOpenChanged: (Boolean) -> Unit = {}
 ) {
     val nuruColors = LocalNuruColors.current
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -108,6 +109,13 @@ fun SettingsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedApp by remember { mutableStateOf<MiniAppData?>(null) }
     var showExternalAdd by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedApp) {
+        onExternalAppOpenChanged(selectedApp?.type == "external")
+    }
+    DisposableEffect(Unit) {
+        onDispose { onExternalAppOpenChanged(false) }
+    }
     var editingApp by remember { mutableStateOf<MiniAppData?>(null) }
 
     val npub = remember(pubkeyHex) { NostrKeyUtils.encodeNpub(pubkeyHex) ?: pubkeyHex }
