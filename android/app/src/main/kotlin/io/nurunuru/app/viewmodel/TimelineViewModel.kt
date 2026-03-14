@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import io.nurunuru.app.data.Nip05Utils
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.NostrRepository
+import io.nurunuru.app.data.SearchQueryParser
 import io.nurunuru.app.data.models.ScoredPost
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -484,8 +485,14 @@ class TimelineViewModel(
                     }
                 }
 
-                // 4. Default: Text search
-                val results = repository.searchNotes(trimmedQuery, 30)
+                // 4. オペレータ付き高度検索 or 通常テキスト検索
+                val parsed = SearchQueryParser.parse(trimmedQuery)
+                val results = if (parsed.hasOperators) {
+                    val resolvedNip05 = parsed.fromNip05.mapNotNull { Nip05Utils.resolveNip05(it) }
+                    repository.advancedSearch(parsed, resolvedNip05, 30)
+                } else {
+                    repository.searchNotes(trimmedQuery, 30)
+                }
                 _uiState.update { it.copy(searchResults = results, isSearching = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isSearching = false) }

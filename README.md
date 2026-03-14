@@ -38,6 +38,11 @@ Nostrは、特定の企業やサーバーに依存しない自由なSNSプロト
 - 複数画像をスワイプで閲覧（ピンチ / ダブルタップでズーム）
 - nevent / nprofile リンクをインラインカードとして表示
 
+**検索**
+- NIP-50全文検索（search.nos.today）
+- 検索コマンド対応: `#タグ` `from:npub` `since:` `until:` `-除外語` `"完全一致"` `filter:image` `filter:video` `filter:link`
+- 複数コマンドの組み合わせ可能
+
 **いいね・リアクション**
 - 2回目のタップでいいね・リポストを取り消し（NIP-09）
 - カスタム絵文字でリアクション（NIP-25）
@@ -109,6 +114,11 @@ Nostr is an open protocol for censorship-resistant social networking. Your accou
 - Images, custom emoji, and short loop videos (NIP-71)
 - Swipe through multiple images (pinch / double-tap to zoom)
 - nevent / nprofile links rendered as inline embedded cards
+
+**Search**
+- NIP-50 full-text search via search.nos.today
+- Search commands: `#tag` `from:npub` `since:` `until:` `-exclude` `"exact phrase"` `filter:image` `filter:video` `filter:link`
+- Combine multiple commands freely
 
 **Likes & Reactions**
 - Second tap cancels a like or repost (NIP-09 deletion)

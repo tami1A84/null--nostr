@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.7] - 2026-03-15
+
+### Added (Android)
+- 高度検索コマンド対応 (NIP-50 + 標準フィルタ + クライアント側後処理):
+  - `#タグ` — ハッシュタグで絞り込み (`#t` フィルタ)
+  - `from:npub1...` / `from:user@domain` — 投稿者を指定 (NIP-05自動解決)
+  - `since:YYYY-MM-DD` / `until:YYYY-MM-DD` — 期間指定
+  - `-除外語` — キーワード除外 (日本語対応)
+  - `"完全一致フレーズ"` — 完全一致フィルタ
+  - `filter:image` / `filter:video` / `filter:link` — メディア種別絞り込み
+  - 複数コマンドの組み合わせ対応 (`#japan since:2025-01-01 -spam` など)
+- 検索画面にコマンド一覧を常時表示、タップで検索バーへ追記（カーソルは末尾に移動）
+- NIP-50検索の `since` 1時間固定制限を撤廃、全期間対象に
+
+### Changed (Android)
+- 検索バーのプレースホルダーをコマンド表示に変更 (`#タグ  from:  since:  until:  -除外`)
+
 ## [1.3.6] - 2026-03-15
 
 ### Added (Android)

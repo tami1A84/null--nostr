@@ -344,13 +344,79 @@ class NostrRepository(
         val filter = NostrClient.Filter(
             kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
             search = query,
-            limit = limit,
-            since = getOneHourAgo()
+            limit = limit
         )
         val events = client.fetchEventsFrom(
             listOf(NostrClient.SEARCH_RELAY), filter, timeoutMs = 6_000
         )
         return enrichPosts(events)
+    }
+
+    /**
+     * オペレータ付き高度検索。
+     * - テキストあり → searchnos (NIP-50) に構造化フィルタを組み合わせて送信
+     * - テキストなし → 標準リレーREQ（#t / authors / since / until のみ）
+     * - クライアント側後処理: -除外語、"完全一致"、filter:image/video/link
+     */
+    suspend fun advancedSearch(
+        parsed: ParsedSearchQuery,
+        resolvedNip05Authors: List<String> = emptyList(),
+        limit: Int = 30,
+    ): List<ScoredPost> {
+        // from: を hex pubkey に解決
+        val fromHex = (parsed.fromPubkeys.mapNotNull { NostrKeyUtils.parsePublicKey(it) }
+                + resolvedNip05Authors).distinct()
+
+        val tagFilters = buildMap<String, List<String>> {
+            if (parsed.hashtags.isNotEmpty()) put("t", parsed.hashtags)
+        }.takeIf { it.isNotEmpty() }
+
+        android.util.Log.d("SearchQuery", "text='${parsed.textQuery}' hashtags=${parsed.hashtags} " +
+            "from=${fromHex} since=${parsed.since} until=${parsed.until} " +
+            "exclude=${parsed.excludeWords} exact=${parsed.exactPhrases} media=${parsed.mediaFilter}")
+
+        val rawEvents = if (parsed.textQuery.isNotEmpty()) {
+            // テキストあり → searchnos へ構造化フィルタごと送信
+            val filter = NostrClient.Filter(
+                kinds   = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
+                search  = parsed.textQuery,
+                authors = fromHex.takeIf { it.isNotEmpty() },
+                tags    = tagFilters,
+                since   = parsed.since,
+                until   = parsed.until,
+                limit   = limit,
+            )
+            client.fetchEventsFrom(listOf(NostrClient.SEARCH_RELAY), filter, timeoutMs = 6_000)
+        } else {
+            // テキストなし → 標準リレーへ構造化フィルタのみ
+            val filter = NostrClient.Filter(
+                kinds   = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP),
+                authors = fromHex.takeIf { it.isNotEmpty() },
+                tags    = tagFilters,
+                since   = parsed.since,
+                until   = parsed.until,
+                limit   = limit,
+            )
+            client.fetchEvents(filter, timeoutMs = 6_000)
+        }
+
+        // クライアント側後処理フィルタ
+        val filtered = rawEvents.filter { event ->
+            val c = event.content
+            parsed.excludeWords.none  { w -> c.contains(w, ignoreCase = true) } &&
+            parsed.exactPhrases.all   { p -> c.contains(p) } &&
+            when (parsed.mediaFilter) {
+                ParsedSearchQuery.MediaFilter.IMAGE ->
+                    SEARCH_IMAGE_HOSTS.any { c.contains(it, ignoreCase = true) }
+                ParsedSearchQuery.MediaFilter.VIDEO ->
+                    SEARCH_VIDEO_HOSTS.any { c.contains(it, ignoreCase = true) }
+                ParsedSearchQuery.MediaFilter.LINK  ->
+                    c.contains("http://") || c.contains("https://")
+                null -> true
+            }
+        }
+        android.util.Log.d("SearchQuery", "raw=${rawEvents.size} filtered=${filtered.size}")
+        return enrichPosts(filtered)
     }
 
     // ─── Notifications ─────────────────────────────────────────────────────────
@@ -582,6 +648,17 @@ class NostrRepository(
     }
 
     companion object {
+        // filter:image / filter:video 判定用ホスト・拡張子リスト
+        val SEARCH_IMAGE_HOSTS = listOf(
+            ".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif",
+            "nostr.build", "void.cat", "imgur.com", "i.imgur.com",
+            "image.nostr.build", "cdn.nostr.build",
+        )
+        val SEARCH_VIDEO_HOSTS = listOf(
+            ".mp4", ".webm", ".mov", ".m3u8",
+            "youtube.com", "youtu.be", "twitch.tv",
+        )
+
         /**
          * Parse sats amount from a bolt11 invoice string.
          * bolt11 format: lnbc<amount><multiplier>1...

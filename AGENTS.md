@@ -180,6 +180,26 @@ Note: `verified_mobile` requires the app to be distributed via Google Play Store
 
 ---
 
+## Search Architecture (Android)
+
+`SearchQueryParser` (`data/SearchQueryParser.kt`) parses operator tokens from the raw query string before routing to the appropriate backend:
+
+| Operator | Example | Backend |
+|---|---|---|
+| `#tag` | `#japan` | `#t` tag filter → relay REQ |
+| `from:` | `from:npub1...` / `from:user@domain` | `authors` filter (NIP-05 resolved async) |
+| `since:` / `until:` | `since:2025-01-01` | timestamp filter on relay REQ or searchnos |
+| `-word` | `-spam` | client-side post-filter (Unicode-aware) |
+| `"phrase"` | `"完全一致"` | client-side exact-match filter |
+| `filter:image/video/link` | `filter:image` | client-side URL pattern filter |
+
+Routing logic in `NostrRepository.advancedSearch()`:
+- **Text present** → searchnos (NIP-50) with all structured filters combined in one REQ
+- **Text absent** → standard relay REQ with tag/author/time filters only
+- Client-side post-filter applied to all results for exclude/exact/media
+
+---
+
 ## Supported NIPs
 
 NIP-01, 02, 05, 07, 09, 11, 17, 19, 25, 27, 30, 32, 42, 44, 46, 50, 51, 57, 58, 59, 62, 65, 70, 71, 98

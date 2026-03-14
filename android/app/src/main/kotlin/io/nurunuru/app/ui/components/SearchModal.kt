@@ -19,9 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,7 +46,7 @@ fun SearchModal(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
-    var query by remember { mutableStateOf(uiState.searchQuery) }
+    var query by remember { mutableStateOf(TextFieldValue(uiState.searchQuery)) }
     var isFocused by remember { mutableStateOf(false) }
 
     // Handle navigation events from ViewModel
@@ -92,7 +94,7 @@ fun SearchModal(
                     Box(modifier = Modifier.weight(1f)) {
                         BasicTextField(
                             value = query,
-                            onValueChange = { query = it },
+                            onValueChange = { query = it },  // TextFieldValue overload
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(40.dp)
@@ -111,7 +113,7 @@ fun SearchModal(
                             cursorBrush = SolidColor(LineGreen),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                             keyboardActions = KeyboardActions(onSearch = {
-                                if (query.isNotBlank()) viewModel.search(query)
+                                if (query.text.isNotBlank()) viewModel.search(query.text)
                             }),
                             decorationBox = { innerTextField ->
                                 Row(
@@ -128,18 +130,18 @@ fun SearchModal(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Box(modifier = Modifier.weight(1f)) {
-                                        if (query.isEmpty()) {
+                                        if (query.text.isEmpty()) {
                                             Text(
-                                                text = "キーワード / npub / NIP-05 / note",
-                                                fontSize = 14.sp,
+                                                text = "#タグ  from:  since:  until:  -除外",
+                                                fontSize = 13.sp,
                                                 color = nuruColors.textTertiary
                                             )
                                         }
                                         innerTextField()
                                     }
-                                    if (query.isNotEmpty()) {
+                                    if (query.text.isNotEmpty()) {
                                         IconButton(
-                                            onClick = { query = ""; viewModel.clearSearch() },
+                                            onClick = { query = TextFieldValue(""); viewModel.clearSearch() },
                                             modifier = Modifier.size(24.dp)
                                         ) {
                                             Icon(
@@ -156,8 +158,8 @@ fun SearchModal(
                     }
 
                     Button(
-                        onClick = { if (query.isNotBlank()) viewModel.search(query) },
-                        enabled = query.isNotBlank() && !uiState.isSearching,
+                        onClick = { if (query.text.isNotBlank()) viewModel.search(query.text) },
+                        enabled = query.text.isNotBlank() && !uiState.isSearching,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = LineGreen,
                             contentColor = Color.White,
@@ -260,7 +262,7 @@ fun SearchModal(
                                             RecentSearchChip(
                                                 text = search,
                                                 onSearch = {
-                                                    query = it
+                                                    query = TextFieldValue(it, selection = TextRange(it.length))
                                                     viewModel.search(it)
                                                 },
                                                 onDelete = { viewModel.removeRecentSearch(it) }
@@ -269,32 +271,66 @@ fun SearchModal(
                                     }
                                 }
                             } else {
+                                item { OperatorHintList(onAppend = { op ->
+                                    val newText = if (query.text.isBlank()) op else "${query.text.trimEnd()} $op"
+                                    query = TextFieldValue(newText, selection = TextRange(newText.length))
+                                }) }
+                            }
+
+                            // オペレーター一覧は最近の検索がある場合も常時表示
+                            if (uiState.recentSearches.isNotEmpty()) {
                                 item {
-                                    Column(
-                                        modifier = Modifier.fillParentMaxSize(),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(64.dp)
-                                                .background(nuruColors.bgSecondary, CircleShape),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(NuruIcons.Search, contentDescription = null, modifier = Modifier.size(32.dp), tint = nuruColors.textTertiary)
-                                        }
-                                        Spacer(Modifier.height(16.dp))
-                                        Text(
-                                            "キーワード、npub、note、NIP-05で検索",
-                                            color = nuruColors.textSecondary,
-                                            fontSize = 14.sp
-                                        )
-                                    }
+                                    Spacer(Modifier.height(8.dp))
+                                    HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+                                    Spacer(Modifier.height(8.dp))
+                                    OperatorHintList(onAppend = { op ->
+                                        val newText = if (query.text.isBlank()) op else "${query.text.trimEnd()} $op"
+                                        query = TextFieldValue(newText, selection = TextRange(newText.length))
+                                    })
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OperatorHintList(onAppend: (String) -> Unit) {
+    val nuruColors = LocalNuruColors.current
+    // Triple(表示ラベル, 挿入テキスト, 説明)
+    val operators = listOf(
+        Triple("#",            "#タグ",        "#ハッシュタグで絞り込み"),
+        Triple("from:",        "from:",        "投稿者を指定 (npub / NIP-05)"),
+        Triple("since:",       "since:",       "この日以降 (YYYY-MM-DD)"),
+        Triple("until:",       "until:",       "この日以前 (YYYY-MM-DD)"),
+        Triple("-",            "-除外語",      "ワードを除外"),
+        Triple("\"",           "\"",           "フレーズ完全一致"),
+        Triple("filter:image", "filter:image", "画像を含む投稿"),
+        Triple("filter:video", "filter:video", "動画を含む投稿"),
+        Triple("filter:link",  "filter:link",  "リンクを含む投稿"),
+    )
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Text(
+            "検索コマンド（タップで追加）",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = nuruColors.textSecondary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        operators.forEach { (insert, label, desc) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onAppend(insert) }
+                    .padding(vertical = 7.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = label, fontSize = 13.sp, color = LineGreen, fontWeight = FontWeight.Medium)
+                Text(text = desc,  fontSize = 12.sp, color = nuruColors.textTertiary)
             }
         }
     }
