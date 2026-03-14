@@ -63,7 +63,7 @@ fun TimelineHeader(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 TimelineTabButton(
-                    text = "おすすめ",
+                    text = "リレー",
                     selected = feedType == FeedType.GLOBAL,
                     showDot = showRecommendedDot,
                     onClick = { onFeedTypeChange(FeedType.GLOBAL) }

@@ -31,10 +31,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import androidx.compose.material.icons.outlined.Settings
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.NostrEvent
+import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.data.models.NotificationItem
 import io.nurunuru.app.data.models.UserProfile
+import io.nurunuru.app.data.prefs.AppPreferences
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import kotlinx.coroutines.delay
@@ -49,20 +52,24 @@ private data class NotifStyle(
     val label: String
 )
 
-private val reactionStyle = NotifStyle(Icons.Default.Favorite, Color(0xFFEF5350), "リアクション")
-private val zapStyle      = NotifStyle(Icons.Default.ElectricBolt, Color(0xFFFFC107), "Zap")
-private val repostStyle   = NotifStyle(Icons.Default.Repeat, Color(0xFF26A69A), "リポスト")
-private val replyStyle    = NotifStyle(Icons.AutoMirrored.Filled.Reply, LineGreen, "返信")
-private val mentionStyle  = NotifStyle(Icons.Default.AlternateEmail, Color(0xFF42A5F5), "メンション")
-private val birthdayStyle = NotifStyle(Icons.Default.Cake, Color(0xFFAB47BC), "誕生日")
+private val reactionStyle      = NotifStyle(Icons.Default.Favorite, Color(0xFFEF5350), "リアクション")
+private val emojiReactionStyle = NotifStyle(Icons.Default.EmojiEmotions, Color(0xFFFF9800), "絵文字リアクション")
+private val zapStyle           = NotifStyle(Icons.Default.ElectricBolt, Color(0xFFFFC107), "Zap")
+private val repostStyle        = NotifStyle(Icons.Default.Repeat, Color(0xFF26A69A), "リポスト")
+private val replyStyle         = NotifStyle(Icons.AutoMirrored.Filled.Reply, LineGreen, "返信")
+private val mentionStyle       = NotifStyle(Icons.Default.AlternateEmail, Color(0xFF42A5F5), "メンション")
+private val badgeStyle         = NotifStyle(Icons.Default.EmojiEvents, Color(0xFFFFD700), "バッジ")
+private val birthdayStyle      = NotifStyle(Icons.Default.Cake, Color(0xFFAB47BC), "誕生日")
 
 private fun styleFor(type: String) = when (type) {
-    "reaction" -> reactionStyle
-    "zap"      -> zapStyle
-    "repost"   -> repostStyle
-    "reply"    -> replyStyle
-    "mention"  -> mentionStyle
-    else       -> birthdayStyle
+    "reaction"       -> reactionStyle
+    "emoji_reaction" -> emojiReactionStyle
+    "zap"            -> zapStyle
+    "repost"         -> repostStyle
+    "reply"          -> replyStyle
+    "mention"        -> mentionStyle
+    "badge"          -> badgeStyle
+    else             -> birthdayStyle
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -72,6 +79,7 @@ private fun styleFor(type: String) = when (type) {
 @Composable
 fun NotificationModal(
     repository: NostrRepository,
+    prefs: AppPreferences,
     myPubkey: String,
     onClose: () -> Unit,
     onProfileClick: (String) -> Unit
@@ -85,8 +93,11 @@ fun NotificationModal(
     var originalPosts by remember { mutableStateOf<Map<String, NostrEvent>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
     var pendingNew by remember { mutableStateOf<List<NotificationItem>>(emptyList()) }
+    var showKindSettings by remember { mutableStateOf(false) }
+    var enabledKinds by remember { mutableStateOf(prefs.notificationEnabledKinds) }
+    var emojiReactionEnabled by remember { mutableStateOf(prefs.notificationEmojiReactionEnabled) }
 
-    // 初回フェッチ
+    // 初回フェッチ + ライブポーリング（10秒ごと）
     LaunchedEffect(Unit) {
         try {
             val result = repository.fetchNotifications(myPubkey)
@@ -98,20 +109,91 @@ fun NotificationModal(
         }
         loading = false
 
-        // バックグラウンドポーリング（30秒ごと）
         while (true) {
-            delay(30_000)
+            delay(10_000)
             try {
                 val fresh = repository.fetchNotifications(myPubkey)
                 val existingIds = notifications.map { it.id }.toSet()
                 val newItems = fresh.items.filter { it.id !in existingIds }
                 if (newItems.isNotEmpty()) {
-                    pendingNew = newItems
+                    pendingNew = (newItems + pendingNew).distinctBy { it.id }
                     profiles = fresh.profiles
                     originalPosts = fresh.originalPosts
                 }
             } catch (_: Exception) { }
         }
+    }
+
+    // 通知kind設定ダイアログ
+    if (showKindSettings) {
+        AlertDialog(
+            onDismissRequest = { showKindSettings = false },
+            title = { Text("通知の種類", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+                    // リアクション (kind 7, content "+" or "-")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+                    ) {
+                        Text("リアクション (👍)", fontSize = 15.sp)
+                        Switch(
+                            checked = NostrKind.REACTION in enabledKinds,
+                            onCheckedChange = { checked ->
+                                val updated = if (checked) enabledKinds + NostrKind.REACTION else enabledKinds - NostrKind.REACTION
+                                enabledKinds = updated
+                                prefs.notificationEnabledKinds = updated
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = LineGreen)
+                        )
+                    }
+                    // 絵文字リアクション (kind 7, custom emoji)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+                    ) {
+                        Text("絵文字リアクション", fontSize = 15.sp)
+                        Switch(
+                            checked = emojiReactionEnabled,
+                            onCheckedChange = { checked ->
+                                emojiReactionEnabled = checked
+                                prefs.notificationEmojiReactionEnabled = checked
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = LineGreen)
+                        )
+                    }
+                    // Zap / リポスト / 返信 / バッジ
+                    listOf(
+                        Triple("Zap", NostrKind.ZAP_RECEIPT, zapStyle.color),
+                        Triple("リポスト", NostrKind.REPOST, repostStyle.color),
+                        Triple("返信・メンション", NostrKind.TEXT_NOTE, replyStyle.color),
+                        Triple("バッジ", NostrKind.BADGE_AWARD, badgeStyle.color)
+                    ).forEach { (label, kind, _) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween
+                        ) {
+                            Text(label, fontSize = 15.sp)
+                            Switch(
+                                checked = kind in enabledKinds,
+                                onCheckedChange = { checked ->
+                                    val updated = if (checked) enabledKinds + kind else enabledKinds - kind
+                                    enabledKinds = updated
+                                    prefs.notificationEnabledKinds = updated
+                                },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = LineGreen)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showKindSettings = false }) { Text("閉じる") }
+            }
+        )
     }
 
     Dialog(
@@ -141,6 +223,9 @@ fun NotificationModal(
                         color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.weight(1f).padding(start = 4.dp)
                     )
+                    IconButton(onClick = { showKindSettings = true }) {
+                        Icon(Icons.Outlined.Settings, "通知設定", tint = nuruColors.textSecondary)
+                    }
                 }
                 HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
 
@@ -347,7 +432,7 @@ fun NotificationRow(
 
             // アクション説明
             when (notification.type) {
-                "reaction" -> {
+                "reaction", "emoji_reaction" -> {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         if (notification.emojiUrl != null) {
                             AsyncImage(
@@ -366,6 +451,22 @@ fun NotificationRow(
                             )
                         }
                         Text(style.label, fontSize = 13.sp, color = nuruColors.textSecondary)
+                    }
+                }
+                "badge" -> {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("🏅", fontSize = 15.sp)
+                        Text("バッジを授与されました", fontSize = 13.sp, color = nuruColors.textSecondary)
+                    }
+                    if (!notification.comment.isNullOrBlank()) {
+                        Text(
+                            notification.comment,
+                            fontSize = 12.sp,
+                            color = nuruColors.textTertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
                     }
                 }
                 "zap" -> {
@@ -406,7 +507,7 @@ fun NotificationRow(
             }
 
             // 対象投稿プレビュー（返信/リアクション/リポスト用）
-            if (originalPost != null && notification.type in listOf("reaction", "repost", "zap")) {
+            if (originalPost != null && notification.type in listOf("reaction", "emoji_reaction", "repost", "zap")) {
                 val previewText = removeImageUrls(originalPost.content).take(80).trim()
                 if (previewText.isNotBlank()) {
                     Spacer(Modifier.height(6.dp))

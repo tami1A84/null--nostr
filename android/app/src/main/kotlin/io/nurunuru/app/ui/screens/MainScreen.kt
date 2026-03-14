@@ -79,7 +79,9 @@ fun MainScreen(
             ).also { it.connect() }
         }
     }
-    val nostrCache = remember { io.nurunuru.app.data.cache.NostrCache(context) }
+    val nostrCache = remember {
+        io.nurunuru.app.data.cache.NostrCache(context).also { it.applySettings(app.prefs) }
+    }
     val repository = remember { NostrRepository(nostrClient, app.prefs, nostrCache, recommendationEngine) }
 
     // ViewModels
@@ -203,6 +205,7 @@ fun MainScreen(
                 TimelineScreen(
                     viewModel = timelineVM,
                     repository = repository,
+                    prefs = app.prefs,
                     myPubkey = pubkeyHex,
                     myPictureUrl = myProfile?.picture,
                     myDisplayName = myProfile?.displayedName ?: ""

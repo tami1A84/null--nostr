@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.6] - 2026-03-15
+
+### Added (Android)
+- バッジアワード (kind 8) 通知: バッジを授与されると通知一覧に🏅表示
+- リアクション通知を「リアクション (👍)」と「絵文字リアクション」に分離、それぞれ個別にON/OFF可能
+- キャッシュ設定にプロフィールバッジ (kind 8, 30009) の項目を追加
+- キャッシュ設定の全デフォルト保持期間を1日に統一
+
+### Changed (Android)
+- おすすめタブ → リレータブ: アルゴリズム・スコアリングを撤廃し、メインリレーの最新 kind 1 を時系列表示。ミュートのみ適用。
+- 通知モーダルのヘッダー右端に⚙設定アイコンを追加、種別ごとのON/OFFをモーダル内で完結
+- 通知ライブポーリングを10秒間隔に短縮、新着ピル表示に対応
+- タイムラインのローディングアニメーションをシマースケルトンに変更 (旧: バウンスドット)
+- リレータブの新着ピル閾値を3件に設定、タップで先頭に挿入 (再フェッチなし)
+- ミニアプリ「リレー設定」: NIP-65表記を整理、手動URL入力欄と「自分のリレーリストを読み込む」ボタンを追加
+
 ## [1.3.5] - 2026-03-13
 
 ### Fixed (Android)

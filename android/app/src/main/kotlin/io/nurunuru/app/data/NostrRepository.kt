@@ -23,13 +23,6 @@ class NostrRepository(
     /** Toggle for using the Rust core for heavy operations. */
     private var useRustCore: Boolean = true
 
-    /**
-     * 直近の fetchRecommendedFromMainRelay で構築したスコアリングコンテキストをキャッシュ。
-     * ライブ新着投稿のスコアリングに再利用することで、リレーへの追加フェッチを避ける。
-     */
-    @Volatile
-    private var cachedScoringContext: RecommendationEngine.ScoringContext? = null
-
     fun setUseRustCore(enabled: Boolean) {
         useRustCore = enabled
     }
@@ -113,119 +106,43 @@ class NostrRepository(
         }
 
     /**
-     * メインリレー1台のみからイベントを取得し、Kotlinアルゴリズム＋ミュートフィルタを適用する。
-     * Web版の getDefaultRelay() 相当の動作。
+     * メインリレーから kind 1 を時系列で取得し、ミュートフィルタのみ適用する。
      */
     private suspend fun fetchRecommendedFromMainRelay(limit: Int): List<ScoredPost> {
         val mainRelay = prefs.mainRelay
         val myPubkey = prefs.publicKeyHex ?: ""
-        val oneHourAgo = getOneHourAgo()
-        val threeHoursAgo = System.currentTimeMillis() / 1000 - 10800
 
-        android.util.Log.d("NostrRepository",
-            "fetchRecommendedTimeline: mainRelay=$mainRelay (always fresh, no cache)")
-
-        // 改善1: メインリレー障害時フォールバック
         val relaysToTry = listOf(mainRelay) +
             io.nurunuru.app.data.models.DEFAULT_RELAYS.filter { it != mainRelay }.take(2)
 
-        // 1. メインリレー（障害時はフォールバック）並列フェッチ
-        val (allEvents, followList, secondDegreeFollows) = coroutineScope {
-            val viralJob = async {
-                var events = emptyList<NostrEvent>()
-                for (relay in relaysToTry) {
-                    events = try {
-                        client.fetchEventsFrom(
-                            listOf(relay),
-                            NostrClient.Filter(
-                                kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
-                                limit = 100,
-                                since = oneHourAgo
-                            ), timeoutMs = 5_000
-                        )
-                    } catch (_: Exception) { emptyList() }
-                    if (events.isNotEmpty()) {
-                        if (relay != mainRelay) android.util.Log.w("NostrRepository",
-                            "Main relay $mainRelay failed, using fallback $relay")
-                        break
-                    }
-                }
-                events
-            }
-            val followListJob = async { fetchFollowList(myPubkey) }
-
-            val viral = viralJob.await()
-            val follows = followListJob.await()
-
-            // 改善3: 2次度サンプリングを動的調整（フォロー数の1/3、最低30人）
-            val secondDegree = if (follows.isNotEmpty()) {
-                val sampleSize = maxOf(30, follows.size / 3)
-                val sampleFollows = follows.shuffled().take(sampleSize)
-                val followsOfFollows = fetchFollowListsBatch(sampleFollows)
-                RecommendationEngine.extract2ndDegreeNetwork(follows, followsOfFollows)
-            } else emptySet()
-
-            val activeRelay = if (viral.isNotEmpty()) mainRelay else relaysToTry.first()
-            val secondDegreePosts = if (secondDegree.isNotEmpty()) {
+        var events = emptyList<NostrEvent>()
+        for (relay in relaysToTry) {
+            events = try {
                 client.fetchEventsFrom(
-                    listOf(activeRelay),
+                    listOf(relay),
                     NostrClient.Filter(
-                        kinds = listOf(NostrKind.TEXT_NOTE, NostrKind.VIDEO_LOOP, NostrKind.LONG_FORM),
-                        authors = secondDegree.take(50).toList(),
-                        limit = 50,
-                        since = threeHoursAgo
-                    ), timeoutMs = 4_000
+                        kinds = listOf(NostrKind.TEXT_NOTE),
+                        limit = limit
+                    ), timeoutMs = 5_000
                 )
-            } else emptyList()
-
-            Triple(
-                // リプライ除外: e タグあり = 他投稿へのリプライ
-                (viral + secondDegreePosts)
-                    .distinctBy { it.id }
-                    .filter { it.getTagValues("e").isEmpty() },
-                follows.toSet(),
-                secondDegree
-            )
+            } catch (_: Exception) { emptyList() }
+            if (events.isNotEmpty()) break
         }
 
-        // 2. プロフィール・エンゲージメントでエンリッチ
-        val enriched = enrichPosts(allEvents)
+        // リプライ除外 (e タグあり = 他投稿へのリプライ)
+        val rootPosts = events.filter { it.getTagValues("e").isEmpty() }
 
-        // 3. 推薦アルゴリズムでスコアリング
-        val profileMap = enriched.associate { it.event.pubkey to (it.profile ?: UserProfile(it.event.pubkey)) }
-        val engagements = enriched.associate { it.event.id to RecommendationEngine.EngagementCounts(
-            likes = it.likeCount,
-            reposts = it.repostCount,
-            replies = it.replyCount,
-            // 改善2: Zap対数スケール（999sat=0問題を修正）
-            zaps = if (it.zapAmount <= 0) 0
-                   else (kotlin.math.ln(it.zapAmount.toDouble() / 1000.0 + 1.0) * 10).toInt().coerceAtLeast(1)
-        ) }
-        val scoringCtx = RecommendationEngine.ScoringContext(
-            followList = followList,
-            secondDegreeFollows = secondDegreeFollows,
-            engagements = engagements,
-            profiles = profileMap,
-            userGeohash = prefs.userGeohash,
-            mutedPubkeys = getCachedMuteList(myPubkey)?.pubkeys?.toSet() ?: emptySet()
-        )
-        // ライブ新着投稿の即時スコアリングに再利用するためキャッシュ
-        cachedScoringContext = scoringCtx
-        val scored = recommendationEngine.getRecommendedPosts(enriched, scoringCtx, limit)
+        val enriched = enrichPosts(rootPosts)
 
-        // 4. ミュートフィルタ（pubkey + eventId）
-        val muteData = getCachedMuteList(myPubkeyHex)
-        if (muteData != null &&
-            (muteData.pubkeys.isNotEmpty() || muteData.eventIds.isNotEmpty())
-        ) {
+        val muteData = getCachedMuteList(myPubkey)
+        val result = if (muteData != null &&
+            (muteData.pubkeys.isNotEmpty() || muteData.eventIds.isNotEmpty())) {
             val mutedPks = muteData.pubkeys.toSet()
             val mutedIds = muteData.eventIds.toSet()
-            return scored.filter { it.event.pubkey !in mutedPks && it.event.id !in mutedIds }
-                .also { android.util.Log.d("NostrRepository",
-                    "Recommended[$mainRelay]: ${scored.size} -> ${it.size} after mute filter") }
-        }
-        android.util.Log.d("NostrRepository", "Recommended[$mainRelay]: ${scored.size} posts")
-        return scored
+            enriched.filter { it.event.pubkey !in mutedPks && it.event.id !in mutedIds }
+        } else enriched
+
+        return result.sortedByDescending { it.event.createdAt }
     }
 
     suspend fun fetchGlobalTimeline(limit: Int = 50): List<ScoredPost> {
@@ -485,10 +402,30 @@ class NostrRepository(
             limit = limit
         )
 
-        val reactions = client.fetchEvents(reactionFilter, timeoutMs = 5_000)
-        val zaps = client.fetchEvents(zapFilter, timeoutMs = 5_000)
-        val reposts = client.fetchEvents(repostFilter, timeoutMs = 5_000)
-        val mentions = client.fetchEvents(replyFilter, timeoutMs = 5_000)
+        // 5. Fetch badge awards (Kind 8 #p tag)
+        val badgeFilter = NostrClient.Filter(
+            kinds = listOf(NostrKind.BADGE_AWARD),
+            tags = mapOf("p" to listOf(pubkeyHex)),
+            since = oneDayAgo,
+            limit = limit
+        )
+
+        val enabledKinds = prefs.notificationEnabledKinds
+        val emojiReactionEnabled = prefs.notificationEmojiReactionEnabled
+        android.util.Log.d("NostrRepository",
+            "fetchNotifications: enabledKinds=${enabledKinds.sorted()} emojiReaction=$emojiReactionEnabled")
+        val reactions = if (NostrKind.REACTION in enabledKinds || emojiReactionEnabled)
+            client.fetchEvents(reactionFilter, timeoutMs = 5_000) else emptyList()
+        val zaps = if (NostrKind.ZAP_RECEIPT in enabledKinds)
+            client.fetchEvents(zapFilter, timeoutMs = 5_000) else emptyList()
+        val reposts = if (NostrKind.REPOST in enabledKinds)
+            client.fetchEvents(repostFilter, timeoutMs = 5_000) else emptyList()
+        val mentions = if (NostrKind.TEXT_NOTE in enabledKinds)
+            client.fetchEvents(replyFilter, timeoutMs = 5_000) else emptyList()
+        val badges = if (NostrKind.BADGE_AWARD in enabledKinds)
+            client.fetchEvents(badgeFilter, timeoutMs = 5_000) else emptyList()
+        android.util.Log.d("NostrRepository",
+            "fetchNotifications: reactions=${reactions.size} zaps=${zaps.size} reposts=${reposts.size} mentions=${mentions.size} badges=${badges.size}")
 
         // 5. Build notification items
         val notificationItems = mutableListOf<NotificationItem>()
@@ -498,23 +435,28 @@ class NostrRepository(
         for (event in reactions) {
             if (event.pubkey == pubkeyHex) continue // Skip self-reactions
             val targetEvent = event.getTagValue("e")
-            targetEvent?.let { targetEventIds.add(it) }
-            notifierPubkeys.add(event.pubkey)
-
-            // Check for custom emoji
             val emojiTag = event.tags.firstOrNull { it.getOrNull(0) == "emoji" }
             val emojiUrl = emojiTag?.getOrNull(2)
+            val content = event.content.ifBlank { "+" }
+            val isEmoji = emojiUrl != null ||
+                (content.startsWith(":") && content.endsWith(":") && content.length > 2)
+
+            if (isEmoji && !emojiReactionEnabled) continue
+            if (!isEmoji && NostrKind.REACTION !in enabledKinds) continue
+
+            targetEvent?.let { targetEventIds.add(it) }
+            notifierPubkeys.add(event.pubkey)
 
             notificationItems.add(
                 NotificationItem(
                     id = event.id,
                     pubkey = event.pubkey,
-                    type = "reaction",
+                    type = if (isEmoji) "emoji_reaction" else "reaction",
                     createdAt = event.createdAt,
                     targetEventId = targetEvent,
-                    comment = event.content.takeIf { it != "+" && it.isNotBlank() },
+                    comment = content.takeIf { it != "+" && it != "-" && it.isNotBlank() },
                     emojiUrl = emojiUrl,
-                    reactionEmoji = event.content.ifBlank { "+" }
+                    reactionEmoji = content
                 )
             )
         }
@@ -592,6 +534,23 @@ class NostrRepository(
                     createdAt = event.createdAt,
                     targetEventId = targetEvent, // null for plain mentions; reply→ shows replied post
                     comment = event.content.take(100).ifBlank { null }
+                )
+            )
+        }
+
+        for (event in badges) {
+            if (event.pubkey == pubkeyHex) continue
+            notifierPubkeys.add(event.pubkey)
+            // バッジ名: "a" タグ "30009:pubkey:d-tag" の d-tag 部分
+            val aRef = event.tags.find { it.getOrNull(0) == "a" && it.getOrNull(1)?.startsWith("30009:") == true }
+            val badgeName = aRef?.getOrNull(1)?.split(":")?.drop(2)?.joinToString(":") ?: ""
+            notificationItems.add(
+                NotificationItem(
+                    id = event.id,
+                    pubkey = event.pubkey,
+                    type = "badge",
+                    createdAt = event.createdAt,
+                    comment = badgeName.ifBlank { null }
                 )
             )
         }
@@ -1697,6 +1656,22 @@ class NostrRepository(
         }
     }
 
+    // ── キャッシュ管理 ────────────────────────────────────────────────────────
+
+    fun getCacheStats() = cache.getCacheStats()
+    fun getCacheEntriesCount(typeId: String) = cache.getEntriesCount(typeId)
+    fun clearExpiredCache() = cache.clearExpiredCache()
+    fun clearCacheByType(typeId: String) = cache.clearByType(typeId)
+    fun clearAllCache() = cache.clearAll()
+    fun applyCacheSettings() {
+        cache.applySettings(prefs)
+        android.util.Log.d("NostrRepository",
+            "Cache settings applied: profile=${cache.profileEnabled}/${cache.profileTtl/86400000.0}d " +
+            "timeline=${cache.timelineEnabled}/${cache.timelineTtl/86400000.0}d " +
+            "notification=${cache.notificationEnabled}/${cache.notificationTtl/86400000.0}d " +
+            "badge=${cache.badgeEnabled}/${cache.badgeTtl/86400000.0}d")
+    }
+
     fun getUploadServer(): String = prefs.uploadServer
     fun setUploadServer(server: String) { prefs.uploadServer = server }
 
@@ -1898,59 +1873,15 @@ class NostrRepository(
     suspend fun enrichPostsDirect(events: List<NostrEvent>): List<ScoredPost> = enrichPosts(events)
 
     /**
-     * おすすめタイムライン用フルスコアリング・フィルタリングをライブ投稿に適用する。
-     *
-     * 直近の fetchRecommendedFromMainRelay で構築した ScoringContext を再利用するため
-     * 追加のリレーフェッチは発生しない。コンテキスト未構築時は最低限のキャッシュデータで代替。
-     *
-     * 適用されるフィルター・アルゴリズム:
-     *   - ミュートフィルター (pubkey + eventId)
-     *   - プロフィール品質フィルター (アイコン・名前なし除外)
-     *   - not-interested 除外
-     *   - RecommendationEngine スコアリング (エンゲージメント・ソーシャルブースト・時間減衰)
-     *   - 言語ブースト (ジオハッシュ由来の期待言語とのマッチ)
-     *   - リプライ除外 (e タグあり)
+     * リレータブのライブ投稿にミュートフィルタのみ適用する。
      */
     fun scoreForRecommended(posts: List<ScoredPost>): List<ScoredPost> {
         if (posts.isEmpty()) return emptyList()
-
-        // キャッシュ済みコンテキストを使用。未構築ならキャッシュから最低限のコンテキストを組み立てる
-        val ctx = cachedScoringContext ?: run {
-            val myPubkey = prefs.publicKeyHex ?: return emptyList()
-            RecommendationEngine.ScoringContext(
-                followList = getCachedFollowList(myPubkey)?.toSet() ?: emptySet(),
-                mutedPubkeys = getCachedMuteList(myPubkey)?.pubkeys?.toSet() ?: emptySet(),
-                userGeohash = prefs.userGeohash
-            )
-        }
-
-        // ライブ投稿はエンゲージメントデータがまだ存在しないため post 内の値を使う
-        val engagements = posts.associate { it.event.id to RecommendationEngine.EngagementCounts(
-            likes = it.likeCount,
-            reposts = it.repostCount,
-            replies = it.replyCount,
-            zaps = if (it.zapAmount <= 0) 0
-                   else (kotlin.math.ln(it.zapAmount.toDouble() / 1000.0 + 1.0) * 10).toInt().coerceAtLeast(1)
-        ) }
-        val profileMap = posts.mapNotNull { it.profile?.let { p -> p.pubkey to p } }.toMap()
-
-        val enrichedCtx = ctx.copy(
-            engagements = ctx.engagements + engagements,
-            profiles = ctx.profiles + profileMap
-        )
-
-        // mutedIds はコンテキストに含まれないので再取得
-        val mutedIds = getCachedMuteList(prefs.publicKeyHex ?: "")?.eventIds?.toSet() ?: emptySet()
-
-        return posts
-            .filter { it.event.getTagValues("e").isEmpty() }  // リプライ除外
-            .filter { it.event.id !in mutedIds }               // ミュート eventId
-            .map { post ->
-                val score = recommendationEngine.calculateScore(post.event, enrichedCtx)
-                post.copy(score = score)
-            }
-            .filter { it.score > 0 }                           // ミュート pubkey・not-interested・品質フィルタ適用済み
-            .sortedByDescending { it.score }
+        val myPubkey = prefs.publicKeyHex ?: return emptyList()
+        val muteData = getCachedMuteList(myPubkey) ?: return posts
+        val mutedPks = muteData.pubkeys.toSet()
+        val mutedIds = muteData.eventIds.toSet()
+        return posts.filter { it.event.pubkey !in mutedPks && it.event.id !in mutedIds }
     }
 
     private suspend fun enrichPosts(events: List<NostrEvent>): List<ScoredPost> = coroutineScope {

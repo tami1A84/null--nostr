@@ -279,14 +279,7 @@ fun FriendlyLoading(
 
 @Composable
 fun TimelineLoadingSkeleton() {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        FriendlyLoading(
-            message = "タイムラインを読み込んでいます",
-            hint = "もう少しお待ちください"
-        )
+    Column(modifier = Modifier.fillMaxSize()) {
+        repeat(6) { PostSkeleton() }
     }
 }

@@ -197,10 +197,13 @@ class TimelineViewModel(
                     val mutedPubkeys = repository.getCachedMuteList(pubkeyHex)
                         ?.pubkeys?.toSet() ?: emptySet()
 
-                    // おすすめタブ: 表示済みでない投稿のみバッファに追加
+                    // リレータブ: 表示済みでない投稿のみバッファに追加
                     val existingGlobalIds = _uiState.value.globalPosts.mapTo(HashSet()) { it.event.id }
-                    val newGlobal = scoredForGlobal.filter { it.event.id !in existingGlobalIds }
-                    liveGlobalBuffer.addAll(newGlobal)
+                    val pendingGlobalIds = _uiState.value.pendingGlobalPosts.mapTo(HashSet()) { it.event.id }
+                    val newGlobal = scoredForGlobal.filter {
+                        it.event.id !in existingGlobalIds && it.event.id !in pendingGlobalIds
+                    }
+                    if (newGlobal.isNotEmpty()) liveGlobalBuffer.addAll(newGlobal)
 
                     withContext(Dispatchers.Main) {
                         val followSet = _uiState.value.followList.toSet()
@@ -215,11 +218,13 @@ class TimelineViewModel(
                                 it.event.pubkey !in mutedPubkeys
                             }
 
-                            // おすすめタブ: 50件たまったらピルを表示してバッファをクリア
-                            val showGlobalPill = liveGlobalBuffer.size >= 50
+                            // リレータブ: 3件たまったらピルを表示してバッファをクリア
+                            val showGlobalPill = liveGlobalBuffer.size >= 3
                             if (showGlobalPill) {
-                                val buffered = liveGlobalBuffer.deduped()
+                                val buffered = liveGlobalBuffer.sortedByDescending { it.event.createdAt }.deduped()
                                 liveGlobalBuffer.clear()
+                                android.util.Log.d("TimelineViewModel",
+                                    "Relay pill ready: ${buffered.size} posts pending")
                                 state.copy(
                                     pendingGlobalPosts = (buffered + state.pendingGlobalPosts).deduped(),
                                     pendingFollowingPosts = (newFollow + state.pendingFollowingPosts).deduped(),
@@ -374,20 +379,23 @@ class TimelineViewModel(
 
     /**
      * 新着ピルのタップ処理。
-     *
-     * おすすめタブ: pending を破棄して fetchRecommendedTimeline() を再実行する。
-     *   エンゲージメントデータ込みのフルアルゴリズムでフィードを置き換えるため、
-     *   pending を単純に prepend するより質の高い結果になる。
-     *
-     * フォロータブ: 新着を先頭に prepend（タイムライン感を維持）。
+     * リレー/フォロータブともに pending を先頭に prepend する。
      */
     fun flushPendingPosts(feedType: FeedType = _uiState.value.feedType) {
         when (feedType) {
-            FeedType.GLOBAL -> {
-                _uiState.update { it.copy(pendingGlobalPosts = emptyList()) }
-                loadGlobalTimeline(isRefresh = true)
+            FeedType.GLOBAL -> _uiState.update { state ->
+                val added = state.pendingGlobalPosts
+                android.util.Log.d("TimelineViewModel",
+                    "Relay pill tapped: prepending ${added.size} posts → total ${added.size + state.globalPosts.size}")
+                state.copy(
+                    globalPosts = (added + state.globalPosts).deduped(),
+                    pendingGlobalPosts = emptyList(),
+                    hasNewRecommendations = false
+                )
             }
             FeedType.FOLLOWING -> _uiState.update { state ->
+                android.util.Log.d("TimelineViewModel",
+                    "Follow pill tapped: prepending ${state.pendingFollowingPosts.size} posts")
                 state.copy(
                     followingPosts = (state.pendingFollowingPosts + state.followingPosts).deduped(),
                     pendingFollowingPosts = emptyList()

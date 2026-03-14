@@ -231,6 +231,45 @@ class AppPreferences(context: Context) {
         return publicKeyHex != null && (hasSecureKey || privateKeyHex != null || isExternalSigner)
     }
 
+    // ── キャッシュ設定 ────────────────────────────────────────────────────────
+
+    fun getCacheTtlMs(typeId: String, defaultMs: Long): Long =
+        plainPrefs.getLong("cache_ttl_$typeId", defaultMs)
+
+    fun setCacheTtlMs(typeId: String, ttlMs: Long) {
+        plainPrefs.edit().putLong("cache_ttl_$typeId", ttlMs).apply()
+    }
+
+    fun isCacheEnabled(typeId: String): Boolean =
+        plainPrefs.getBoolean("cache_enabled_$typeId", true)
+
+    fun setCacheEnabled(typeId: String, enabled: Boolean) {
+        plainPrefs.edit().putBoolean("cache_enabled_$typeId", enabled).apply()
+    }
+
+    var notificationEnabledKinds: Set<Int>
+        get() {
+            val str = plainPrefs.getString(KEY_NOTIFICATION_KINDS, null)
+            return if (str == null) {
+                setOf(
+                    io.nurunuru.app.data.models.NostrKind.REACTION,
+                    io.nurunuru.app.data.models.NostrKind.ZAP_RECEIPT,
+                    io.nurunuru.app.data.models.NostrKind.REPOST,
+                    io.nurunuru.app.data.models.NostrKind.TEXT_NOTE,
+                    io.nurunuru.app.data.models.NostrKind.BADGE_AWARD
+                )
+            } else {
+                str.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+            }
+        }
+        set(value) {
+            plainPrefs.edit().putString(KEY_NOTIFICATION_KINDS, value.joinToString(",")).apply()
+        }
+
+    var notificationEmojiReactionEnabled: Boolean
+        get() = plainPrefs.getBoolean("notif_emoji_reaction_enabled", true)
+        set(value) { plainPrefs.edit().putBoolean("notif_emoji_reaction_enabled", value).apply() }
+
     fun clear() {
         securePrefs.edit().clear().apply()
         plainPrefs.edit().clear().apply()
@@ -257,5 +296,6 @@ class AppPreferences(context: Context) {
         private const val KEY_NIP65_RELAYS = "nip65_relays"
         private const val KEY_MAIN_RELAY = "main_relay"
         private const val KEY_PLAIN_MIGRATED = "plain_migrated_v1"
+        private const val KEY_NOTIFICATION_KINDS = "notification_enabled_kinds"
     }
 }

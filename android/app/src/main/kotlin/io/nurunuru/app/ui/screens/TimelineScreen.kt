@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import io.nurunuru.app.data.prefs.AppPreferences
 import io.nurunuru.app.ui.components.*
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -41,6 +42,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 fun TimelineScreen(
     viewModel: TimelineViewModel,
     repository: io.nurunuru.app.data.NostrRepository,
+    prefs: AppPreferences,
     myPubkey: String,
     myPictureUrl: String?,
     myDisplayName: String
@@ -158,6 +160,7 @@ fun TimelineScreen(
     if (showNotificationsModal) {
         NotificationModal(
             repository = repository,
+            prefs = prefs,
             myPubkey = myPubkey,
             onClose = { showNotificationsModal = false },
             onProfileClick = { viewingPubkey = it }

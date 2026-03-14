@@ -55,6 +55,52 @@ class NostrCache(context: Context) {
     private val profileCache = LRUCache<String, UserProfile>(Constants.CacheMaxEntries.PROFILES)
     private val timelineCache = LRUCache<String, String>(Constants.CacheMaxEntries.TIMELINE)
 
+    // ── 可変TTL・有効フラグ（AppPreferences から applySettings() で設定）────────
+
+    var profileTtl:      Long    = Constants.CacheDuration.PROFILE
+    var profileEnabled:  Boolean = true
+
+    var timelineTtl:     Long    = 30L * Constants.Time.MS_DAY   // 30日
+    var timelineEnabled: Boolean = true
+
+    var followListTtl:   Long    = Constants.CacheDuration.FOLLOW_LIST
+    var followListEnabled: Boolean = true
+
+    var muteListTtl:     Long    = Constants.CacheDuration.MUTE_LIST
+    var muteListEnabled: Boolean = true
+
+    var notificationTtl:     Long    = Constants.CacheDuration.NOTIFICATION
+    var notificationEnabled: Boolean = true
+
+    var emojiTtl:     Long    = Constants.CacheDuration.EMOJI
+    var emojiEnabled: Boolean = true
+
+    var relayInfoTtl:     Long    = Constants.CacheDuration.NOTIFICATION
+    var relayInfoEnabled: Boolean = true
+
+    var badgeTtl:     Long    = Constants.CacheDuration.NOTIFICATION
+    var badgeEnabled: Boolean = true
+
+    fun applySettings(appPrefs: io.nurunuru.app.data.prefs.AppPreferences) {
+        val day = Constants.CacheDuration.NOTIFICATION  // 1日 = 86_400_000
+        profileTtl      = appPrefs.getCacheTtlMs("profile",      day)
+        profileEnabled  = appPrefs.isCacheEnabled("profile")
+        timelineTtl     = appPrefs.getCacheTtlMs("timeline",     day)
+        timelineEnabled = appPrefs.isCacheEnabled("timeline")
+        followListTtl      = appPrefs.getCacheTtlMs("followlist",   day)
+        followListEnabled  = appPrefs.isCacheEnabled("followlist")
+        muteListTtl      = appPrefs.getCacheTtlMs("mutelist",    day)
+        muteListEnabled  = appPrefs.isCacheEnabled("mutelist")
+        notificationTtl     = appPrefs.getCacheTtlMs("notification", day)
+        notificationEnabled = appPrefs.isCacheEnabled("notification")
+        emojiTtl      = appPrefs.getCacheTtlMs("emoji",       day)
+        emojiEnabled  = appPrefs.isCacheEnabled("emoji")
+        relayInfoTtl     = appPrefs.getCacheTtlMs("relay",       day)
+        relayInfoEnabled = appPrefs.isCacheEnabled("relay")
+        badgeTtl     = appPrefs.getCacheTtlMs("badge",       day)
+        badgeEnabled = appPrefs.isCacheEnabled("badge")
+    }
+
     // ─── Generic localStorage-like Operations ────────────────────────────────
 
     private fun getRaw(key: String): String? {
@@ -94,8 +140,9 @@ class NostrCache(context: Context) {
 
     fun setCachedProfile(pubkey: String, profile: UserProfile) {
         profileCache.set(pubkey, profile)
+        if (!profileEnabled) return
         try {
-            setRaw("profile_$pubkey", json.encodeToString(profile), Constants.CacheDuration.PROFILE)
+            setRaw("profile_$pubkey", json.encodeToString(profile), profileTtl)
         } catch (_: Exception) { }
     }
 
@@ -117,8 +164,9 @@ class NostrCache(context: Context) {
     }
 
     fun setCachedFollowList(pubkey: String, followList: List<String>) {
+        if (!followListEnabled) return
         try {
-            setRaw("followlist_$pubkey", json.encodeToString(followList), Constants.CacheDuration.FOLLOW_LIST)
+            setRaw("followlist_$pubkey", json.encodeToString(followList), followListTtl)
         } catch (_: Exception) { }
     }
 
@@ -127,7 +175,8 @@ class NostrCache(context: Context) {
     fun getCachedMuteList(pubkey: String): String? = getRaw("mutelist_$pubkey")
 
     fun setCachedMuteList(pubkey: String, muteListJson: String) {
-        setRaw("mutelist_$pubkey", muteListJson, Constants.CacheDuration.MUTE_LIST)
+        if (!muteListEnabled) return
+        setRaw("mutelist_$pubkey", muteListJson, muteListTtl)
     }
 
     // ─── Emoji Cache ─────────────────────────────────────────────────────────
@@ -135,7 +184,8 @@ class NostrCache(context: Context) {
     fun getCachedEmoji(pubkey: String): String? = getRaw("emoji_$pubkey")
 
     fun setCachedEmoji(pubkey: String, emojiDataJson: String) {
-        setRaw("emoji_$pubkey", emojiDataJson, Constants.CacheDuration.EMOJI)
+        if (!emojiEnabled) return
+        setRaw("emoji_$pubkey", emojiDataJson, emojiTtl)
     }
 
     fun clearCachedEmoji(pubkey: String) { removeRaw("emoji_$pubkey") }
@@ -145,13 +195,15 @@ class NostrCache(context: Context) {
     fun getCachedBadgeInfo(pubkey: String): String? = getRaw("badge_info_$pubkey")
 
     fun setCachedBadgeInfo(pubkey: String, dataJson: String) {
-        setRaw("badge_info_$pubkey", dataJson, 3_600_000L)
+        if (!badgeEnabled) return
+        setRaw("badge_info_$pubkey", dataJson, badgeTtl)
     }
 
     fun getCachedAwardedBadges(pubkey: String): String? = getRaw("badge_awarded_$pubkey")
 
     fun setCachedAwardedBadges(pubkey: String, dataJson: String) {
-        setRaw("badge_awarded_$pubkey", dataJson, 3_600_000L)
+        if (!badgeEnabled) return
+        setRaw("badge_awarded_$pubkey", dataJson, badgeTtl)
     }
 
     // ─── User Notes / Likes Cache ────────────────────────────────────────────
@@ -184,8 +236,8 @@ class NostrCache(context: Context) {
 
     fun setCachedTimeline(eventsJson: String) {
         timelineCache.set("events", eventsJson)
-        // TTL は実質不要だが既存の CacheEntry 形式に合わせて 30 日で保持する。
-        setRaw("timeline_events", eventsJson, 30L * 24 * 60 * 60 * 1000)
+        if (!timelineEnabled) return
+        setRaw("timeline_events", eventsJson, timelineTtl)
     }
 
     // ─── Notification Cache (1 day) ──────────────────────────────────────────
@@ -193,7 +245,8 @@ class NostrCache(context: Context) {
     fun getCachedNotifications(pubkey: String): String? = getRaw("notifications_$pubkey")
 
     fun setCachedNotifications(pubkey: String, json: String) {
-        setRaw("notifications_$pubkey", json, Constants.CacheDuration.NOTIFICATION)
+        if (!notificationEnabled) return
+        setRaw("notifications_$pubkey", json, notificationTtl)
     }
 
     // ─── Relay List Cache (NIP-65) ───────────────────────────────────────────
@@ -201,7 +254,8 @@ class NostrCache(context: Context) {
     fun getCachedRelayList(pubkey: String): String? = getRaw("relaylist_$pubkey")
 
     fun setCachedRelayList(pubkey: String, relayListJson: String) {
-        setRaw("relaylist_$pubkey", relayListJson, Constants.CacheDuration.RELAY_INFO)
+        if (!relayInfoEnabled) return
+        setRaw("relaylist_$pubkey", relayListJson, relayInfoTtl)
     }
 
     // ─── Cleanup ─────────────────────────────────────────────────────────────
@@ -233,6 +287,42 @@ class NostrCache(context: Context) {
         val editor = prefs.edit()
         prefs.all.keys.filter { it.startsWith(fullPrefix) }.forEach { editor.remove(it) }
         editor.apply()
+    }
+
+    fun clearByType(typeId: String) {
+        when (typeId) {
+            "profile"      -> { profileCache.clear(); clearByPrefix("profile_") }
+            "timeline"     -> { timelineCache.clear(); clearByPrefix("timeline_") }
+            "followlist"   -> clearByPrefix("followlist_")
+            "mutelist"     -> clearByPrefix("mutelist_")
+            "notification" -> clearByPrefix("notifications_")
+            "emoji"        -> clearByPrefix("emoji_")
+            "relay"        -> clearByPrefix("relaylist_")
+            "badge"        -> clearByPrefix("badge_")
+        }
+    }
+
+    fun clearAll() {
+        profileCache.clear()
+        timelineCache.clear()
+        val editor = prefs.edit()
+        prefs.all.keys.filter { it.startsWith(prefix) }.forEach { editor.remove(it) }
+        editor.apply()
+    }
+
+    fun getEntriesCount(typeId: String): Int {
+        val sub = when (typeId) {
+            "profile"      -> "profile_"
+            "timeline"     -> "timeline_"
+            "followlist"   -> "followlist_"
+            "mutelist"     -> "mutelist_"
+            "notification" -> "notifications_"
+            "emoji"        -> "emoji_"
+            "relay"        -> "relaylist_"
+            "badge"        -> "badge_"
+            else           -> return 0
+        }
+        return prefs.all.keys.count { it.startsWith(prefix + sub) }
     }
 
     data class CacheStats(

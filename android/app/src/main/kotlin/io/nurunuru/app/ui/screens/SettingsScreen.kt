@@ -53,6 +53,7 @@ import io.nurunuru.app.ui.miniapps.EmojiSettings
 import io.nurunuru.app.ui.miniapps.EventBackupSettings
 import io.nurunuru.app.ui.miniapps.MuteList
 import io.nurunuru.app.ui.miniapps.NostrBrowserApp
+import io.nurunuru.app.ui.miniapps.CacheSettings
 import io.nurunuru.app.ui.miniapps.ZapSettings
 import io.nurunuru.app.ui.miniapps.SchedulerApp
 import io.nurunuru.app.ui.miniapps.VanishRequest
@@ -89,6 +90,7 @@ fun MiniAppData.getIcon(): ImageVector {
         "elevenlabs" -> NuruIcons.Mic
         "backup" -> NuruIcons.Backup
         "vanish" -> NuruIcons.Trash
+        "cache"  -> Icons.Outlined.Storage
         else -> if (type == "external") Icons.Outlined.OpenInNew else Icons.Outlined.Extension
     }
 }
@@ -109,7 +111,6 @@ fun SettingsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedApp by remember { mutableStateOf<MiniAppData?>(null) }
     var showExternalAdd by remember { mutableStateOf(false) }
-
     LaunchedEffect(selectedApp) {
         onExternalAppOpenChanged(selectedApp?.type == "external")
     }
@@ -132,7 +133,8 @@ fun SettingsScreen(
             MiniAppData("upload", "アップロード設定", "画像のアップロード先サーバーを選択", "tools"),
             MiniAppData("elevenlabs", "音声入力設定", "ElevenLabs Scribeによる高精度な音声入力", "tools"),
             MiniAppData("backup", "バックアップ", "自分の投稿データをJSON形式でエクスポート", "tools"),
-            MiniAppData("vanish", "削除リクエスト", "リレーに対して全データの削除を要求", "tools")
+            MiniAppData("vanish", "削除リクエスト", "リレーに対して全データの削除を要求", "tools"),
+            MiniAppData("cache", "キャッシュ設定", "キャッシュするkindと保持日数を管理", "tools")
         )
     }
 
@@ -684,6 +686,7 @@ private fun MiniAppDetailView(
         "elevenlabs" -> "音声入力設定"
         "backup" -> "バックアップ"
         "vanish" -> "削除リクエスト"
+        "cache"  -> "キャッシュ設定"
         else -> app.name
     }
 
@@ -724,6 +727,7 @@ private fun MiniAppDetailView(
                 "elevenlabs" -> ElevenLabsSettings(prefs = prefs)
                 "backup" -> EventBackupSettings(pubkey = pubkeyHex, repository = repository)
                 "vanish" -> VanishRequest(pubkey = pubkeyHex, repository = repository)
+                "cache" -> CacheSettings(prefs = prefs, repository = repository)
                 "scheduler" -> SchedulerApp(pubkey = pubkeyHex, repository = repository)
                 else -> {
                     Column(
@@ -836,6 +840,8 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
     var nearestRelays by remember { mutableStateOf<List<RelayInfoWithDistance>>(emptyList()) }
     var detectingLocation by remember { mutableStateOf(false) }
     var publishingNip65 by remember { mutableStateOf(false) }
+    var loadingNip65 by remember { mutableStateOf(false) }
+    var manualRelayUrl by remember { mutableStateOf("") }
     var mainRelayState by remember { mutableStateOf(prefs.mainRelay) }
 
     val selectedRegion = remember(selectedRegionId) {
@@ -1076,17 +1082,8 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                     if (nearestRelays.isNotEmpty()) {
                         Column(modifier = Modifier.padding(top = 16.dp)) {
                             HorizontalDivider(color = nuruColors.border, modifier = Modifier.padding(vertical = 12.dp))
-                            // ヘッダー行
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("最寄りのリレー", fontSize = 10.sp, color = nuruColors.textTertiary)
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("おすすめ", fontSize = 10.sp, color = LineGreen)
-                                    Text("NIP-65", fontSize = 10.sp, color = nuruColors.textTertiary)
-                                }
-                            }
+                            Text("最寄りのリレー", fontSize = 10.sp, color = nuruColors.textTertiary,
+                                modifier = Modifier.padding(bottom = 4.dp))
 
                             nearestRelays.take(5).forEach { relay ->
                                 val isMain = relay.info.url == mainRelayState
@@ -1101,20 +1098,16 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                                         modifier = Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        // ラジオボタン: おすすめタイムライン用メインリレー選択
                                         androidx.compose.material3.RadioButton(
                                             selected = isMain,
                                             onClick = {
                                                 prefs.mainRelay = relay.info.url
                                                 mainRelayState = relay.info.url
-                                                android.util.Log.d("SettingsScreen",
-                                                    "mainRelay set: ${relay.info.url}")
                                             },
                                             colors = androidx.compose.material3.RadioButtonDefaults.colors(
                                                 selectedColor = LineGreen
                                             )
                                         )
-                                        // リレー名・距離
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 relay.info.name,
@@ -1128,7 +1121,6 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                                                 color = nuruColors.textTertiary
                                             )
                                         }
-                                        // チェックボックス: NIP-65リストへの追加
                                         androidx.compose.material3.Checkbox(
                                             checked = isInNip65,
                                             onCheckedChange = { checked ->
@@ -1148,12 +1140,118 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                                     }
                                 }
                             }
-                            Text(
-                                "ラジオ=おすすめタイムライン用、チェック=NIP-65リレーリスト",
-                                fontSize = 9.sp,
-                                color = nuruColors.textTertiary,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
+                        }
+                    }
+
+                    // 手動リレー追加
+                    HorizontalDivider(color = nuruColors.border, modifier = Modifier.padding(vertical = 12.dp))
+                    Text("リレーを追加", fontSize = 10.sp, color = nuruColors.textTertiary,
+                        modifier = Modifier.padding(bottom = 4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = manualRelayUrl,
+                            onValueChange = { manualRelayUrl = it },
+                            placeholder = { Text("wss://relay.example.com", fontSize = 12.sp) },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                        )
+                        Button(
+                            onClick = {
+                                val url = manualRelayUrl.trim()
+                                if (url.startsWith("wss://") || url.startsWith("ws://")) {
+                                    val newRelay = Nip65Relay(url, true, true)
+                                    val newList = (listOf(newRelay) + currentRelays.filter { it.url != url }).take(10)
+                                    currentRelays = newList
+                                    prefs.nip65Relays = newList
+                                    manualRelayUrl = ""
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
+                            shape = RoundedCornerShape(12.dp)
+                        ) { Text("追加", fontSize = 12.sp) }
+                    }
+
+                    // 自分のリレーリストを読み込む
+                    Button(
+                        onClick = {
+                            loadingNip65 = true
+                            coroutineScope.launch {
+                                val pubkey = prefs.publicKeyHex
+                                if (pubkey != null) {
+                                    val relays = try { repository.fetchNip65WriteRelays(pubkey) } catch (_: Exception) { emptyList() }
+                                    if (relays.isNotEmpty()) {
+                                        val newList = relays.take(10).map { Nip65Relay(it, true, true) }
+                                        currentRelays = newList
+                                        prefs.nip65Relays = newList
+                                        Toast.makeText(context, "${newList.size}件のリレーを読み込みました", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "リレーリストが見つかりませんでした", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                loadingNip65 = false
+                            }
+                        },
+                        enabled = !loadingNip65,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = nuruColors.bgTertiary),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (loadingNip65) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = nuruColors.textSecondary)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text("自分のリレーリストを読み込む", fontSize = 12.sp, color = nuruColors.textSecondary)
+                    }
+
+                    // 保存済みリレー一覧
+                    if (currentRelays.isNotEmpty()) {
+                        HorizontalDivider(color = nuruColors.border, modifier = Modifier.padding(vertical = 8.dp))
+                        Text("保存済みリレー", fontSize = 10.sp, color = nuruColors.textTertiary,
+                            modifier = Modifier.padding(bottom = 4.dp))
+                        currentRelays.forEach { relay ->
+                            val isMain = relay.url == mainRelayState
+                            Surface(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                color = if (isMain) LineGreen.copy(alpha = 0.12f) else nuruColors.bgTertiary,
+                                shape = RoundedCornerShape(12.dp),
+                                border = if (isMain) androidx.compose.foundation.BorderStroke(1.dp, LineGreen) else null
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = isMain,
+                                        onClick = {
+                                            prefs.mainRelay = relay.url
+                                            mainRelayState = relay.url
+                                        },
+                                        colors = androidx.compose.material3.RadioButtonDefaults.colors(selectedColor = LineGreen)
+                                    )
+                                    Text(
+                                        relay.url.replace("wss://", ""),
+                                        fontSize = 12.sp,
+                                        color = if (isMain) LineGreen else nuruColors.textPrimary,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            val newList = currentRelays.filter { it.url != relay.url }
+                                            currentRelays = newList
+                                            prefs.nip65Relays = newList
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, null, tint = nuruColors.textTertiary, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -1165,7 +1263,7 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                                     val triples = currentRelays.map { Triple(it.url, it.read, it.write) }
                                     val success = repository.updateRelayList(triples)
                                     if (success) {
-                                        Toast.makeText(context, "リレーリストを発行しました (NIP-65)", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "リレーリストを発行しました", Toast.LENGTH_SHORT).show()
                                     } else {
                                         Toast.makeText(context, "発行に失敗しました", Toast.LENGTH_SHORT).show()
                                     }
@@ -1173,14 +1271,14 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                                 }
                             },
                             enabled = !publishingNip65,
-                            modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9C27B0)), // Purple
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9C27B0)),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             if (publishingNip65) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
                             } else {
-                                Text("リレーリストを発行 (NIP-65)", fontWeight = FontWeight.Bold)
+                                Text("リレーリストを発行", fontWeight = FontWeight.Bold)
                             }
                         }
                     }

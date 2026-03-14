@@ -33,8 +33,8 @@ android {
         applicationId = "io.nurunuru.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.3.5"
+        versionCode = 9
+        versionName = "1.3.6"
     }
 
     buildTypes {
