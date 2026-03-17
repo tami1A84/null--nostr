@@ -38,6 +38,8 @@ import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.data.models.ScoredPost
 import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.theme.LocalNuruColors
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -279,7 +281,17 @@ fun PostContent(
         val value = match.value
         when {
             value.startsWith("http") -> parts.add(ContentPart.Link(value))
-            value.startsWith("nostr:") -> parts.add(ContentPart.Nostr(value))
+            value.startsWith("nostr:") -> {
+                val bech32 = value.removePrefix("nostr:")
+                if (bech32.startsWith("npub1") || bech32.startsWith("nprofile1")) {
+                    // プロフィールメンションはカードではなくインラインテキスト
+                    val parsed = try { io.nurunuru.app.data.NostrKeyUtils.parseNostrLink(bech32) } catch (_: Exception) { null }
+                    if (parsed != null) parts.add(ContentPart.Mention(value, parsed.id, bech32))
+                    else parts.add(ContentPart.Nostr(value))
+                } else {
+                    parts.add(ContentPart.Nostr(value))
+                }
+            }
             value.startsWith("#") -> parts.add(ContentPart.Hashtag(value))
             value.startsWith(":") && value.endsWith(":") -> parts.add(ContentPart.Emoji(value))
         }
@@ -290,6 +302,21 @@ fun PostContent(
     }
 
     val hasCards = parts.any { it is ContentPart.Nostr || it is ContentPart.Link }
+    val hasMentions = parts.any { it is ContentPart.Mention }
+
+    // メンションされたユーザーのプロフィールを非同期フェッチ
+    val mentionPubkeys = remember(parts) {
+        parts.filterIsInstance<ContentPart.Mention>().map { it.pubkeyHex }.distinct()
+    }
+    var mentionProfiles by remember(mentionPubkeys) {
+        mutableStateOf<Map<String, io.nurunuru.app.data.models.UserProfile?>>(emptyMap())
+    }
+    LaunchedEffect(mentionPubkeys) {
+        if (mentionPubkeys.isNotEmpty()) {
+            val profiles = withContext(Dispatchers.IO) { repository.fetchProfiles(mentionPubkeys) }
+            mentionProfiles = profiles
+        }
+    }
 
     val annotated = buildAnnotatedString {
         parts.forEach { part ->
@@ -321,6 +348,16 @@ fun PostContent(
                 }
                 is ContentPart.Link -> withStyle(SpanStyle(color = nuruColors.lineGreen)) { append(part.url.take(40) + if (part.url.length > 40) "..." else "") }
                 is ContentPart.Nostr -> { /* nostr: リンクはカードとして描画するためテキスト出力しない */ }
+                is ContentPart.Mention -> {
+                    pushStringAnnotation("mention", part.pubkeyHex)
+                    withStyle(SpanStyle(color = nuruColors.lineGreen, fontWeight = FontWeight.Medium)) {
+                        val displayName = mentionProfiles[part.pubkeyHex]?.displayedName
+                        val label = if (displayName != null) "@$displayName"
+                                    else "@" + part.bech32.take(12) + if (part.bech32.length > 12) "..." else ""
+                        append(label)
+                    }
+                    pop()
+                }
             }
         }
     }
@@ -337,14 +374,18 @@ fun PostContent(
             color = MaterialTheme.colorScheme.onBackground,
             lineHeight = 22.sp,
             onTextLayout = { textLayoutResult = it },
-            modifier = if (onHashtagClick != null) Modifier.pointerInput(annotated) {
+            modifier = if (onHashtagClick != null || hasMentions) Modifier.pointerInput(annotated) {
                 detectTapGestures { offset ->
                     textLayoutResult?.let { layout ->
                         val position = layout.getOffsetForPosition(offset)
-                        annotated.getStringAnnotations("hashtag", position, position)
-                            .firstOrNull()?.let { annotation ->
-                                onHashtagClick(annotation.item)
-                            }
+                        annotated.getStringAnnotations("mention", position, position)
+                            .firstOrNull()?.let { onProfileClick(it.item); return@let }
+                        if (onHashtagClick != null) {
+                            annotated.getStringAnnotations("hashtag", position, position)
+                                .firstOrNull()?.let { annotation ->
+                                    onHashtagClick(annotation.item)
+                                }
+                        }
                     }
                 }
             } else Modifier
@@ -369,6 +410,8 @@ sealed class ContentPart {
     data class Text(val text: String) : ContentPart()
     data class Link(val url: String) : ContentPart()
     data class Nostr(val link: String) : ContentPart()
+    /** npub/nprofile メンション — カードではなくインライン @name テキストとして表示 */
+    data class Mention(val link: String, val pubkeyHex: String, val bech32: String) : ContentPart()
     data class Hashtag(val tag: String) : ContentPart()
     data class Emoji(val code: String) : ContentPart()
 }

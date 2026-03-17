@@ -36,7 +36,12 @@ data class TimelineUiState(
     val hasNewRecommendations: Boolean = false,
     val hasNewFollowing: Boolean = false,
     val followList: List<String> = emptyList(),
-    val birdwatchNotes: Map<String, List<io.nurunuru.app.data.models.NostrEvent>> = emptyMap()
+    val birdwatchNotes: Map<String, List<io.nurunuru.app.data.models.NostrEvent>> = emptyMap(),
+    val savedRelayUrls: List<String> = emptyList(),
+    val selectedRelayUrl: String? = null,
+    val relayPosts: List<ScoredPost> = emptyList(),
+    val pendingRelayPosts: List<ScoredPost> = emptyList(),
+    val isRelayFeedLoading: Boolean = false
 )
 
 class TimelineViewModel(
@@ -58,6 +63,12 @@ class TimelineViewModel(
     private var liveSubId: String? = null
     private var livePollingJob: Job? = null
 
+    // ─── Relay live streaming ─────────────────────────────────────────────────
+    private var relayLiveJob: Job? = null
+    private val seenRelayEventIds: MutableSet<String> =
+        java.util.concurrent.ConcurrentHashMap.newKeySet()
+    private val liveRelayBuffer = mutableListOf<ScoredPost>()
+
     /**
      * IDs of events already processed by the live stream.
      * Uses ConcurrentHashMap.newKeySet() for thread safety — the live polling
@@ -72,6 +83,7 @@ class TimelineViewModel(
 
     init {
         loadData()
+        loadSavedRelays()
     }
 
     private fun loadData() {
@@ -253,6 +265,8 @@ class TimelineViewModel(
     fun stopLiveStreaming() {
         livePollingJob?.cancel()
         livePollingJob = null
+        relayLiveJob?.cancel()
+        relayLiveJob = null
     }
 
     private fun loadRecentSearches() {
@@ -383,6 +397,19 @@ class TimelineViewModel(
      * リレー/フォロータブともに pending を先頭に prepend する。
      */
     fun flushPendingPosts(feedType: FeedType = _uiState.value.feedType) {
+        // リレー選択中は pendingRelayPosts を relayPosts に prepend
+        if (feedType == FeedType.GLOBAL && _uiState.value.selectedRelayUrl != null) {
+            _uiState.update { state ->
+                val added = state.pendingRelayPosts
+                android.util.Log.d("TimelineViewModel",
+                    "Relay live pill tapped: prepending ${added.size} posts")
+                state.copy(
+                    relayPosts = (added + state.relayPosts).deduped(),
+                    pendingRelayPosts = emptyList()
+                )
+            }
+            return
+        }
         when (feedType) {
             FeedType.GLOBAL -> _uiState.update { state ->
                 val added = state.pendingGlobalPosts
@@ -514,9 +541,93 @@ class TimelineViewModel(
         loadRecentSearches()
     }
 
+    fun loadSavedRelays() {
+        val urls = repository.getSavedRelayUrls()
+        _uiState.update { it.copy(savedRelayUrls = urls) }
+    }
+
+    fun selectRelayFeed(url: String?) {
+        // 旧ライブストリームを停止してバッファをリセット
+        relayLiveJob?.cancel()
+        relayLiveJob = null
+        seenRelayEventIds.clear()
+        synchronized(liveRelayBuffer) { liveRelayBuffer.clear() }
+        _uiState.update { it.copy(selectedRelayUrl = url, pendingRelayPosts = emptyList()) }
+        if (url != null) {
+            loadRelayFeed(url)
+        } else {
+            _uiState.update { it.copy(relayPosts = emptyList()) }
+        }
+    }
+
+    private fun loadRelayFeed(relayUrl: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRelayFeedLoading = true) }
+            val posts = try { repository.fetchRelayTimeline(relayUrl, 50) }
+                        catch (_: Exception) { emptyList() }
+            if (posts.isEmpty()) {
+                // タイムアウトまたは接続失敗 → リレー選択を解除して通常フィードに戻す
+                android.util.Log.d("TimelineViewModel",
+                    "loadRelayFeed: $relayUrl returned 0 events, auto-deselecting")
+                _uiState.update { it.copy(
+                    selectedRelayUrl = null,
+                    relayPosts = emptyList(),
+                    isRelayFeedLoading = false
+                ) }
+            } else {
+                // 初回取得イベントを既読としてマーク（ライブストリームとの重複防止）
+                seenRelayEventIds.addAll(posts.map { it.event.id })
+                _uiState.update { it.copy(relayPosts = posts, isRelayFeedLoading = false) }
+                // 初回ロード成功後にライブストリーム開始
+                startRelayLiveStream(relayUrl)
+            }
+        }
+    }
+
+    private fun startRelayLiveStream(relayUrl: String) {
+        android.util.Log.d("TimelineViewModel", "Relay live stream starting: $relayUrl")
+        relayLiveJob = viewModelScope.launch {
+            try {
+                repository.openRelayLiveStream(relayUrl)
+                    .collect { event ->
+                        android.util.Log.d("TimelineViewModel", "Relay live event received: ${event.id.take(8)}")
+                        if (event.id in seenRelayEventIds) return@collect
+                        seenRelayEventIds.add(event.id)
+
+                        val post = withContext(Dispatchers.IO) {
+                            val profiles = repository.fetchProfiles(listOf(event.pubkey))
+                            ScoredPost(
+                                event = event,
+                                profile = profiles[event.pubkey],
+                                likeCount = 0, repostCount = 0, replyCount = 0,
+                                zapAmount = 0L, score = 1.0,
+                                isLiked = false, isReposted = false
+                            )
+                        }
+
+                        // リレー固有ストリームは投稿頻度が低いため 1件でピルを表示
+                        synchronized(liveRelayBuffer) { liveRelayBuffer.add(post) }
+                        val buffered = synchronized(liveRelayBuffer) {
+                            val copy = liveRelayBuffer.sortedByDescending { it.event.createdAt }
+                            liveRelayBuffer.clear()
+                            copy
+                        }
+                        android.util.Log.d("TimelineViewModel",
+                            "Relay live pill ready: ${buffered.size} posts pending")
+                        _uiState.update { state ->
+                            state.copy(pendingRelayPosts = (buffered + state.pendingRelayPosts).deduped())
+                        }
+                    }
+            } catch (e: Exception) {
+                android.util.Log.w("TimelineViewModel", "Relay live stream ended: ${e.message}")
+            }
+        }
+    }
+
     fun likePost(eventId: String, emoji: String = "+", customTags: List<List<String>> = emptyList()) {
         viewModelScope.launch {
-            val post = (_uiState.value.globalPosts + _uiState.value.followingPosts)
+            val post = (_uiState.value.globalPosts + _uiState.value.followingPosts +
+                        _uiState.value.searchResults + _uiState.value.relayPosts)
                 .firstOrNull { it.event.id == eventId }
             // Toggle: if already liked, unlike (delete reaction event)
             if (post?.isLiked == true) {
@@ -536,7 +647,8 @@ class TimelineViewModel(
 
     fun repostPost(eventId: String) {
         viewModelScope.launch {
-            val post = (_uiState.value.globalPosts + _uiState.value.followingPosts)
+            val post = (_uiState.value.globalPosts + _uiState.value.followingPosts +
+                        _uiState.value.searchResults + _uiState.value.relayPosts)
                 .firstOrNull { it.event.id == eventId }
             // Toggle: if already reposted, unrepost (delete repost event)
             if (post?.isReposted == true) {
@@ -575,7 +687,8 @@ class TimelineViewModel(
             state.copy(
                 globalPosts = state.globalPosts.map(updateFunc),
                 followingPosts = state.followingPosts.map(updateFunc),
-                searchResults = state.searchResults.map(updateFunc)
+                searchResults = state.searchResults.map(updateFunc),
+                relayPosts = state.relayPosts.map(updateFunc)
             )
         }
     }
@@ -647,6 +760,8 @@ class TimelineViewModel(
         super.onCleared()
         liveSubId?.let { repository.stopLiveStream(it) }
         liveSubId = null
+        relayLiveJob?.cancel()
+        relayLiveJob = null
     }
 
     class Factory(

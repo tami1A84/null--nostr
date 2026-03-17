@@ -69,35 +69,36 @@ fun URLPreview(url: String, compact: Boolean = false) {
                     .url("https://api.microlink.io?url=${run { java.net.URLEncoder.encode(url, "UTF-8") }}")
                     .build()
 
-                val response = okHttpClient.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val body = response.body?.string()
-                    if (body != null) {
-                        val root = json.parseToJsonElement(body).jsonObject
-                        if (root["status"]?.jsonPrimitive?.content == "success") {
-                            val d = root["data"] as? JsonObject
-                            if (d != null) {
-                                val preview = PreviewData(
-                                    url = url,
-                                    title = (d["title"] as? JsonPrimitive)?.content,
-                                    description = (d["description"] as? JsonPrimitive)?.content,
-                                    image = (d["image"] as? JsonObject)?.get("url")?.let { (it as? JsonPrimitive)?.content },
-                                    siteName = (d["publisher"] as? JsonPrimitive)?.content,
-                                    favicon = (d["logo"] as? JsonObject)?.get("url")?.let { (it as? JsonPrimitive)?.content }
-                                )
-                                if (preview.title != null) {
-                                    ogCache[url] = preview
-                                    withContext(Dispatchers.Main) {
-                                        data = preview
+                okHttpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string()
+                        if (body != null) {
+                            val root = json.parseToJsonElement(body).jsonObject
+                            if (root["status"]?.jsonPrimitive?.content == "success") {
+                                val d = root["data"] as? JsonObject
+                                if (d != null) {
+                                    val preview = PreviewData(
+                                        url = url,
+                                        title = (d["title"] as? JsonPrimitive)?.content,
+                                        description = (d["description"] as? JsonPrimitive)?.content,
+                                        image = (d["image"] as? JsonObject)?.get("url")?.let { (it as? JsonPrimitive)?.content },
+                                        siteName = (d["publisher"] as? JsonPrimitive)?.content,
+                                        favicon = (d["logo"] as? JsonObject)?.get("url")?.let { (it as? JsonPrimitive)?.content }
+                                    )
+                                    if (preview.title != null) {
+                                        ogCache[url] = preview
+                                        withContext(Dispatchers.Main) {
+                                            data = preview
+                                        }
+                                    } else {
+                                        ogCache[url] = null
                                     }
-                                } else {
-                                    ogCache[url] = null
                                 }
                             }
                         }
+                    } else {
+                        ogCache[url] = null
                     }
-                } else {
-                    ogCache[url] = null
                 }
             } catch (e: Exception) {
                 Log.w("URLPreview", "Failed to fetch OG data for $url", e)

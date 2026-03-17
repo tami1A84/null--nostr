@@ -83,7 +83,10 @@ fun TimelineScreen(
                     showRecommendedDot = uiState.hasNewRecommendations,
                     showFollowingDot = uiState.hasNewFollowing,
                     onSearchClick = { showSearchModal = true },
-                    onNotificationsClick = { showNotificationsModal = true }
+                    onNotificationsClick = { showNotificationsModal = true },
+                    savedRelayUrls = uiState.savedRelayUrls,
+                    selectedRelayUrl = uiState.selectedRelayUrl,
+                    onSelectRelay = { viewModel.selectRelayFeed(it) }
                 )
             },
             floatingActionButton = {
@@ -100,6 +103,7 @@ fun TimelineScreen(
         ) { padding ->
             HorizontalPager(
                 state = pagerState,
+                beyondBoundsPageCount = 1,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
@@ -186,7 +190,12 @@ private fun TimelineContent(
     val pullRefreshState = rememberPullToRefreshState()
     if (pullRefreshState.isRefreshing) {
         LaunchedEffect(Unit) {
-            viewModel.refresh()
+            val selectedRelay = uiState.selectedRelayUrl
+            if (feedType == FeedType.GLOBAL && selectedRelay != null) {
+                viewModel.selectRelayFeed(selectedRelay)
+            } else {
+                viewModel.refresh()
+            }
         }
     }
     val isRefreshing = if (feedType == FeedType.GLOBAL) uiState.isGlobalRefreshing else uiState.isFollowingRefreshing
@@ -194,21 +203,35 @@ private fun TimelineContent(
         if (!isRefreshing) pullRefreshState.endRefresh()
     }
 
+    val isRelaySelected = feedType == FeedType.GLOBAL && uiState.selectedRelayUrl != null
+
+    // distinctBy は ViewModel 側で保証済みだが、非同期 state 更新の
+    // フレーム境界で重複が紛れ込んだ場合の最終防衛として残す。
+    val displayPosts = when {
+        isRelaySelected -> uiState.relayPosts
+        feedType == FeedType.GLOBAL -> uiState.globalPosts
+        else -> uiState.followingPosts
+    }.distinctBy { it.event.id }
+    val pendingPosts = when {
+        isRelaySelected -> uiState.pendingRelayPosts
+        feedType == FeedType.GLOBAL -> uiState.pendingGlobalPosts
+        else -> uiState.pendingFollowingPosts
+    }
+    val isLoading = when {
+        isRelaySelected -> uiState.isRelayFeedLoading
+        feedType == FeedType.GLOBAL -> uiState.isGlobalLoading
+        else -> uiState.isFollowingLoading
+    }
+    val error = if (!isRelaySelected && feedType == FeedType.GLOBAL) uiState.globalError
+                else if (!isRelaySelected) uiState.followingError
+                else null
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(pullRefreshState.nestedScrollConnection)
             .background(nuruColors.bgPrimary)
     ) {
-        // distinctBy は ViewModel 側で保証済みだが、非同期 state 更新の
-        // フレーム境界で重複が紛れ込んだ場合の最終防衛として残す。
-        val displayPosts = (if (feedType == FeedType.GLOBAL) uiState.globalPosts else uiState.followingPosts)
-            .distinctBy { it.event.id }
-        val pendingPosts = if (feedType == FeedType.GLOBAL) uiState.pendingGlobalPosts else uiState.pendingFollowingPosts
-
-        val isLoading = if (feedType == FeedType.GLOBAL) uiState.isGlobalLoading else uiState.isFollowingLoading
-        val error = if (feedType == FeedType.GLOBAL) uiState.globalError else uiState.followingError
-
         when {
             isLoading && displayPosts.isEmpty() -> {
                 TimelineLoadingSkeleton()
@@ -231,7 +254,7 @@ private fun TimelineContent(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(displayPosts, key = { it.event.id }) { post ->
-                        val notInterestedCallback = if (feedType == FeedType.GLOBAL) {
+                        val notInterestedCallback = if (feedType == FeedType.GLOBAL && !isRelaySelected) {
                             { viewModel.setNotInterested(post.event.id) }
                         } else null
 

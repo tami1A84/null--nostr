@@ -1086,34 +1086,22 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                                 modifier = Modifier.padding(bottom = 4.dp))
 
                             nearestRelays.take(5).forEach { relay ->
-                                val isMain = relay.info.url == mainRelayState
                                 val isInNip65 = currentRelays.any { it.url == relay.info.url }
                                 Surface(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                                    color = if (isMain) LineGreen.copy(alpha = 0.12f) else nuruColors.bgTertiary,
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = if (isMain) androidx.compose.foundation.BorderStroke(1.dp, LineGreen) else null
+                                    color = nuruColors.bgTertiary,
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(start = 4.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                                        modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        androidx.compose.material3.RadioButton(
-                                            selected = isMain,
-                                            onClick = {
-                                                prefs.mainRelay = relay.info.url
-                                                mainRelayState = relay.info.url
-                                            },
-                                            colors = androidx.compose.material3.RadioButtonDefaults.colors(
-                                                selectedColor = LineGreen
-                                            )
-                                        )
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 relay.info.name,
                                                 fontSize = 12.sp,
                                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                                                color = if (isMain) LineGreen else nuruColors.textPrimary
+                                                color = nuruColors.textPrimary
                                             )
                                             Text(
                                                 "${relay.info.region} · ${RelayDiscovery.formatDistance(relay.distance)}",
@@ -1215,29 +1203,19 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                         Text("保存済みリレー", fontSize = 10.sp, color = nuruColors.textTertiary,
                             modifier = Modifier.padding(bottom = 4.dp))
                         currentRelays.forEach { relay ->
-                            val isMain = relay.url == mainRelayState
                             Surface(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                color = if (isMain) LineGreen.copy(alpha = 0.12f) else nuruColors.bgTertiary,
-                                shape = RoundedCornerShape(12.dp),
-                                border = if (isMain) androidx.compose.foundation.BorderStroke(1.dp, LineGreen) else null
+                                color = nuruColors.bgTertiary,
+                                shape = RoundedCornerShape(12.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                                    modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    androidx.compose.material3.RadioButton(
-                                        selected = isMain,
-                                        onClick = {
-                                            prefs.mainRelay = relay.url
-                                            mainRelayState = relay.url
-                                        },
-                                        colors = androidx.compose.material3.RadioButtonDefaults.colors(selectedColor = LineGreen)
-                                    )
                                     Text(
                                         relay.url.replace("wss://", ""),
                                         fontSize = 12.sp,
-                                        color = if (isMain) LineGreen else nuruColors.textPrimary,
+                                        color = nuruColors.textPrimary,
                                         modifier = Modifier.weight(1f)
                                     )
                                     IconButton(
