@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.8] - 2026-03-18
+
+### Added (Android)
+- リレーライブストリーム: 特定リレー選択中も新着投稿ピルを表示 (EOSE後も WS 接続を維持し kind 1 をリアルタイム受信)
+- `@メンション` (nostr:npub1/nprofile1) をプロフィールカードからインライン `@ユーザー名` テキストに変更、タップでプロフィールモーダルを表示
+
+### Fixed (Android)
+- GLOBALタブ (リレータブ) の新着ピルが表示されない問題: `HorizontalPager` に `beyondBoundsPageCount=1` を設定し、バックグラウンドページの Compose ツリーを維持
+- リレー接続タイムアウト・0件取得時に自動解除して通常フィードへ復帰
+- 検索モーダルでいいね・リポストが機能しない問題: ViewModel の投稿検索を `searchResults` / `relayPosts` にも拡張
+- URLプレビューの OkHttp コネクションリーク修正 (`response.use {}` で確実にクローズ)
+- ヘッダーのリレーピル内に ▼ ドロップダウンを統合、外部タップで閉じるように修正
+
+### Changed (Android)
+- ミニアプリタブのリレー単一選択ラジオボタンを削除
+
 ## [1.3.7] - 2026-03-15
 
 ### Added (Android)
