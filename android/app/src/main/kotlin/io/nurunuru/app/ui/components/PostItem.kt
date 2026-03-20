@@ -33,7 +33,8 @@ fun PostItem(
     isOwnPost: Boolean = false,
     isVerified: Boolean = false,
     birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList(),
-    onHashtagClick: ((String) -> Unit)? = null
+    onHashtagClick: ((String) -> Unit)? = null,
+    myPubkey: String = ""
 ) {
     val nuruColors = LocalNuruColors.current
     val profile = post.profile
@@ -207,13 +208,14 @@ fun PostItem(
                 .padding(16.dp)
         ) {
             EmojiPicker(
-                pubkey = post.event.pubkey, // Use some pubkey
+                pubkey = myPubkey.ifEmpty { post.event.pubkey },
                 onSelect = { emoji ->
                     onLike(":${emoji.shortcode}:", listOf(listOf("emoji", emoji.shortcode, emoji.url)))
                     showReactionPicker = false
                 },
                 onClose = { showReactionPicker = false },
-                repository = repository
+                repository = repository,
+                individualOnly = true
             )
         }
     }

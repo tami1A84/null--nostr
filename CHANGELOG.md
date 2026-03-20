@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.9] - 2026-03-21
+
+### Added (Android)
+- LINE Seed JP フォントを全体に適用: アプリ全体のフォントを LINE Seed JP (Regular / Bold) に変更
+- 投稿リレー選択パネル: 投稿モーダルのツールバーにリレーアイコンを追加、投稿先リレーをチェックボックスで選択可能に
+- NIP-70 プロテクト対応: 投稿時に `-` タグを付与し、他クライアントによる再共有を防止するオプション
+- 絵文字事前ロード: ホーム画面起動時に自分の絵文字リストをバックグラウンドでキャッシュ → リアクション長押し時に即表示
+- 絵文字設定にお気に入りセクション追加: セット内の絵文字を ♥ タップで個人絵文字リストへ登録・解除
+
+### Changed (Android)
+- 絵文字ピッカー: `fetchAndCacheEmojis` を共通関数化、重複フェッチ防止ロジック追加
+- 絵文字設定: キャッシュファースト読み込み (EmojiPickerCache 共有)
+- リアクションピッカー: 自分の絵文字リスト (`myPubkey`) を優先して表示
+
+### Added (Rust FFI)
+- `publish_note_with_tags_to_relays`: 指定リレーのみへの投稿を FFI 経由で対応 (engine.rs の `publish_note_to_relays` を呼び出し)
+
 ## [1.3.8] - 2026-03-18
 
 ### Added (Android)

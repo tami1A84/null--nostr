@@ -431,16 +431,18 @@ class NostrRepository(
     // ─── Notifications ─────────────────────────────────────────────────────────
 
     /** Fetch notifications (reactions + zaps targeting the user). Cache-first, 1-day window. */
-    suspend fun fetchNotifications(pubkeyHex: String, limit: Int = 50): NotificationResult {
-        // キャッシュヒット時は即返す
-        cache.getCachedNotifications(pubkeyHex)?.let { cached ->
-            try {
-                val result = json.decodeFromString<NotificationResult>(cached)
-                if (result.items.isNotEmpty()) {
-                    android.util.Log.d("NostrRepository", "notifications cache hit: ${result.items.size}")
-                    return result
-                }
-            } catch (_: Exception) { }
+    suspend fun fetchNotifications(pubkeyHex: String, limit: Int = 50, skipCache: Boolean = false): NotificationResult {
+        // キャッシュヒット時は即返す（skipCache=true のときはスキップ）
+        if (!skipCache) {
+            cache.getCachedNotifications(pubkeyHex)?.let { cached ->
+                try {
+                    val result = json.decodeFromString<NotificationResult>(cached)
+                    if (result.items.isNotEmpty()) {
+                        android.util.Log.d("NostrRepository", "notifications cache hit: ${result.items.size}")
+                        return result
+                    }
+                } catch (_: Exception) { }
+            }
         }
 
         val oneDayAgo = System.currentTimeMillis() / 1000 - Constants.Time.DAY_SECS
@@ -1470,7 +1472,9 @@ class NostrRepository(
         replyToId: String? = null,
         contentWarning: String? = null,
         customTags: List<List<String>> = emptyList(),
-        kind: Int = NostrKind.TEXT_NOTE
+        kind: Int = NostrKind.TEXT_NOTE,
+        targetRelays: List<String>? = null,
+        nip70Protected: Boolean = false
     ): NostrEvent? {
         val tags = mutableListOf<List<String>>()
         tags.addAll(customTags)
@@ -1480,6 +1484,9 @@ class NostrRepository(
         }
         if (contentWarning != null && tags.none { it.getOrNull(0) == "content-warning" }) {
             tags.add(listOf("content-warning", contentWarning))
+        }
+        if (nip70Protected && tags.none { it.getOrNull(0) == "-" }) {
+            tags.add(listOf("-"))
         }
         if (tags.none { it.getOrNull(0) == "client" }) {
             tags.add(listOf("client", "nullnull"))
@@ -1511,7 +1518,14 @@ class NostrRepository(
 
         if (kind == NostrKind.TEXT_NOTE) {
             return try {
-                val eventId = withContext(Dispatchers.IO) { rustClient.publishNoteWithTags(content, tags) }
+                val eventId = withContext(Dispatchers.IO) {
+                    if (!targetRelays.isNullOrEmpty()) {
+                        android.util.Log.d("NostrRepository", "publishNote to ${targetRelays.size} relays: $targetRelays")
+                        rustClient.publishNoteWithTagsToRelays(content, tags, targetRelays)
+                    } else {
+                        rustClient.publishNoteWithTags(content, tags)
+                    }
+                }
                 android.util.Log.d("NostrRepository", "Rust publishNote OK: $eventId")
                 // Fetch the published event back from local cache for callers that need it
                 withContext(Dispatchers.IO) {

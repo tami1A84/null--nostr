@@ -284,7 +284,8 @@ fun UserProfileModal(
                                     repository = repository,
                                     onDelete = { /* N/A */ },
                                     onMute = { viewModel.muteUser(post.event.pubkey) },
-                                    isOwnPost = post.event.pubkey == viewModel.myPubkeyHex
+                                    isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
+                                    myPubkey = viewModel.myPubkeyHex
                                 )
                             }
                         }

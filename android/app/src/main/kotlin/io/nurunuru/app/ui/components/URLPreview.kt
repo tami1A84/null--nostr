@@ -183,7 +183,10 @@ private fun URLPreviewCard(data: PreviewData, compact: Boolean) {
                         model = data.image,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxWidth().height(180.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
                     )
                 }
                 Column(modifier = Modifier.padding(12.dp)) {

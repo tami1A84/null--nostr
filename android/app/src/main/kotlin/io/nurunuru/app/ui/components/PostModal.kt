@@ -40,9 +40,13 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Router
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.ui.icons.NuruIcons
+import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
@@ -71,8 +75,14 @@ fun PostModal(
     var uploadProgress by remember { mutableStateOf("") }
     var showEmojiPicker by remember { mutableStateOf(false) }
     var selectedCustomEmojis by remember { mutableStateOf<List<CustomEmoji>>(emptyList()) }
-    var showRecorder by remember { mutableStateOf(false) }
-    var recordedVideo by remember { mutableStateOf<RecordedVideo?>(null) }
+    // var showRecorder by remember { mutableStateOf(false) }
+    // var recordedVideo by remember { mutableStateOf<RecordedVideo?>(null) }
+
+    // リレー選択 + NIP-70
+    val allRelays = remember { repository.getSavedRelayUrls() }
+    var selectedRelays by remember { mutableStateOf<Set<String>>(allRelays.toSet()) }
+    var nip70Protected by remember { mutableStateOf(false) }
+    var showRelayPanel by remember { mutableStateOf(false) }
 
     BackHandler {
         onDismiss()
@@ -108,7 +118,7 @@ fun PostModal(
     val focusRequester = remember { FocusRequester() }
     val currentLength = remember(text.text) { text.text.length }
     val remaining = MAX_NOTE_LENGTH - currentLength
-    val canPost = (text.text.isNotBlank() || selectedImages.isNotEmpty() || recordedVideo != null) && remaining >= 0 && !posting
+    val canPost = (text.text.isNotBlank() || selectedImages.isNotEmpty()) && remaining >= 0 && !posting
 
     val scope = rememberCoroutineScope()
 
@@ -120,7 +130,7 @@ fun PostModal(
                 var finalContent = text.text
                 val tags = mutableListOf<List<String>>()
 
-                if (selectedImages.isNotEmpty() && recordedVideo == null) {
+                if (selectedImages.isNotEmpty()) {
                     uploadProgress = "画像をアップロード中... (0/${selectedImages.size})"
                     val uploadedUrls = withContext(Dispatchers.IO) {
                         // Parallel uploads (web 版と同じ挙動)
@@ -153,20 +163,7 @@ fun PostModal(
                     }
                 }
 
-                recordedVideo?.let { video ->
-                    // Kind 34236 required tags (NIP-71)
-                    val videoId = "nurunuru-${System.currentTimeMillis()}"
-                    tags.add(listOf("d", videoId))
-                    tags.add(listOf("url", video.url))
-                    tags.add(listOf("m", video.mimeType))
-                    tags.add(listOf("duration", video.durationSeconds.toString()))
-                    tags.add(listOf("imeta", "url ${video.url}", "m ${video.mimeType}", "size ${video.size}", "dim 720x1280"))
-                    video.thumbnailUrl?.let { tags.add(listOf("thumb", it)) }
-                    // ProofMode tags (NIP-ProofMode)
-                    tags.addAll(video.proofTags)
-                    val level = video.proofTags.find { it.getOrNull(0) == "verification" }?.getOrNull(1)
-                    android.util.Log.d("PostModal", "Video post: proofTags=${video.proofTags.size}, level=$level, d=$videoId")
-                }
+                // recordedVideo?.let { video -> ... }  // 動画投稿機能停止中
 
                 if (replyToId != null) {
                     tags.add(listOf("e", replyToId, "", "reply"))
@@ -181,12 +178,15 @@ fun PostModal(
                 val hashtags = Regex("#([\\w\\u3000]+)").findAll(finalContent).map { it.groupValues[1] }.distinct()
                 hashtags.forEach { tags.add(listOf("t", it.lowercase())) }
 
+                val targetRelayList = if (selectedRelays.size != allRelays.size) selectedRelays.toList() else null
                 val success = repository.publishNote(
                     content = finalContent,
                     replyToId = replyToId,
                     contentWarning = contentWarning.takeIf { showCWInput && it.isNotBlank() },
                     customTags = tags,
-                    kind = if (recordedVideo != null) NostrKind.VIDEO_LOOP else NostrKind.TEXT_NOTE
+                    kind = NostrKind.TEXT_NOTE,
+                    targetRelays = targetRelayList,
+                    nip70Protected = nip70Protected
                 )
 
                 if (success != null) {
@@ -289,12 +289,7 @@ fun PostModal(
                             }
                         )
 
-                        if (recordedVideo != null) {
-                            VideoPreview(
-                                video = recordedVideo!!,
-                                onRemove = { recordedVideo = null }
-                            )
-                        } else if (selectedImages.isNotEmpty()) {
+                        if (selectedImages.isNotEmpty()) {
                             ImagePreviewList(
                                 images = selectedImages,
                                 onRemove = { index ->
@@ -311,13 +306,13 @@ fun PostModal(
                 HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
 
                 PostToolbar(
-                    recordedVideo = recordedVideo,
                     selectedImages = selectedImages,
                     showCWInput = showCWInput,
                     isSTTActive = isSTTActive,
                     hasMicPermission = hasMicPermission,
                     remaining = remaining,
-                    onVideoClick = { showRecorder = true },
+                    showRelayPanel = showRelayPanel,
+                    hasRelayFilter = selectedRelays.size != allRelays.size || nip70Protected,
                     onImageClick = { imagePickerLauncher.launch("image/*") },
                     onCWClick = { showCWInput = !showCWInput },
                     onEmojiClick = { showEmojiPicker = !showEmojiPicker },
@@ -328,8 +323,27 @@ fun PostModal(
                         } else {
                             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         }
-                    }
+                    },
+                    onRelayClick = { showRelayPanel = !showRelayPanel; showEmojiPicker = false }
                 )
+
+                // リレー選択パネル（折りたたみ）
+                AnimatedVisibility(
+                    visible = showRelayPanel,
+                    enter = androidx.compose.animation.expandVertically(),
+                    exit = androidx.compose.animation.shrinkVertically()
+                ) {
+                    RelaySelectPanel(
+                        relays = allRelays,
+                        selectedRelays = selectedRelays,
+                        nip70Protected = nip70Protected,
+                        onToggleRelay = { url ->
+                            selectedRelays = if (url in selectedRelays)
+                                selectedRelays - url else selectedRelays + url
+                        },
+                        onToggleNip70 = { nip70Protected = !nip70Protected }
+                    )
+                }
 
                 if (showEmojiPicker) {
                     EmojiPicker(
@@ -345,24 +359,22 @@ fun PostModal(
                             showEmojiPicker = false
                         },
                         onClose = { showEmojiPicker = false },
-                        repository = repository
+                        repository = repository,
+                        individualOnly = true
                     )
                 }
             }
         }
     }
 
-    if (showRecorder) {
-        DivineVideoRecorder(
-            onComplete = {
-                recordedVideo = it
-                selectedImages = emptyList()
-                showRecorder = false
-            },
-            onClose = { showRecorder = false },
-            repository = repository
-        )
-    }
+    // 動画投稿機能停止中
+    // if (showRecorder) {
+    //     DivineVideoRecorder(
+    //         onComplete = { recordedVideo = it; selectedImages = emptyList(); showRecorder = false },
+    //         onClose = { showRecorder = false },
+    //         repository = repository
+    //     )
+    // }
 }
 
 @Composable
@@ -421,17 +433,18 @@ private fun PostHeader(
 
 @Composable
 private fun PostToolbar(
-    recordedVideo: RecordedVideo?,
     selectedImages: List<android.net.Uri>,
     showCWInput: Boolean,
     isSTTActive: Boolean,
     hasMicPermission: Boolean,
     remaining: Int,
-    onVideoClick: () -> Unit,
+    showRelayPanel: Boolean,
+    hasRelayFilter: Boolean,
     onImageClick: () -> Unit,
     onCWClick: () -> Unit,
     onEmojiClick: () -> Unit,
-    onMicClick: () -> Unit
+    onMicClick: () -> Unit,
+    onRelayClick: () -> Unit
 ) {
     val nuruColors = LocalNuruColors.current
     Row(
@@ -441,10 +454,8 @@ private fun PostToolbar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        IconButton(onClick = onVideoClick, enabled = selectedImages.isEmpty()) {
-            Icon(NuruIcons.Video, "動画", tint = if (recordedVideo != null) nuruColors.lineGreen else nuruColors.textTertiary)
-        }
-        IconButton(onClick = onImageClick, enabled = recordedVideo == null && selectedImages.size < 3) {
+        // IconButton(onClick = onVideoClick) { ... }  // 動画投稿機能停止中
+        IconButton(onClick = onImageClick, enabled = selectedImages.size < 3) {
             Icon(NuruIcons.Image, "画像", tint = if (selectedImages.isNotEmpty()) nuruColors.lineGreen else nuruColors.textTertiary)
         }
         IconButton(onClick = onCWClick) {
@@ -460,6 +471,13 @@ private fun PostToolbar(
                 tint = if (isSTTActive) Color.Red else if (hasMicPermission) nuruColors.textTertiary else nuruColors.textTertiary.copy(alpha = 0.3f)
             )
         }
+        IconButton(onClick = onRelayClick) {
+            Icon(
+                Icons.Default.Router,
+                "リレー選択",
+                tint = if (showRelayPanel || hasRelayFilter) LineGreen else nuruColors.textTertiary
+            )
+        }
 
         Spacer(Modifier.weight(1f))
 
@@ -469,6 +487,79 @@ private fun PostToolbar(
             color = if (remaining < 0) Color.Red else if (remaining < 20) Color(0xFFFF9800) else nuruColors.textTertiary,
             modifier = Modifier.padding(end = 8.dp)
         )
+    }
+}
+
+@Composable
+private fun RelaySelectPanel(
+    relays: List<String>,
+    selectedRelays: Set<String>,
+    nip70Protected: Boolean,
+    onToggleRelay: (String) -> Unit,
+    onToggleNip70: () -> Unit
+) {
+    val nuruColors = LocalNuruColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(nuruColors.bgSecondary)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text("投稿先リレー", fontSize = 11.sp, color = nuruColors.textTertiary, fontWeight = FontWeight.Medium)
+        relays.forEach { url ->
+            val isSelected = url in selectedRelays
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleRelay(url) }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleRelay(url) },
+                    modifier = Modifier.size(20.dp),
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = LineGreen,
+                        checkmarkColor = Color.White,
+                        uncheckedColor = nuruColors.textTertiary
+                    )
+                )
+                Text(
+                    url.replace("wss://", "").trimEnd('/'),
+                    fontSize = 13.sp,
+                    color = nuruColors.textPrimary
+                )
+            }
+        }
+        // NIP-70 トグル
+        androidx.compose.material3.HorizontalDivider(color = nuruColors.border.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 4.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggleNip70() }
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                if (nip70Protected) Icons.Default.Lock else Icons.Default.LockOpen,
+                null,
+                tint = if (nip70Protected) LineGreen else nuruColors.textTertiary,
+                modifier = Modifier.size(18.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Protected (NIP-70)", fontSize = 13.sp, color = nuruColors.textPrimary)
+                Text("リレーにリポスト禁止を要求", fontSize = 11.sp, color = nuruColors.textTertiary)
+            }
+            Switch(
+                checked = nip70Protected,
+                onCheckedChange = { onToggleNip70() },
+                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = LineGreen)
+            )
+        }
     }
 }
 

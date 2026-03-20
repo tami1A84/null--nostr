@@ -64,7 +64,6 @@ fun ReactionEmojiPicker(
     var emojiSets by remember { mutableStateOf<List<EmojiSetData>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
-    var activeTab by remember { mutableStateOf("all") }
 
     // Load custom emojis (キャッシュファースト: EmojiPickerCache を共有)
     LaunchedEffect(pubkey) {
@@ -144,21 +143,13 @@ fun ReactionEmojiPicker(
         }
     }
 
-    val allCustomEmojis = emojis + emojiSets.flatMap { it.emojis }
+    // お気に入り（個別）のみ表示
+    val allCustomEmojis = emojis
 
-    val filteredEmojis = when {
-        searchQuery.isNotEmpty() -> allCustomEmojis.filter {
-            it.shortcode.contains(searchQuery, ignoreCase = true)
-        }
-        activeTab == "all" -> allCustomEmojis
-        activeTab == "user" -> emojis
-        else -> emojiSets.find { it.name == activeTab }?.emojis ?: emptyList()
-    }
-
-    val tabs = buildList {
-        add("all" to "すべて")
-        if (emojis.isNotEmpty()) add("user" to "個別")
-        emojiSets.forEach { add(it.name to it.name) }
+    val filteredEmojis = if (searchQuery.isNotEmpty()) {
+        allCustomEmojis.filter { it.shortcode.contains(searchQuery, ignoreCase = true) }
+    } else {
+        allCustomEmojis
     }
 
     ModalBottomSheet(
@@ -205,32 +196,6 @@ fun ReactionEmojiPicker(
                 )
             )
 
-            // Tabs
-            if (searchQuery.isEmpty() && tabs.size > 1) {
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(tabs) { (id, name) ->
-                        val isActive = activeTab == id
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = if (isActive) io.nurunuru.app.ui.theme.LineGreen
-                                    else nuruColors.bgTertiary,
-                            modifier = Modifier.clickable { activeTab = id }
-                        ) {
-                            Text(
-                                text = name,
-                                fontSize = 12.sp,
-                                color = if (isActive) androidx.compose.ui.graphics.Color.White
-                                        else nuruColors.textSecondary,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
             // Emoji Grid
             Box(
                 modifier = Modifier
@@ -252,8 +217,8 @@ fun ReactionEmojiPicker(
                             modifier = Modifier.align(Alignment.Center),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("カスタム絵文字がありません", color = nuruColors.textTertiary, fontSize = 14.sp)
-                            Text("ミニアプリから絵文字セットを追加できます",
+                            Text("お気に入り絵文字がありません", color = nuruColors.textTertiary, fontSize = 14.sp)
+                            Text("ミニアプリのカスタム絵文字設定から♥登録できます",
                                 color = nuruColors.textTertiary, fontSize = 12.sp,
                                 modifier = Modifier.padding(top = 4.dp))
                         }

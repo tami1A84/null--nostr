@@ -46,11 +46,17 @@ Nostrは、特定の企業やサーバーに依存しない自由なSNSプロト
 **いいね・リアクション**
 - 2回目のタップでいいね・リポストを取り消し（NIP-09）
 - カスタム絵文字でリアクション（NIP-25）
+- リアクション選択時に自分の絵文字リストを即座に表示（事前ロード済み）
 
 **通知**
 - リアクション・Zap・リポスト・返信・メンションを一覧表示
 - リアルタイム更新：新着を上部ピルで通知
 - 種別アイコンバッジ付きの見やすいデザイン
+
+**投稿**
+- 投稿先リレーを選択して送信（特定のリレーのみへの投稿に対応）
+- NIP-70 プロテクト対応：`-` タグで他クライアントからの再共有を防止
+- 最大3枚の画像を並列アップロード
 
 **動画投稿**
 - 最大6.3秒のループ動画を撮影・投稿
@@ -67,7 +73,8 @@ Nostrは、特定の企業やサーバーに依存しない自由なSNSプロト
 - 秘密鍵はデバイス内に安全に保管
 
 **ミニアプリ**
-- カスタム絵文字、プロフィールバッジ、スケジュール調整など
+- カスタム絵文字: セット内絵文字を ♥ でお気に入り登録・即座にリアクション選択へ反映
+- プロフィールバッジ、スケジュール調整など
 - 外部WebアプリをNostrセッション付きで起動
 
 ### インストール
@@ -123,11 +130,17 @@ Nostr is an open protocol for censorship-resistant social networking. Your accou
 **Likes & Reactions**
 - Second tap cancels a like or repost (NIP-09 deletion)
 - Custom emoji reactions (NIP-25)
+- Emoji list pre-loaded at startup for instant reaction picker display
 
 **Notifications**
 - Reactions, Zaps, reposts, replies, and mentions in one list
 - Real-time updates: new items announced via animated pill banner
 - Per-type icon badges for at-a-glance clarity
+
+**Posts**
+- Select target relays before posting (publish to specific relays only)
+- NIP-70 protection: add `-` tag to prevent reposting by other clients
+- Upload up to 3 images in parallel
 
 **Video Posts**
 - Record and post loop videos up to 6.3 seconds
@@ -144,7 +157,8 @@ Nostr is an open protocol for censorship-resistant social networking. Your accou
 - Private keys stored securely on-device, never exposed
 
 **Mini Apps**
-- Built-in tools: custom emoji, profile badges, scheduler, relay settings, backup
+- Custom emoji: heart-tap to favorite emojis from sets, instantly available in reaction picker
+- Built-in tools: profile badges, scheduler, relay settings, backup
 - Launch external web apps with a Nostr session
 
 ### Installation

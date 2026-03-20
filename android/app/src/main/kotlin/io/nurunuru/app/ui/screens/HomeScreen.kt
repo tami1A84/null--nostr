@@ -54,6 +54,13 @@ fun HomeScreen(
         }
     }
 
+    // 絵文字キャッシュ事前ロード（リアクション長押し時に即表示するため）
+    LaunchedEffect(viewModel.myPubkeyHex) {
+        if (viewModel.myPubkeyHex.isNotEmpty()) {
+            fetchAndCacheEmojis(viewModel.myPubkeyHex, repository)
+        }
+    }
+
     var showEditProfile by remember { mutableStateOf(false) }
     var showFollowList by remember { mutableStateOf(false) }
     var showPostModal by remember { mutableStateOf(false) }
@@ -187,7 +194,8 @@ fun HomeScreen(
                                             onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
                                             onNotInterested = null,
                                             isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
-                                            isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false
+                                            isVerified = if (post.event.pubkey == profile?.pubkey) uiState.isNip05Verified else false,
+                                            myPubkey = viewModel.myPubkeyHex
                                         )
                                     }
                                 }

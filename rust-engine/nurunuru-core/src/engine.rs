@@ -911,6 +911,26 @@ impl NuruNuruEngine {
         Ok(output.val)
     }
 
+    /// Publish a note to specific relays only (NIP-70 relay selection).
+    pub async fn publish_note_to_relays(
+        &self,
+        content: &str,
+        tags: Vec<Tag>,
+        relay_urls: Vec<String>,
+    ) -> Result<EventId> {
+        let mut builder = EventBuilder::text_note(content);
+        for tag in tags {
+            builder = builder.tag(tag);
+        }
+        let urls: Vec<nostr::types::Url> = relay_urls
+            .iter()
+            .filter_map(|u| u.parse().ok())
+            .collect();
+        let event = self.client.sign_event_builder(builder).await?;
+        let output = self.client.send_event_to(urls, &event).await?;
+        Ok(output.val)
+    }
+
     /// Store a raw event directly into nostrdb (bypasses relay network).
     ///
     /// Used by `/api/ingest` to persist browser-received events so they are

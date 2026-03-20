@@ -802,6 +802,8 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -876,6 +878,8 @@ fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_event(
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_note(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_note_with_tags(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_note_with_tags_to_relays(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_raw_event(
 ): Short
@@ -1019,6 +1023,8 @@ fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_event(`ptr`: Pointer
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_note(`ptr`: Pointer,`content`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_note_with_tags(`ptr`: Pointer,`content`: RustBuffer.ByValue,`tags`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_note_with_tags_to_relays(`ptr`: Pointer,`content`: RustBuffer.ByValue,`tags`: RustBuffer.ByValue,`relayUrls`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_raw_event(`ptr`: Pointer,`eventJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1260,6 +1266,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_note_with_tags() != 26543.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_note_with_tags_to_relays() != 23673.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_publish_raw_event() != 20623.toShort()) {
@@ -1887,6 +1896,14 @@ public interface NuruNuruClientInterface {
      * `[["e","<event-id>","","reply"],["p","<pubkey>"]]`
      */
     fun `publishNoteWithTags`(`content`: kotlin.String, `tags`: List<List<kotlin.String>>): kotlin.String
+    
+    /**
+     * Publish a text note to specific relays only (NIP-70 relay selection).
+     *
+     * `relay_urls` is a list of `wss://...` relay URLs. Only those relays
+     * will receive the event. Returns the signed event ID hex.
+     */
+    fun `publishNoteWithTagsToRelays`(`content`: kotlin.String, `tags`: List<List<kotlin.String>>, `relayUrls`: List<kotlin.String>): kotlin.String
     
     /**
      * Publish an already-signed Nostr event JSON to all connected relays.
@@ -2590,6 +2607,25 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_note_with_tags(
         it, FfiConverterString.lower(`content`),FfiConverterSequenceSequenceString.lower(`tags`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Publish a text note to specific relays only (NIP-70 relay selection).
+     *
+     * `relay_urls` is a list of `wss://...` relay URLs. Only those relays
+     * will receive the event. Returns the signed event ID hex.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `publishNoteWithTagsToRelays`(`content`: kotlin.String, `tags`: List<List<kotlin.String>>, `relayUrls`: List<kotlin.String>): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_publish_note_with_tags_to_relays(
+        it, FfiConverterString.lower(`content`),FfiConverterSequenceSequenceString.lower(`tags`),FfiConverterSequenceString.lower(`relayUrls`),_status)
 }
     }
     )

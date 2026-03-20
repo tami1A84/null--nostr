@@ -131,7 +131,7 @@ fun TimelineHeader(
                                     Text(
                                         url.replace("wss://", "").trimEnd('/'),
                                         fontSize = 13.sp,
-                                        color = if (isSelected) LineGreen else nuruColors.textPrimary
+                                        color = nuruColors.textPrimary
                                     )
                                 },
                                 onClick = {
@@ -139,7 +139,7 @@ fun TimelineHeader(
                                     showRelayDropdown = false
                                 },
                                 trailingIcon = if (isSelected) {
-                                    { Icon(Icons.Default.Check, null, tint = LineGreen, modifier = Modifier.size(14.dp)) }
+                                    { Icon(Icons.Default.Check, null, tint = nuruColors.textPrimary, modifier = Modifier.size(14.dp)) }
                                 } else null
                             )
                         }

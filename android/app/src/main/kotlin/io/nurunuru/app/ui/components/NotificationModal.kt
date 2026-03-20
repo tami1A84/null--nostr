@@ -112,8 +112,9 @@ fun NotificationModal(
         while (true) {
             delay(10_000)
             try {
-                val fresh = repository.fetchNotifications(myPubkey)
-                val existingIds = notifications.map { it.id }.toSet()
+                val fresh = repository.fetchNotifications(myPubkey, skipCache = true)
+                val existingIds = notifications.map { it.id }.toSet() +
+                                  pendingNew.map { it.id }.toSet()
                 val newItems = fresh.items.filter { it.id !in existingIds }
                 if (newItems.isNotEmpty()) {
                     pendingNew = (newItems + pendingNew).distinctBy { it.id }

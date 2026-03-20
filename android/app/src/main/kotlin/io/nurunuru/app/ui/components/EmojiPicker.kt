@@ -47,6 +47,7 @@ internal object EmojiPickerCache {
     )
     private val ttlMs = 5 * 60 * 1000L // 5 minutes
     private val store = java.util.concurrent.ConcurrentHashMap<String, CachedData>()
+    private val fetching = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
     fun get(pubkey: String): CachedData? {
         val entry = store[pubkey] ?: return null
@@ -56,6 +57,64 @@ internal object EmojiPickerCache {
     fun put(pubkey: String, emojis: List<CustomEmoji>, sets: List<EmojiSet>) {
         store[pubkey] = CachedData(emojis, sets, System.currentTimeMillis())
     }
+
+    fun invalidate(pubkey: String) {
+        store.remove(pubkey)
+    }
+
+    /** 重複フェッチ防止。既にフェッチ中なら false を返す */
+    fun tryStartFetch(pubkey: String): Boolean = fetching.putIfAbsent(pubkey, true) == null
+    fun endFetch(pubkey: String) = fetching.remove(pubkey)
+}
+
+/** EmojiPickerCache を満たすネットワークフェッチ。重複フェッチは自動防止。 */
+internal suspend fun fetchAndCacheEmojis(
+    pubkey: String,
+    repository: io.nurunuru.app.data.NostrRepository
+): EmojiPickerCache.CachedData? {
+    if (EmojiPickerCache.get(pubkey) != null) return EmojiPickerCache.get(pubkey)
+    if (!EmojiPickerCache.tryStartFetch(pubkey)) return null  // 既にフェッチ中
+    return try {
+        val filter = NostrClient.Filter(kinds = listOf(10030), authors = listOf(pubkey), limit = 1)
+        val events = repository.fetchEvents(filter)
+        val individualEmojis = mutableListOf<CustomEmoji>()
+        val setPointers = mutableListOf<String>()
+        if (events.isNotEmpty()) {
+            events.first().tags.forEach { tag ->
+                if (tag.getOrNull(0) == "emoji" && tag.size >= 3)
+                    individualEmojis.add(CustomEmoji(tag[1], tag[2], "user"))
+                else if (tag.getOrNull(0) == "a" && tag.getOrNull(1)?.startsWith("30030:") == true)
+                    setPointers.add(tag[1])
+            }
+        }
+        val loadedSets = mutableListOf<EmojiSet>()
+        setPointers.forEach { pointer ->
+            val parts = pointer.split(":")
+            if (parts.size >= 3) {
+                val setFilter = NostrClient.Filter(
+                    kinds = listOf(30030),
+                    authors = listOf(parts[1]),
+                    tags = mapOf("d" to listOf(parts.drop(2).joinToString(":"))),
+                    limit = 1
+                )
+                val setEvents = repository.fetchEvents(setFilter)
+                if (setEvents.isNotEmpty()) {
+                    val setEvent = setEvents.first()
+                    val setName = setEvent.getTagValue("title") ?: setEvent.getTagValue("d") ?: "Emoji Set"
+                    val setEmojis = setEvent.tags
+                        .filter { it.getOrNull(0) == "emoji" && it.size >= 3 }
+                        .map { CustomEmoji(it[1], it[2], setName) }
+                    if (setEmojis.isNotEmpty()) loadedSets.add(EmojiSet(setName, setEmojis, pointer))
+                }
+            }
+        }
+        EmojiPickerCache.put(pubkey, individualEmojis, loadedSets)
+        EmojiPickerCache.get(pubkey)
+    } catch (_: Exception) {
+        null
+    } finally {
+        EmojiPickerCache.endFetch(pubkey)
+    }
 }
 
 @Composable
@@ -63,7 +122,8 @@ fun EmojiPicker(
     pubkey: String,
     onSelect: (CustomEmoji) -> Unit,
     onClose: () -> Unit,
-    repository: io.nurunuru.app.data.NostrRepository
+    repository: io.nurunuru.app.data.NostrRepository,
+    individualOnly: Boolean = false
 ) {
     val nuruColors = LocalNuruColors.current
     var searchQuery by remember { mutableStateOf("") }
@@ -74,7 +134,6 @@ fun EmojiPicker(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(pubkey) {
-        // キャッシュヒット時は即表示（リレーフェッチなし）
         val cached = EmojiPickerCache.get(pubkey)
         if (cached != null) {
             emojis = cached.emojis
@@ -84,77 +143,37 @@ fun EmojiPicker(
         }
         scope.launch {
             loading = true
-            try {
-                // Fetch kind 10030 (Emoji List)
-                val filter = NostrClient.Filter(
-                    kinds = listOf(10030),
-                    authors = listOf(pubkey),
-                    limit = 1
-                )
-                val events = repository.fetchEvents(filter)
-
-                val individualEmojis = mutableListOf<CustomEmoji>()
-                val setPointers = mutableListOf<String>()
-
-                if (events.isNotEmpty()) {
-                    val tags = events.first().tags
-                    tags.forEach { tag ->
-                        if (tag.getOrNull(0) == "emoji" && tag.size >= 3) {
-                            individualEmojis.add(CustomEmoji(tag[1], tag[2], "user"))
-                        } else if (tag.getOrNull(0) == "a" && tag.getOrNull(1)?.startsWith("30030:") == true) {
-                            setPointers.add(tag[1])
-                        }
-                    }
-                }
-
-                // Load emoji sets (Kind 30030)
-                val loadedSets = mutableListOf<EmojiSet>()
-                setPointers.forEach { pointer ->
-                    val parts = pointer.split(":")
-                    if (parts.size >= 3) {
-                        val author = parts[1]
-                        val dTag = parts.drop(2).joinToString(":")
-                        val setFilter = NostrClient.Filter(
-                            kinds = listOf(30030),
-                            authors = listOf(author),
-                            tags = mapOf("d" to listOf(dTag)),
-                            limit = 1
-                        )
-                        val setEvents = repository.fetchEvents(setFilter)
-                        if (setEvents.isNotEmpty()) {
-                            val setEvent = setEvents.first()
-                            val setName = setEvent.getTagValue("title") ?: setEvent.getTagValue("d") ?: "Emoji Set"
-                            val setEmojis = setEvent.tags
-                                .filter { it.getOrNull(0) == "emoji" && it.size >= 3 }
-                                .map { CustomEmoji(it[1], it[2], setName) }
-                            if (setEmojis.isNotEmpty()) {
-                                loadedSets.add(EmojiSet(setName, setEmojis, pointer))
-                            }
-                        }
-                    }
-                }
-
-                emojis = individualEmojis
-                emojiSets = loadedSets
-                EmojiPickerCache.put(pubkey, individualEmojis, loadedSets)
-            } catch (e: Exception) {
-                // Handle error
-            } finally {
-                loading = false
+            val result = fetchAndCacheEmojis(pubkey, repository)
+            if (result != null) {
+                emojis = result.emojis
+                emojiSets = result.sets
             }
+            loading = false
         }
     }
 
-    val allEmojis = (emojis + emojiSets.flatMap { it.emojis }).distinctBy { it.shortcode }
-    val filteredEmojis = allEmojis.filter {
-        it.shortcode.contains(searchQuery, ignoreCase = true) &&
-        (activeTab == "all" || (activeTab == "user" && emojis.contains(it)) ||
-         emojiSets.find { s -> s.name == activeTab }?.emojis?.contains(it) == true)
+    // individualOnly=true: デフォルトはお気に入りのみ、検索時は全セット横断
+    val searchPool = remember(emojis, emojiSets) {
+        (emojis + emojiSets.flatMap { it.emojis }).distinctBy { it.shortcode }
+    }
+    val filteredEmojis = remember(searchQuery, activeTab, emojis, emojiSets, searchPool) {
+        when {
+            searchQuery.isNotEmpty() ->
+                // 検索時は常に全セット横断
+                searchPool.filter { it.shortcode.contains(searchQuery, ignoreCase = true) }
+            individualOnly ->
+                // 検索なし・individualOnly: お気に入りのみ
+                emojis
+            activeTab == "all" -> searchPool
+            activeTab == "user" -> emojis
+            else -> emojiSets.find { it.name == activeTab }?.emojis ?: emptyList()
+        }
     }
 
-    val tabs = mutableListOf("all")
-    if (emojis.isNotEmpty()) tabs.add("user")
-    tabs.addAll(emojiSets.map { it.name })
+    val tabs = if (individualOnly) emptyList() else mutableListOf("all").also { t ->
+        if (emojis.isNotEmpty()) t.add("user")
+        t.addAll(emojiSets.map { it.name })
+    }
 
     Column(
         modifier = Modifier
@@ -230,7 +249,7 @@ fun EmojiPicker(
         } else if (filteredEmojis.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    if (allEmojis.isEmpty()) "カスタム絵文字がありません" else "該当する絵文字がありません",
+                    if (searchPool.isEmpty()) "カスタム絵文字がありません" else "該当する絵文字がありません",
                     color = nuruColors.textTertiary,
                     style = MaterialTheme.typography.bodySmall
                 )

@@ -712,6 +712,27 @@ impl NuruNuruClient {
         Ok(eid.to_hex())
     }
 
+    /// Publish a text note to specific relays only (NIP-70 relay selection).
+    ///
+    /// `relay_urls` is a list of `wss://...` relay URLs. Only those relays
+    /// will receive the event. Returns the signed event ID hex.
+    pub fn publish_note_with_tags_to_relays(
+        &self,
+        content: String,
+        tags: Vec<Vec<String>>,
+        relay_urls: Vec<String>,
+    ) -> Result<String, NuruNuruFfiError> {
+        let parsed_tags = parse_ffi_tags(tags)?;
+        let eid = self
+            .runtime
+            .block_on(
+                self.engine
+                    .publish_note_to_relays(&content, parsed_tags, relay_urls),
+            )
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(eid.to_hex())
+    }
+
     /// Update user profile (Kind 0, NIP-01).
     ///
     /// `metadata_json` must be a JSON object with profile fields:

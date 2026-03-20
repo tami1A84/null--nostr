@@ -157,7 +157,8 @@ fun TimelineScreen(
             viewModel = viewModel,
             repository = repository,
             onClose = { showSearchModal = false; viewModel.clearSearch() },
-            onProfileClick = { viewingPubkey = it }
+            onProfileClick = { viewingPubkey = it },
+            myPubkey = myPubkey
         )
     }
 
@@ -201,6 +202,13 @@ private fun TimelineContent(
     val isRefreshing = if (feedType == FeedType.GLOBAL) uiState.isGlobalRefreshing else uiState.isFollowingRefreshing
     LaunchedEffect(isRefreshing) {
         if (!isRefreshing) pullRefreshState.endRefresh()
+    }
+
+    // 絵文字キャッシュ事前ロード（リアクション長押し時に即表示するため）
+    LaunchedEffect(myPubkey) {
+        if (myPubkey.isNotEmpty()) {
+            fetchAndCacheEmojis(myPubkey, repository)
+        }
     }
 
     val isRelaySelected = feedType == FeedType.GLOBAL && uiState.selectedRelayUrl != null
@@ -288,7 +296,8 @@ private fun TimelineContent(
                                 onNotInterested = notInterestedCallback,
                                 birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
                                 isOwnPost = post.event.pubkey == myPubkey,
-                                onHashtagClick = onHashtagClick
+                                onHashtagClick = onHashtagClick,
+                                myPubkey = myPubkey
                             )
                         }
                     }

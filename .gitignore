@@ -43,3 +43,7 @@ node_modules/
 # Rust napi-rs build artifacts
 *.node
 rust-engine/target/
+
+# LINE Seed JP font distribution package (only res/font/ TTFs are committed)
+android/app/src/main/LINESeedJP_20241105/
+android/app/src/main/assets/

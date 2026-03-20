@@ -42,7 +42,8 @@ fun SearchModal(
     viewModel: TimelineViewModel,
     repository: io.nurunuru.app.data.NostrRepository,
     onClose: () -> Unit,
-    onProfileClick: (String) -> Unit
+    onProfileClick: (String) -> Unit,
+    myPubkey: String = ""
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
@@ -226,7 +227,8 @@ fun SearchModal(
                                     onRepost = { viewModel.repostPost(post.event.id) },
                                     onProfileClick = { onProfileClick(post.event.pubkey) },
                                     repository = repository,
-                                    birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList()
+                                    birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
+                                    myPubkey = myPubkey
                                 )
                             }
                         }
