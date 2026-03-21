@@ -45,6 +45,14 @@ cp rust-engine/target/aarch64-linux-android/release/libuniffi_nurunuru.so \
 
 NDK linker/compiler config is persisted in `rust-engine/.cargo/config.toml`. `CC_aarch64_linux_android` is set there; `AR_aarch64_linux_android` must be passed explicitly as an env var (cc-rs limitation).
 
+### iOS
+```bash
+cd ios && xcodebuild -scheme NuruNuru -destination 'platform=iOS Simulator,name=iPhone 16' build
+cd ios && xcodebuild -scheme NuruNuru -destination 'platform=iOS Simulator,name=iPhone 16' test
+open ios/NuruNuru.xcodeproj                    # open in Xcode
+```
+Design doc: [ios/DESIGN.md](./ios/DESIGN.md) | Guardrails: [ios/GUARDRAILS.md](./ios/GUARDRAILS.md)
+
 ### zapstore Publishing
 ```bash
 ~/go/bin/zsp publish   # from repo root, requires nsec
@@ -55,12 +63,30 @@ NDK linker/compiler config is persisted in `rust-engine/.cargo/config.toml`. `CC
 ### Platform Stack
 - **Web (Vercel)**: Next.js 14 (app router) + `nostr-tools` + `rx-nostr` + direct WebSocket connections
 - **Android**: Kotlin (Jetpack Compose) → `nurunuru-ffi` (UniFFI) → `nurunuru-core` (Rust)
+- **iOS**: Swift (SwiftUI) → pure Swift Nostr layer (Phase 1) → `nurunuru-ffi` UniFFI (Phase 2)
 - **Desktop**: `nurunuru-napi` (napi-rs) → `nurunuru-core` (Rust)
 - Web mode: `lib/rust-bridge.js` and `lib/rust-engine-manager.js` are stubs; all Nostr ops use `lib/nostr.js` directly
 
 ### FFI Bridge
 `rust-engine/nurunuru-ffi/src/lib.rs` → UniFFI → auto-generated `bindgen/kotlin-out/uniffi/nurunuru/nurunuru.kt` → loaded by the Android app via JNA.
 The generated `.kt` file must be committed alongside any `lib.rs` API changes.
+
+### iOS Layer
+```
+ios/NuruNuru/
+  Theme/          # NuruColors, NuruTypography, NuruSpacing (auto-generated from tokens)
+  Models/         # NostrEvent, ScoredPost, MlsGroup — same names as Android
+  Data/           # NostrRepository (actor), NostrClient, ConnectionManager, SecureKeyManager
+  ViewModels/     # AuthViewModel, TimelineViewModel, HomeViewModel, TalkViewModel
+  Views/Screens/  # LoginView, MainTabView, HomeView, TimelineView, TalkView, SettingsView
+  Views/Components/ # PostRow, PostActions, PostContent, PostSheet, ImageViewerView
+  Views/Sheets/   # SearchSheet, ZapSheet, NotificationSheet, EmojiPickerSheet
+  Views/MiniApps/ # BadgeSettingsView, EmojiSettingsView, ZapSettingsView
+```
+- `NostrRepository` is an `actor` — single data access point (same pattern as Android)
+- `@Observable` ViewModels (iOS 17 Observation framework, not Combine)
+- NIP-46 (Nostr Connect) replaces NIP-55 (Amber) for external signing on iOS
+- Design must match Android pixel-for-pixel. See [ios/GUARDRAILS.md](./ios/GUARDRAILS.md)
 
 ### Web Layer (`lib/`)
 - `nostr.js` — core protocol ops (publish, DM, zap, sign)
@@ -92,7 +118,7 @@ Implemented in Rust at `nurunuru-core/src/recommendation.rs` (`rank_feed()`) and
 - Android entry point: `NostrRepository.fetchRecommendedTimeline()` → `TimelineViewModel` (おすすめ tab)
 
 ### Design Tokens
-`design-tokens/constants.json` is the source of truth for weights, colors, and limits. Run `npm run tokens` to sync to `lib/constants.generated.js` (Web) and `android/app/src/main/kotlin/io/nurunuru/app/data/Constants.kt` (Android).
+`design-tokens/constants.json` is the source of truth for weights, colors, and limits. Run `npm run tokens` to sync to `lib/constants.generated.js` (Web), `android/app/src/main/kotlin/io/nurunuru/app/data/Constants.kt` (Android), and `ios/NuruNuru/Utilities/Constants.swift` (iOS).
 
 ## Key Constraints
 
@@ -108,3 +134,15 @@ Implemented in Rust at `nurunuru-core/src/recommendation.rs` (`rank_feed()`) and
 - `BasicTextField` inside scrollable `Column` must NOT use `Modifier.weight(1f)` (crashes)
 - `nostrdb` stored at `context.filesDir/nostrdb_ndb`
 - NIP-55 (Amber) external signer via `ExternalSigner.kt`
+
+### iOS
+- Post length: strictly enforced 140-char limit in `PostSheet.swift`
+- Font: LINE Seed JP only (bundled .ttf). Never fall back to system font for body text
+- Private keys: Keychain only (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`). Never in UserDefaults or logs
+- Use `.id(post.event.id)` for stable list identity; no entrance animations on timeline
+- Full-screen modals: `.fullScreenCover` for image viewer, `.sheet` for everything else
+- `NostrRepository` must be an `actor` for thread-safe access
+- `@Observable` for all ViewModels (iOS 17+). No Combine/ObservableObject
+- NIP-46 (Nostr Connect) for external signing (no NIP-55 on iOS)
+- SPM only for dependencies. Minimize third-party (prefer Apple frameworks)
+- Minimum deployment target: iOS 17.0
