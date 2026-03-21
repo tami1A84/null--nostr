@@ -6,6 +6,8 @@ import android.net.Uri
 import android.util.Log
 import io.nurunuru.app.MainActivity
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -53,9 +55,13 @@ object ExternalSigner : AppSigner {
             {"type":"sign_event","kind":0},
             {"type":"sign_event","kind":1},
             {"type":"sign_event","kind":3},
+            {"type":"sign_event","kind":4},
             {"type":"sign_event","kind":5},
             {"type":"sign_event","kind":6},
             {"type":"sign_event","kind":7},
+            {"type":"sign_event","kind":443},
+            {"type":"sign_event","kind":444},
+            {"type":"sign_event","kind":445},
             {"type":"sign_event","kind":10000},
             {"type":"sign_event","kind":10002},
             {"type":"sign_event","kind":30030},
@@ -71,6 +77,9 @@ object ExternalSigner : AppSigner {
             `package` = PACKAGE_NAME
             putExtra("type", "get_public_key")
             putExtra("permissions", permissions)
+            // Amber 5.x requires the calling package name to register app in ContentProvider DB.
+            // Without this, ContentProvider queries return null (app not trusted).
+            putExtra("package", "io.nurunuru.app")
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
     }
@@ -80,6 +89,7 @@ object ExternalSigner : AppSigner {
             `package` = PACKAGE_NAME
             putExtra("type", "sign_event")
             putExtra("current_user", pubkey)
+            putExtra("package", "io.nurunuru.app")
             try {
                 val id = Json.parseToJsonElement(eventJson).jsonObject["id"]?.jsonPrimitive?.content
                 if (id != null) putExtra("id", id)
@@ -181,8 +191,8 @@ object ExternalSigner : AppSigner {
     private suspend fun request(context: Context?, intent: Intent): Intent? = mutex.withLock {
         val ctx = context ?: MainActivity.instance ?: return null
 
-        // Try Content Resolver first (Silent signing)
-        val resultIntent = tryContentResolver(ctx, intent)
+        // ContentProvider クエリはブロッキング I/O — IO スレッドで実行してメインをブロックしない
+        val resultIntent = withContext(Dispatchers.IO) { tryContentResolver(ctx, intent) }
         if (resultIntent != null) return resultIntent
 
         // Fallback to Intent (App switching)
@@ -190,10 +200,17 @@ object ExternalSigner : AppSigner {
         val deferred = CompletableDeferred<Intent>()
         pendingRequest = deferred
 
-        if (ctx is MainActivity) {
-            ctx.launchExternalSigner(intent)
-        } else {
-            MainActivity.instance?.launchExternalSigner(intent) ?: return null
+        // Activity 起動はメインスレッドで行う
+        val launched = withContext(Dispatchers.Main.immediate) {
+            when {
+                ctx is MainActivity -> { ctx.launchExternalSigner(intent); true }
+                MainActivity.instance != null -> { MainActivity.instance!!.launchExternalSigner(intent); true }
+                else -> false
+            }
+        }
+        if (!launched) {
+            pendingRequest = null
+            return null
         }
 
         Log.d(TAG, "Intent launched, awaiting result...")
@@ -242,10 +259,13 @@ object ExternalSigner : AppSigner {
         currentUser: String,
         pubKey: String
     ): Intent? {
-        // NIP-55: Authority is often <package>.<METHOD>
-        // We try both .METHOD and /method for compatibility
+        // Amber 5.x ContentProvider authority format: <package>.<METHOD> (dot + uppercase).
+        // e.g. content://com.greenart7c3.nostrsigner.SIGN_EVENT
+        // Path-based (/<method>) and lowercase variants do NOT exist in Amber 5.x
+        // and produce "Failed to find provider info" errors — skip them.
+        // We still try lowercase as a NIP-55 generic fallback for other signers.
         val methods = listOf(type.uppercase(), type.lowercase())
-        val delimiters = listOf(".", "/")
+        val delimiters = listOf(".")   // only dot-separated; slash-based not used by Amber 5.x
 
         for (delimiter in delimiters) {
             for (method in methods) {
@@ -253,25 +273,28 @@ object ExternalSigner : AppSigner {
                     val uri = Uri.parse("${baseUri.removeSuffix("/")}$delimiter$method")
                     Log.d(TAG, "Querying provider: $uri")
 
-                    // NIP-55 Content Provider query:
-                    // projection: [data] (event json or content)
-                    // selection: type (e.g. "sign_event")
-                    // selectionArgs: [account, counterparty (optional)]
+                    // NIP-55 Content Provider query (Amber / Amethyst compatible format):
+                    // projection[0]: the payload (unsigned event JSON, or ciphertext)
+                    // selection: null — type is already in the URI path, passing "sign_event"
+                    //            as selection causes Amber to return a null cursor
+                    // selectionArgs[0]: account pubkey (hex); [1]: counterparty pubkey if needed
                     val projection = arrayOf(data)
-                    val selection = type
+                    val selection: String? = null
                     val selectionArgs = if (pubKey.isNotBlank()) {
-                        // Amber expects account first. NIP-55 specifies [counterparty, account]
-                        // but Amber's SignerProvider expects account at index 0.
-                        if (baseUri.contains("greenart7c3")) {
-                            arrayOf(currentUser, pubKey)
-                        } else {
-                            arrayOf(pubKey, currentUser)
-                        }
+                        arrayOf(currentUser, pubKey)
                     } else {
                         arrayOf(currentUser)
                     }
 
-                    context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
+                    Log.d(TAG, "  query: currentUser=${currentUser.take(8)}.., data=${data.take(20)}.., selectionArgs=${selectionArgs.size}")
+                    val cursor = context.contentResolver.query(uri, projection, selection, selectionArgs, null)
+                    if (cursor == null) {
+                        Log.d(TAG, "  → null cursor from $uri")
+                    } else if (!cursor.moveToFirst()) {
+                        Log.d(TAG, "  → empty cursor (${cursor.columnCount} cols) from $uri")
+                        cursor.close()
+                    }
+                    cursor?.use { cursor ->
                         if (cursor.moveToFirst()) {
                             val signatureIndex = cursor.getColumnIndex("signature")
                             val eventIndex = cursor.getColumnIndex("event")
@@ -282,6 +305,7 @@ object ExternalSigner : AppSigner {
                             val result = if (resultIndex != -1) cursor.getString(resultIndex) else null
 
                             if (signature != null || event != null || result != null) {
+                                Log.d(TAG, "ContentProvider success [$uri]: event=${event?.take(20)}, sig=${signature?.take(20)}")
                                 return Intent().apply {
                                     putExtra("signature", signature)
                                     putExtra("event", event)
@@ -299,7 +323,7 @@ object ExternalSigner : AppSigner {
                         }
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Query failed for combination $baseUri $delimiter $method: ${e.message}")
+                    Log.e(TAG, "ContentProvider query failed [$baseUri$delimiter$method]: ${e::class.simpleName}: ${e.message}")
                 }
             }
         }

@@ -99,36 +99,18 @@ suspend fun NostrRepository.uploadImage(fileBytes: ByteArray, mimeType: String):
 }
 
 suspend fun NostrRepository.updateRelayList(relays: List<Triple<String, Boolean, Boolean>>): Boolean {
-    val rustClient = client.getRustClient() ?: return false
     val tags = relays.map { (url, read, write) ->
         val marker = when { read && write -> null; read -> "read"; write -> "write"; else -> null }
         if (marker != null) listOf("r", url, marker) else listOf("r", url)
     }
-    return try {
-        if (isExternalSigner()) {
-            val unsigned = rustClient.createUnsignedEvent(10002u, "", tags, myPubkeyHex)
-            signAndPublish(unsigned)
-        } else {
-            rustClient.publishEvent(10002u, "", tags)
-            true
-        }
-    } catch (e: Exception) { false }
+    return publishNewEvent(10002, "", tags) != null
 }
 
 suspend fun NostrRepository.requestVanish(relays: List<String>?, reason: String): Boolean {
-    val rustClient = client.getRustClient() ?: return false
     val tags = mutableListOf<List<String>>()
     if (relays.isNullOrEmpty()) tags.add(listOf("relay", "ALL_RELAYS"))
     else relays.forEach { tags.add(listOf("relay", it)) }
-    return try {
-        if (isExternalSigner()) {
-            val unsigned = rustClient.createUnsignedEvent(NostrKind.VANISH_REQUEST.toUInt(), reason, tags, myPubkeyHex)
-            signAndPublish(unsigned)
-        } else {
-            rustClient.publishEvent(NostrKind.VANISH_REQUEST.toUInt(), reason, tags)
-            true
-        }
-    } catch (e: Exception) { false }
+    return publishNewEvent(NostrKind.VANISH_REQUEST, reason, tags) != null
 }
 
 suspend fun NostrRepository.updateProfile(profile: UserProfile): Boolean {
@@ -148,19 +130,5 @@ suspend fun NostrRepository.updateProfile(profile: UserProfile): Boolean {
         put("geohash", profile.geohash)
     }
     val metadataJson = obj.toString()
-
-    val rustClient = client.getRustClient() ?: return false
-    return try {
-        if (isExternalSigner()) {
-            val unsigned = rustClient.createUnsignedEvent(0u, metadataJson, emptyList(), myPubkeyHex)
-            signAndPublish(unsigned).also { if (it) android.util.Log.d("NostrRepository", "Ext updateProfile OK") }
-        } else {
-            rustClient.updateProfile(metadataJson)
-            android.util.Log.d("NostrRepository", "Rust updateProfile OK")
-            true
-        }
-    } catch (e: Exception) {
-        android.util.Log.e("NostrRepository", "Rust updateProfile failed: ${e.message}")
-        false
-    }
+    return publishNewEvent(0, metadataJson, emptyList()) != null
 }

@@ -25,20 +25,22 @@ suspend fun NostrRepository.fetchProfile(pubkeyHex: String): UserProfile? {
 /** キャッシュのみ読む（ネットワーク不使用）。初回表示の即時描画に使う。 */
 fun NostrRepository.getCachedUserNotesPosts(pubkeyHex: String): List<ScoredPost> {
     val raw = cache.getCachedUserNotes(pubkeyHex) ?: return emptyList()
+    val deletedIds = cache.getDeletedEventIds()
     return try {
-        json.decodeFromString<List<ScoredPost>>(raw).also {
-            android.util.Log.d("NostrRepository", "user_notes cache-only: ${it.size}")
-        }
+        json.decodeFromString<List<ScoredPost>>(raw)
+            .filter { it.event.id !in deletedIds }
+            .also { android.util.Log.d("NostrRepository", "user_notes cache-only: ${it.size}") }
     } catch (_: Exception) { emptyList() }
 }
 
 /** キャッシュのみ読む（ネットワーク不使用）。初回表示の即時描画に使う。 */
 fun NostrRepository.getCachedUserLikesPosts(pubkeyHex: String): List<ScoredPost> {
     val raw = cache.getCachedUserLikes(pubkeyHex) ?: return emptyList()
+    val deletedIds = cache.getDeletedEventIds()
     return try {
-        json.decodeFromString<List<ScoredPost>>(raw).also {
-            android.util.Log.d("NostrRepository", "user_likes cache-only: ${it.size}")
-        }
+        json.decodeFromString<List<ScoredPost>>(raw)
+            .filter { it.event.id !in deletedIds }
+            .also { android.util.Log.d("NostrRepository", "user_likes cache-only: ${it.size}") }
     } catch (_: Exception) { emptyList() }
 }
 
@@ -63,7 +65,9 @@ suspend fun NostrRepository.fetchUserNotes(pubkeyHex: String, limit: Int = 30): 
         since = getOneDayAgo()
     )
     val relayEvents = client.fetchEvents(filter, 6_000)
+    val deletedIds = cache.getDeletedEventIds()
     val allEvents = (relayEvents + nostrdbPosts).distinctBy { it.id }
+        .filter { it.id !in deletedIds }
         .sortedByDescending { it.createdAt }
         .take(limit)
     val posts = enrichPosts(allEvents)
@@ -72,7 +76,7 @@ suspend fun NostrRepository.fetchUserNotes(pubkeyHex: String, limit: Int = 30): 
             json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ScoredPost.serializer()), posts))
     } catch (_: Exception) { }
     android.util.Log.d("NostrRepository",
-        "fetchUserNotes: relay=${relayEvents.size} nostrdb=${nostrdbPosts.size} merged=${posts.size}")
+        "fetchUserNotes: relay=${relayEvents.size} nostrdb=${nostrdbPosts.size} merged=${posts.size} deleted=${deletedIds.size}")
     return posts
 }
 
@@ -259,21 +263,12 @@ suspend fun NostrRepository.fetchAwardedBadges(pubkeyHex: String, currentBadgeRe
 }
 
 suspend fun NostrRepository.updateProfileBadges(pubkeyHex: String, badges: List<BadgeInfo>): Boolean {
-    val rustClient = client.getRustClient() ?: return false
     val tags = mutableListOf(listOf("d", "profile_badges"))
     for (badge in badges) {
         tags.add(listOf("a", badge.ref))
         badge.awardEventId?.let { tags.add(listOf("e", it)) }
     }
-    return try {
-        if (isExternalSigner()) {
-            val unsigned = rustClient.createUnsignedEvent(NostrKind.PROFILE_BADGES.toUInt(), "", tags, myPubkeyHex)
-            signAndPublish(unsigned)
-        } else {
-            rustClient.publishEvent(NostrKind.PROFILE_BADGES.toUInt(), "", tags)
-            true
-        }
-    } catch (e: Exception) { false }
+    return publishNewEvent(NostrKind.PROFILE_BADGES, "", tags) != null
 }
 
 // ─── Emoji ────────────────────────────────────────────────────────────────────
@@ -359,14 +354,5 @@ suspend fun NostrRepository.searchEmojiSets(query: String): List<EmojiSet> {
 }
 
 suspend fun NostrRepository.updateEmojiList(tags: List<List<String>>): Boolean {
-    val rustClient = client.getRustClient() ?: return false
-    return try {
-        if (isExternalSigner()) {
-            val unsigned = rustClient.createUnsignedEvent(NostrKind.EMOJI_LIST.toUInt(), "", tags, myPubkeyHex)
-            signAndPublish(unsigned)
-        } else {
-            rustClient.publishEvent(NostrKind.EMOJI_LIST.toUInt(), "", tags)
-            true
-        }
-    } catch (e: Exception) { false }
+    return publishNewEvent(NostrKind.EMOJI_LIST, "", tags) != null
 }

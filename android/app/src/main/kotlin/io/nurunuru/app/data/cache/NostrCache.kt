@@ -219,10 +219,32 @@ class NostrCache(context: Context) {
         setRaw("user_notes_$pubkey", json, Constants.CacheDuration.NOTIFICATION) // 1 day
     }
 
+    fun removeFromUserNotesCache(pubkey: String, eventId: String, serializer: kotlinx.serialization.json.Json) {
+        val raw = getCachedUserNotes(pubkey) ?: return
+        try {
+            val posts = serializer.decodeFromString<List<io.nurunuru.app.data.models.ScoredPost>>(raw)
+            val updated = posts.filter { it.event.id != eventId }
+            if (updated.size != posts.size) {
+                setCachedUserNotes(pubkey, serializer.encodeToString(updated))
+            }
+        } catch (_: Exception) { }
+    }
+
     fun getCachedUserLikes(pubkey: String): String? = getRaw("user_likes_$pubkey")
 
     fun setCachedUserLikes(pubkey: String, json: String) {
         setRaw("user_likes_$pubkey", json, Constants.CacheDuration.NOTIFICATION) // 1 day
+    }
+
+    fun removeFromUserLikesCache(pubkey: String, eventId: String, serializer: kotlinx.serialization.json.Json) {
+        val raw = getCachedUserLikes(pubkey) ?: return
+        try {
+            val posts = serializer.decodeFromString<List<io.nurunuru.app.data.models.ScoredPost>>(raw)
+            val updated = posts.filter { it.event.id != eventId }
+            if (updated.size != posts.size) {
+                setCachedUserLikes(pubkey, serializer.encodeToString(updated))
+            }
+        } catch (_: Exception) { }
     }
 
     // ─── Timeline Cache ──────────────────────────────────────────────────────
@@ -316,12 +338,30 @@ class NostrCache(context: Context) {
         editor.apply()
     }
 
+    // ── 削除済みイベント ID（アプリ再起動後もリレーフェッチから除外するため永続） ──────
+    // NIP-09 の削除イベントはリレーが即座に反映しないため、ローカルで追跡する。
+    // 最大 500 件。超えた場合は古いものを削除しない（SetはLRUではないが実用上問題なし）。
+    private val DELETED_IDS_KEY = "deleted_event_ids"
+
+    fun addDeletedEventId(eventId: String) {
+        val current = prefs.getStringSet(DELETED_IDS_KEY, emptySet())?.toMutableSet() ?: mutableSetOf()
+        current.add(eventId)
+        // 上限を超えたら古めのものを間引く（SetはLRUを保証しないが近似的に機能する）
+        val trimmed = if (current.size > 500) current.drop(current.size - 500).toMutableSet() else current
+        prefs.edit().putStringSet(DELETED_IDS_KEY, trimmed).commit()
+    }
+
+    fun getDeletedEventIds(): Set<String> =
+        prefs.getStringSet(DELETED_IDS_KEY, emptySet()) ?: emptySet()
+
     // ── 退出済みグループ ブロックリスト（MLS キャッシュとは独立して永続） ────────
 
     fun markGroupAsLeft(groupIdHex: String) {
         val current = prefs.getStringSet("mls_left_groups", emptySet())?.toMutableSet() ?: mutableSetOf()
         current.add(groupIdHex)
-        prefs.edit().putStringSet("mls_left_groups", current).apply()
+        // commit() instead of apply() — synchronous write so getLeftGroupIds() immediately reflects
+        // the leave when fetchMlsGroups() is called right after leaveGroup() in the same coroutine.
+        prefs.edit().putStringSet("mls_left_groups", current).commit()
     }
 
     fun getLeftGroupIds(): Set<String> =

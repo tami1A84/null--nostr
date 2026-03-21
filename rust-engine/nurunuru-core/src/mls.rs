@@ -265,6 +265,18 @@ impl MlsManager {
         })
     }
 
+    /// Merge the pending commit for a group after the commit has been published to relays.
+    ///
+    /// Must be called after `add_member`, `remove_member`, or `leave_group` once the
+    /// commit event has been successfully published. Without this, subsequent operations
+    /// on the same group will fail with "pending commit exists".
+    pub fn merge_pending_commit(&self, group_id_hex: &str) -> Result<()> {
+        let group_id = self.resolve_group_id(group_id_hex)?;
+        self.mdk
+            .merge_pending_commit(&group_id)
+            .map_err(|e| NuruNuruError::MlsError(format!("merge_pending_commit: {e}")))
+    }
+
     /// Remove a member from the group.
     ///
     /// `content` in the returned `EncryptedMessageData` is the full JSON of the

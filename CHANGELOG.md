@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-03-22
+
+### Fixed (Android)
+- 削除した投稿がアプリ再起動後にホームタブに再表示される問題: 削除済みイベントIDを SharedPreferences に永続保存し、リレーフェッチ・キャッシュ読み込み・ViewModel の3層すべてで除外するよう修正
+- Amber 外部署名（NIP-55）でいいね・リアクション時にアプリがフリーズ/ANR になる問題: Rust FFI のブロッキング呼び出し（`publishRawEvent`）と ContentProvider クエリをメインスレッドから IO スレッドに移動
+- Amber の ContentProvider 署名が毎回ポップアップになる問題: `getPublicKeyIntent` に `package` extra を追加し Amber の信頼 DB に登録されるよう修正
+- トークグループを退出後にキャッシュクリアしても一覧が更新されない問題: `clearStateAfterCacheClear()` でグループ状態を完全リセットしてから再ロードするよう修正、`loadGroups()` の空リスト保護ガードを削除
+
 ## [1.4.0] - 2026-03-21
 
 ### Added (Android)

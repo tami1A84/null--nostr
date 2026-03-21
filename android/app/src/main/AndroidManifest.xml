@@ -14,8 +14,23 @@
 
     <queries>
         <package android:name="com.greenart7c3.nostrsigner" />
+        <!-- Amber 5.x uses per-type authorities (dot-separated, uppercase).
+             Each must be declared so Android 11+ package visibility allows our
+             contentResolver.query() calls to reach them. Without these, Android
+             throws "Failed to find provider info" and returns a null cursor. -->
         <provider android:authorities="com.greenart7c3.nostrsigner" />
+        <provider android:authorities="com.greenart7c3.nostrsigner.SIGN_EVENT" />
+        <provider android:authorities="com.greenart7c3.nostrsigner.sign_event" />
+        <provider android:authorities="com.greenart7c3.nostrsigner.GET_PUBLIC_KEY" />
+        <provider android:authorities="com.greenart7c3.nostrsigner.NIP04_ENCRYPT" />
+        <provider android:authorities="com.greenart7c3.nostrsigner.NIP04_DECRYPT" />
+        <provider android:authorities="com.greenart7c3.nostrsigner.NIP44_ENCRYPT" />
+        <provider android:authorities="com.greenart7c3.nostrsigner.NIP44_DECRYPT" />
+        <provider android:authorities="com.greenart7c3.nostrsigner.SIGN_MESSAGE" />
+        <provider android:authorities="com.greenart7c3.nostrsigner.PING" />
         <provider android:authorities="com.nostr.signer" />
+        <provider android:authorities="com.nostr.signer.SIGN_EVENT" />
+        <provider android:authorities="com.nostr.signer.sign_event" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />

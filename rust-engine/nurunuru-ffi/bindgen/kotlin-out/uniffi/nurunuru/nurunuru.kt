@@ -826,6 +826,8 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -900,6 +902,8 @@ fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_get_message_histor
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_leave_group(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_list_groups(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_merge_pending_commit(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_message(
 ): Short
@@ -1068,6 +1072,8 @@ fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_leave_group(`ptr`: Point
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_list_groups(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_merge_pending_commit(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_process_message(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,`eventJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_process_welcome(`ptr`: Pointer,`welcomeEventJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1332,6 +1338,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_list_groups() != 21675.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_merge_pending_commit() != 50789.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_message() != 43277.toShort()) {
@@ -2002,6 +2011,15 @@ public interface NuruNuruClientInterface {
      * List all MLS groups the user belongs to.
      */
     fun `mlsListGroups`(): List<FfiMlsGroupInfo>
+    
+    /**
+     * Merge the pending MLS commit after successfully publishing the commit event to relays.
+     *
+     * Must be called after `mls_add_member`, `mls_remove_member`, or `mls_leave_group`
+     * once the commit event has been published. Without this, subsequent operations on the
+     * same group will fail with "Can't execute operation because a pending commit exists".
+     */
+    fun `mlsMergePendingCommit`(`groupIdHex`: kotlin.String)
     
     /**
      * Process an incoming Kind-445 event and return the decrypted message.
@@ -2783,6 +2801,25 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
     }
     )
     }
+    
+
+    
+    /**
+     * Merge the pending MLS commit after successfully publishing the commit event to relays.
+     *
+     * Must be called after `mls_add_member`, `mls_remove_member`, or `mls_leave_group`
+     * once the commit event has been published. Without this, subsequent operations on the
+     * same group will fail with "Can't execute operation because a pending commit exists".
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsMergePendingCommit`(`groupIdHex`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_merge_pending_commit(
+        it, FfiConverterString.lower(`groupIdHex`),_status)
+}
+    }
+    
     
 
     

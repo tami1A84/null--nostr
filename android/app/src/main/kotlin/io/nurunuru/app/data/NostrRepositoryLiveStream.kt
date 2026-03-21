@@ -45,23 +45,12 @@ suspend fun NostrRepository.publishEvent(
     content: String,
     tags: List<List<String>> = emptyList()
 ): NostrEvent? {
-    val rustClient = client.getRustClient() ?: return null
     val allTags = tags.toMutableList()
     if (allTags.none { it.getOrNull(0) == "client" }) {
         allTags.add(listOf("client", "nullnull"))
     }
-    return try {
-        if (isExternalSigner()) {
-            val unsigned = rustClient.createUnsignedEvent(kind.toUInt(), content, allTags, myPubkeyHex)
-            signAndPublish(unsigned)
-        } else {
-            rustClient.publishEvent(kind.toUInt(), content, allTags)
-        }
-        null
-    } catch (e: Exception) {
-        android.util.Log.e("NostrRepository", "publishEvent(kind=$kind) failed: ${e.message}")
-        null
-    }
+    val eventId = publishNewEvent(kind, content, allTags) ?: return null
+    return NostrEvent(id = eventId, pubkey = myPubkeyHex, kind = kind, tags = allTags, content = content)
 }
 
 // ─── Live Streaming ───────────────────────────────────────────────────────────

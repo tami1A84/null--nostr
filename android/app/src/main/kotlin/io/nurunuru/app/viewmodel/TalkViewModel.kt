@@ -51,28 +51,41 @@ class TalkViewModel(
         loadGroups()
     }
 
+    /**
+     * キャッシュクリア後にUIを即時リセットして再取得する。
+     * Rust MLS 状態から再構築されるため、退出済みグループは leftIds フィルタで除外される。
+     */
     fun clearStateAfterCacheClear() {
-        _uiState.update { it.copy(groups = emptyList(), messages = emptyList()) }
+        messageStreamJob?.cancel()
+        messageStreamJob = null
+        _uiState.update {
+            it.copy(
+                groups = emptyList(),
+                messages = emptyList(),
+                activeGroupId = null,
+                activeGroup = null,
+                showGroupInfo = false
+            )
+        }
+        loadGroups()
     }
 
     fun loadGroups() {
         viewModelScope.launch {
             // キャッシュファースト: 即時表示
             val cached = repository.getCachedMlsGroups()
-            if (cached.isNotEmpty()) {
-                _uiState.update { it.copy(groups = cached, isLoading = true, error = null) }
-            } else {
-                _uiState.update { it.copy(groups = emptyList(), isLoading = true, error = null) }
-            }
+            _uiState.update { it.copy(groups = cached, isLoading = true, error = null) }
+
             // バックグラウンドで最新データを取得してキャッシュを更新
             try {
                 val groups = repository.fetchMlsGroups()
                 @Suppress("DEPRECATION")
                 val legacy = try { repository.fetchDmConversations(myPubkeyHex) } catch (_: Exception) { emptyList() }
-                // 空リストで既存グループを消さない（Rust 未接続時のキャッシュ返却など）
+                // fetchMlsGroups() は Rust 未接続時にキャッシュを返すため、
+                // 空リストは「本当に0グループ」を意味する — そのまま反映する
                 _uiState.update {
                     it.copy(
-                        groups = if (groups.isNotEmpty()) groups else it.groups,
+                        groups = groups,
                         legacyConversations = legacy,
                         isLoading = false
                     )

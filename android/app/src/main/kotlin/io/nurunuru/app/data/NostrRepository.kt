@@ -99,17 +99,49 @@ class NostrRepository(
 
     /** Signs, publishes, and returns the event ID on success (null on failure). */
     internal suspend fun signAndPublishGetId(unsignedJson: String): String? {
+        // signEvent() は Amber Intent 起動を伴うため Main スレッドで呼ぶ
         val signedJson = client.getSigner().signEvent(unsignedJson) ?: run {
             android.util.Log.w("NostrRepository", "signAndPublish: signer returned null")
             return null
         }
         val rustClient = client.getRustClient() ?: return null
+        // publishRawEvent() は Rust FFI のブロッキング呼び出し — IO スレッドで実行してメイン ANR を防ぐ
+        return withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                rustClient.publishRawEvent(signedJson)
+                kotlinx.serialization.json.Json.parseToJsonElement(signedJson)
+                    .jsonObject["id"]?.jsonPrimitive?.content
+            } catch (e: Exception) {
+                android.util.Log.w("NostrRepository", "signAndPublish: publish failed: ${e.message}")
+                null
+            }
+        }
+    }
+
+    /**
+     * Unified publish: creates a new signed event and broadcasts it.
+     * - External signer (Amber): creates unsigned event → delegates signing to Amber → publishes raw.
+     * - Internal signer: uses Rust client's publishEvent() directly.
+     * Returns the event ID on success, null on failure.
+     *
+     * Use this for generic event kinds where no specialized Rust API exists.
+     * For kinds with optimized Rust methods (react, repost, followUser, etc.) keep the if/else.
+     */
+    internal suspend fun publishNewEvent(
+        kind: Int,
+        content: String,
+        tags: List<List<String>>
+    ): String? {
+        val rustClient = client.getRustClient() ?: return null
         return try {
-            rustClient.publishRawEvent(signedJson)
-            kotlinx.serialization.json.Json.parseToJsonElement(signedJson)
-                .jsonObject["id"]?.jsonPrimitive?.content
+            if (isExternalSigner()) {
+                val unsigned = rustClient.createUnsignedEvent(kind.toUInt(), content, tags, myPubkeyHex)
+                signAndPublishGetId(unsigned)
+            } else {
+                rustClient.publishEvent(kind.toUInt(), content, tags).takeIf { it.isNotEmpty() }
+            }
         } catch (e: Exception) {
-            android.util.Log.w("NostrRepository", "signAndPublish: publish failed: ${e.message}")
+            android.util.Log.e("NostrRepository", "publishNewEvent(kind=$kind) failed: ${e.message}")
             null
         }
     }

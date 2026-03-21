@@ -62,7 +62,7 @@ suspend fun NostrRepository.fetchMlsGroups(): List<MlsGroup> {
                     isDm = ffi.isDm,
                     memberProfiles = ffi.memberPubkeys.mapNotNull { pk ->
                         val p = profiles[pk]
-                        if (p != null && (p.name != null || p.displayName != null)) pk to p else null
+                        if (p != null) pk to p else null
                     }.toMap(),
                     lastMessage = lastMsg?.content ?: "",
                     lastMessageTime = lastMsg?.timestamp ?: ffi.createdAt.toLong()
@@ -218,7 +218,7 @@ suspend fun NostrRepository.createDmGroup(partnerPubkey: String): MlsGroup? {
             val relays = prefs.relays.take(3).toList()
             val ffiGroup = rustClient.mlsCreateGroup(
                 name = "",
-                adminPubkeys = listOf(myPubkeyHex, partnerPubkey),
+                adminPubkeys = listOf(myPubkeyHex),
                 relays = relays
             )
 
@@ -232,26 +232,33 @@ suspend fun NostrRepository.createDmGroup(partnerPubkey: String): MlsGroup? {
             val kpEvent = kpEvents.maxByOrNull { it.createdAt }
 
             if (kpEvent != null) {
-                val kpJson = json.encodeToString(NostrEvent.serializer(), kpEvent)
+                val kpJson = json.encodeToString(NostrEvent.serializer(),
+                    patchKeyPackageRelays(kpEvent, relays.ifEmpty { prefs.relays.take(3).toList() }))
                 val addResult = rustClient.mlsAddMember(ffiGroup.groupIdHex, kpJson)
                 publishMlsKind445(addResult.commitEventData, ffiGroup.groupIdHex)
                 publishMlsWelcome(addResult.welcomeEventData)
+                try { rustClient.mlsMergePendingCommit(ffiGroup.groupIdHex) } catch (_: Exception) { }
             }
 
-            val profiles = fetchProfiles(listOf(myPubkeyHex, partnerPubkey))
+            // Re-fetch group to get updated memberPubkeys (ffiGroup is stale — only has creator)
+            val freshGroup = try { rustClient.mlsGetGroupInfo(ffiGroup.groupIdHex) } catch (_: Exception) { null }
+            val memberPubkeys = freshGroup?.memberPubkeys
+                ?: (listOf(myPubkeyHex, partnerPubkey)).distinct()
+
+            val profiles = fetchProfiles(memberPubkeys)
             val group = MlsGroup(
                 groupIdHex = ffiGroup.groupIdHex,
                 name = ffiGroup.name,
                 description = ffiGroup.description,
                 adminPubkeys = ffiGroup.adminPubkeys,
-                memberPubkeys = ffiGroup.memberPubkeys,
+                memberPubkeys = memberPubkeys,
                 relays = ffiGroup.relays,
                 createdAt = ffiGroup.createdAt.toLong(),
                 epoch = ffiGroup.epoch.toLong(),
                 isDm = true,
-                memberProfiles = ffiGroup.memberPubkeys.mapNotNull { pk ->
+                memberProfiles = memberPubkeys.mapNotNull { pk ->
                     val p = profiles[pk]
-                    if (p != null && (p.name != null || p.displayName != null)) pk to p else null
+                    if (p != null) pk to p else null
                 }.toMap()
             )
 
@@ -293,28 +300,34 @@ suspend fun NostrRepository.createGroupChat(name: String, memberPubkeys: List<St
 
             for ((_, kpEvent) in latestKp) {
                 try {
-                    val kpJson = json.encodeToString(NostrEvent.serializer(), kpEvent)
+                    val kpJson = json.encodeToString(NostrEvent.serializer(),
+                        patchKeyPackageRelays(kpEvent, relays))
                     val addResult = rustClient.mlsAddMember(ffiGroup.groupIdHex, kpJson)
                     publishMlsKind445(addResult.commitEventData, ffiGroup.groupIdHex)
                     publishMlsWelcome(addResult.welcomeEventData)
+                    try { rustClient.mlsMergePendingCommit(ffiGroup.groupIdHex) } catch (_: Exception) { }
                 } catch (_: Exception) { }
             }
 
-            val allMembers = (listOf(myPubkeyHex) + memberPubkeys).distinct()
+            // Re-fetch group to get updated memberPubkeys (ffiGroup is stale — only has creator)
+            val freshGroup = try { rustClient.mlsGetGroupInfo(ffiGroup.groupIdHex) } catch (_: Exception) { null }
+            val allMembers = freshGroup?.memberPubkeys
+                ?: (listOf(myPubkeyHex) + memberPubkeys).distinct()
+
             val profiles = fetchProfiles(allMembers)
             val group = MlsGroup(
                 groupIdHex = ffiGroup.groupIdHex,
                 name = ffiGroup.name,
                 description = ffiGroup.description,
                 adminPubkeys = ffiGroup.adminPubkeys,
-                memberPubkeys = ffiGroup.memberPubkeys,
+                memberPubkeys = allMembers,
                 relays = ffiGroup.relays,
                 createdAt = ffiGroup.createdAt.toLong(),
                 epoch = ffiGroup.epoch.toLong(),
                 isDm = false,
                 memberProfiles = allMembers.mapNotNull { pk ->
                     val p = profiles[pk]
-                    if (p != null && (p.name != null || p.displayName != null)) pk to p else null
+                    if (p != null) pk to p else null
                 }.toMap()
             )
 
@@ -335,6 +348,8 @@ suspend fun NostrRepository.leaveGroup(groupIdHex: String): Boolean {
     val rustClient = client.getRustClient() ?: return false
     return withContext(Dispatchers.IO) {
         try {
+            // Merge any pending commit before leaving (prior add/remove may have left one)
+            try { rustClient.mlsMergePendingCommit(groupIdHex) } catch (_: Exception) { }
             val ffiMsg = rustClient.mlsLeaveGroup(groupIdHex)
             publishMlsKind445(ffiMsg, groupIdHex)
             // Rust SQLite doesn't physically delete — mark locally
@@ -355,6 +370,7 @@ suspend fun NostrRepository.addMemberToGroup(groupIdHex: String, memberPubkey: S
     val rustClient = client.getRustClient() ?: return false
     return withContext(Dispatchers.IO) {
         try {
+            val relays = prefs.relays.take(3).toList()
             val kpFilter = NostrClient.Filter(
                 kinds = listOf(NostrKind.MLS_KEY_PACKAGE),
                 authors = listOf(memberPubkey),
@@ -362,10 +378,12 @@ suspend fun NostrRepository.addMemberToGroup(groupIdHex: String, memberPubkey: S
             )
             val kpEvents = client.fetchEvents(kpFilter, timeoutMs = 5_000)
             val kpEvent = kpEvents.maxByOrNull { it.createdAt } ?: return@withContext false
-            val kpJson = json.encodeToString(NostrEvent.serializer(), kpEvent)
+            val kpJson = json.encodeToString(NostrEvent.serializer(),
+                patchKeyPackageRelays(kpEvent, relays))
             val addResult = rustClient.mlsAddMember(groupIdHex, kpJson)
             publishMlsKind445(addResult.commitEventData, groupIdHex)
             publishMlsWelcome(addResult.welcomeEventData)
+            try { rustClient.mlsMergePendingCommit(groupIdHex) } catch (_: Exception) { }
             true
         } catch (e: Exception) {
             android.util.Log.e("NostrRepository", "addMemberToGroup failed: ${e.message}", e)
@@ -380,6 +398,7 @@ suspend fun NostrRepository.removeMemberFromGroup(groupIdHex: String, memberPubk
         try {
             val ffiMsg = rustClient.mlsRemoveMember(groupIdHex, memberPubkey)
             publishMlsKind445(ffiMsg, groupIdHex)
+            try { rustClient.mlsMergePendingCommit(groupIdHex) } catch (_: Exception) { }
             true
         } catch (e: Exception) {
             android.util.Log.e("NostrRepository", "removeMemberFromGroup failed: ${e.message}", e)
@@ -393,12 +412,16 @@ suspend fun NostrRepository.ensureKeyPackagePublished() {
     val rustClient = client.getRustClient() ?: return
     withContext(Dispatchers.IO) {
         try {
-            // Check if we already have a recent key package on the relay
+            // Check if we already have a recent key package with relay URLs on the relay.
+            // Re-publish if missing or if the existing package lacks relay tags (legacy issue).
             val existing = client.fetchEvents(
                 NostrClient.Filter(kinds = listOf(NostrKind.MLS_KEY_PACKAGE), authors = listOf(pubkey), limit = 1),
                 timeoutMs = 3_000
             )
-            if (existing.isNotEmpty()) return@withContext
+            val hasRelays = existing.firstOrNull()?.tags?.any { tag ->
+                tag.firstOrNull() == "relays" && tag.size > 1
+            } ?: false
+            if (existing.isNotEmpty() && hasRelays) return@withContext
 
             publishKeyPackage()
         } catch (e: Exception) {
@@ -407,17 +430,40 @@ suspend fun NostrRepository.ensureKeyPackagePublished() {
     }
 }
 
+/**
+ * Patch a key package event's "relays" tag with actual relay URLs if missing.
+ * mdk-core requires at least one relay URL in the "relays" tag.
+ * Old nurunuru versions published key packages without relay URLs.
+ * nostr::Event deserialization does NOT verify id/sig, so patching tags is safe.
+ */
+private fun patchKeyPackageRelays(kpEvent: NostrEvent, fallbackRelays: List<String>): NostrEvent {
+    val hasRelays = kpEvent.tags.any { tag -> tag.firstOrNull() == "relays" && tag.size > 1 }
+    if (hasRelays) return kpEvent
+    val relayTag = listOf("relays") + fallbackRelays
+    val patchedTags = kpEvent.tags.map { tag ->
+        if (tag.firstOrNull() == "relays") relayTag else tag
+    }.let { if (it.none { t -> t.firstOrNull() == "relays" }) it + listOf(relayTag) else it }
+    return kpEvent.copy(tags = patchedTags)
+}
+
 private suspend fun NostrRepository.publishKeyPackage() {
     val rustClient = client.getRustClient() ?: return
     try {
         val kpData = rustClient.mlsCreateKeyPackage()
+        // Replace the empty "relays" tag with actual relay URLs (mdk-core requires at least one).
+        // create_key_package_for_event is called with empty relays, producing ["relays"] with no URLs.
+        val relayUrls = prefs.relays.take(3).toList()
+        val relayTag = listOf("relays") + relayUrls
+        val tagsWithRelays = kpData.tags.map { tag ->
+            if (tag.firstOrNull() == "relays") relayTag else tag
+        }
         if (isExternalSigner()) {
             val unsigned = rustClient.createUnsignedEvent(
-                NostrKind.MLS_KEY_PACKAGE.toUInt(), kpData.content, kpData.tags, myPubkeyHex
+                NostrKind.MLS_KEY_PACKAGE.toUInt(), kpData.content, tagsWithRelays, myPubkeyHex
             )
             signAndPublish(unsigned)
         } else {
-            rustClient.publishEvent(NostrKind.MLS_KEY_PACKAGE.toUInt(), kpData.content, kpData.tags)
+            rustClient.publishEvent(NostrKind.MLS_KEY_PACKAGE.toUInt(), kpData.content, tagsWithRelays)
         }
         android.util.Log.d("NostrRepository", "Key package published")
     } catch (e: Exception) {

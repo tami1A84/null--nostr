@@ -45,6 +45,10 @@ class HomeViewModel(
     private val _uiState = MutableStateFlow(HomeUiState(isLoading = true))
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    // Locally deleted post IDs — prevents deleted posts from reappearing after relay re-fetch.
+    // Cleared only on ViewModel destruction (Activity lifecycle boundary).
+    private val deletedPostIds = mutableSetOf<String>()
+
     init {
         _uiState.update { it.copy(uploadServer = repository.getUploadServer()) }
     }
@@ -55,79 +59,120 @@ class HomeViewModel(
 
     fun loadProfile(pubkeyHex: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null, isNip05Verified = false, viewingPubkey = pubkeyHex.takeIf { it != myPubkeyHex }) }
-
-            // ── Phase 1: キャッシュからの即時表示（ネットワーク不使用）──────────
-            val cachedProfile = repository.getCachedProfile(pubkeyHex)
-            val cachedFollowList = repository.getCachedFollowList(pubkeyHex)
-            val cachedPosts = repository.getCachedUserNotesPosts(pubkeyHex)
-            val cachedLikes = repository.getCachedUserLikesPosts(pubkeyHex)
-            val hasCachedData = cachedProfile != null || cachedPosts.isNotEmpty()
-            if (hasCachedData) {
-                _uiState.update { it.copy(
-                    profile = cachedProfile ?: it.profile,
-                    followList = cachedFollowList ?: it.followList,
-                    followCount = cachedFollowList?.size ?: it.followCount,
-                    posts = if (cachedPosts.isNotEmpty()) cachedPosts else it.posts,
-                    likedPosts = if (cachedLikes.isNotEmpty()) cachedLikes else it.likedPosts,
-                    isLoading = false
-                ) }
+            _uiState.update {
+                it.copy(isLoading = true, error = null, isNip05Verified = false,
+                    viewingPubkey = pubkeyHex.takeIf { it != myPubkeyHex })
             }
 
-            // ── Phase 2: リレーから最新を取得（常に実行）──────────────────────
-            try {
-                val (profile, posts, likedPosts, followList, badges) = kotlinx.coroutines.coroutineScope {
-                    val profileJob = async { repository.fetchProfile(pubkeyHex) }
-                    val postsJob   = async { repository.fetchUserNotes(pubkeyHex, 50) }
-                    val likesJob   = async { repository.fetchUserLikes(pubkeyHex, 50) }
-                    val followJob  = async { repository.fetchFollowList(pubkeyHex) }
-                    val badgesJob  = async { repository.fetchBadges(pubkeyHex) }
-                    kotlinx.coroutines.awaitAll(profileJob, postsJob, likesJob, followJob, badgesJob)
-                    @Suppress("UNCHECKED_CAST")
-                    Quint(
-                        profileJob.await(),
-                        postsJob.await() as List<ScoredPost>,
-                        likesJob.await() as List<ScoredPost>,
-                        followJob.await() as List<String>,
-                        badgesJob.await() as List<NostrEvent>
-                    )
-                }
-                val badgeUrls = badges.mapNotNull { it.getTagValue("thumb") ?: it.getTagValue("image") }
-                val enrichedPosts = posts.map { if (it.event.pubkey == pubkeyHex) it.copy(badges = badgeUrls) else it }
-                val enrichedLikes = likedPosts.map { if (it.event.pubkey == pubkeyHex) it.copy(badges = badgeUrls) else it }
-                val myFollowList = if (pubkeyHex == myPubkeyHex) followList else repository.fetchFollowList(myPubkeyHex)
-                val isFollowing = if (pubkeyHex == myPubkeyHex) false else myFollowList.contains(pubkeyHex)
-
+            // Phase 1: キャッシュからの即時表示（ネットワーク不使用）
+            val cachedProfile = repository.getCachedProfile(pubkeyHex)
+            val cachedFollowList = repository.getCachedFollowList(pubkeyHex)
+            val cachedPosts = repository.getCachedUserNotesPosts(pubkeyHex).filterDeleted()
+            val cachedLikes = repository.getCachedUserLikesPosts(pubkeyHex).filterDeleted()
+            if (cachedProfile != null || cachedPosts.isNotEmpty()) {
                 _uiState.update {
                     it.copy(
-                        profile = profile,
-                        posts = enrichedPosts,
-                        likedPosts = enrichedLikes,
-                        followCount = followList.size,
-                        followList = followList,
-                        badges = badges,
-                        isFollowing = isFollowing,
+                        profile = cachedProfile ?: it.profile,
+                        followList = cachedFollowList ?: it.followList,
+                        followCount = cachedFollowList?.size ?: it.followCount,
+                        posts = if (cachedPosts.isNotEmpty()) cachedPosts else it.posts,
+                        likedPosts = if (cachedLikes.isNotEmpty()) cachedLikes else it.likedPosts,
                         isLoading = false
                     )
                 }
+            }
 
-                val currentNip05 = profile?.nip05
-                if (currentNip05 != null) {
-                    launch {
-                        val verified = Nip05Utils.verifyNip05(currentNip05, pubkeyHex)
-                        _uiState.update { it.copy(isNip05Verified = verified) }
-                    }
-                } else {
-                    _uiState.update { it.copy(isNip05Verified = false) }
+            // Phase 2: リレーから最新を取得（常に実行）
+            fetchAndApply(pubkeyHex, isRefresh = false)
+        }
+    }
+
+    fun refresh() {
+        val targetPubkey = _uiState.value.viewingPubkey ?: myPubkeyHex
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true) }
+            fetchAndApply(targetPubkey, isRefresh = true)
+        }
+    }
+
+    private data class FetchResult(
+        val profile: UserProfile?,
+        val posts: List<ScoredPost>,
+        val likedPosts: List<ScoredPost>,
+        val followList: List<String>,
+        val badges: List<NostrEvent>
+    )
+
+    /**
+     * リレーから最新データを並列取得してUIに反映する共通処理。
+     * loadProfile() の Phase 2 と refresh() の両方から呼ばれる。
+     * deletedPostIds でフィルタリングするため、削除後のリロードで再出現しない。
+     */
+    private suspend fun fetchAndApply(pubkeyHex: String, isRefresh: Boolean) {
+        try {
+            val (profile, posts, likedPosts, followList, badges) = coroutineScope {
+                val profileJob = async { repository.fetchProfile(pubkeyHex) }
+                val postsJob   = async { repository.fetchUserNotes(pubkeyHex, 50) }
+                val likesJob   = async { repository.fetchUserLikes(pubkeyHex, 50) }
+                val followJob  = async { repository.fetchFollowList(pubkeyHex) }
+                val badgesJob  = async { repository.fetchBadges(pubkeyHex) }
+                awaitAll(profileJob, postsJob, likesJob, followJob, badgesJob)
+                FetchResult(
+                    profile    = profileJob.await(),
+                    posts      = postsJob.await(),
+                    likedPosts = likesJob.await(),
+                    followList = followJob.await(),
+                    badges     = badgesJob.await()
+                )
+            }
+
+            val badgeUrls = badges.mapNotNull { it.getTagValue("thumb") ?: it.getTagValue("image") }
+            val enrichedPosts = posts.filterDeleted()
+                .map { if (it.event.pubkey == pubkeyHex) it.copy(badges = badgeUrls) else it }
+            val enrichedLikes = likedPosts.filterDeleted()
+                .map { if (it.event.pubkey == pubkeyHex) it.copy(badges = badgeUrls) else it }
+
+            val myFollowList = if (pubkeyHex == myPubkeyHex) followList
+                               else repository.fetchFollowList(myPubkeyHex)
+            val isFollowing = pubkeyHex != myPubkeyHex && myFollowList.contains(pubkeyHex)
+
+            _uiState.update {
+                it.copy(
+                    profile = profile,
+                    posts = enrichedPosts,
+                    likedPosts = enrichedLikes,
+                    followCount = followList.size,
+                    followList = followList,
+                    badges = badges,
+                    isFollowing = isFollowing,
+                    isLoading = false,
+                    isRefreshing = false
+                )
+            }
+
+            val nip05 = profile?.nip05
+            if (nip05 != null) {
+                viewModelScope.launch {
+                    val verified = Nip05Utils.verifyNip05(nip05, pubkeyHex)
+                    _uiState.update { it.copy(isNip05Verified = verified) }
                 }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = "プロフィールの読み込みに失敗しました", isLoading = false) }
+            } else {
+                _uiState.update { it.copy(isNip05Verified = false) }
+            }
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(
+                    error = if (!isRefresh) "プロフィールの読み込みに失敗しました" else null,
+                    isLoading = false,
+                    isRefreshing = false
+                )
             }
         }
     }
 
-    /** 並列フェッチ結果を保持するための内部データクラス */
-    private data class Quint<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: E)
+    /** 削除済み投稿をフィルタリングする拡張関数 */
+    private fun List<ScoredPost>.filterDeleted(): List<ScoredPost> =
+        if (deletedPostIds.isEmpty()) this else filter { it.event.id !in deletedPostIds }
 
     fun muteUser(pubkey: String) {
         viewModelScope.launch {
@@ -248,58 +293,21 @@ class HomeViewModel(
         }
     }
 
-    fun refresh() {
-        val targetPubkey = _uiState.value.viewingPubkey ?: myPubkeyHex
+    fun deletePost(eventId: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true) }
             try {
-                // 常にリレーから最新取得（fetchUserNotes/fetchUserLikes はキャッシュを読まない）
-                val (profile, posts, likedPosts, followList, badges) = kotlinx.coroutines.coroutineScope {
-                    val profileJob = async { repository.fetchProfile(targetPubkey) }
-                    val postsJob   = async { repository.fetchUserNotes(targetPubkey, 50) }
-                    val likesJob   = async { repository.fetchUserLikes(targetPubkey, 50) }
-                    val followJob  = async { repository.fetchFollowList(targetPubkey) }
-                    val badgesJob  = async { repository.fetchBadges(targetPubkey) }
-                    kotlinx.coroutines.awaitAll(profileJob, postsJob, likesJob, followJob, badgesJob)
-                    @Suppress("UNCHECKED_CAST")
-                    Quint(
-                        profileJob.await(),
-                        postsJob.await() as List<ScoredPost>,
-                        likesJob.await() as List<ScoredPost>,
-                        followJob.await() as List<String>,
-                        badgesJob.await() as List<NostrEvent>
-                    )
-                }
-                val badgeUrls = badges.mapNotNull { it.getTagValue("thumb") ?: it.getTagValue("image") }
-                val enrichedPosts = posts.map { if (it.event.pubkey == targetPubkey) it.copy(badges = badgeUrls) else it }
-                val enrichedLikes = likedPosts.map { if (it.event.pubkey == targetPubkey) it.copy(badges = badgeUrls) else it }
-                val myFollowList = if (targetPubkey == myPubkeyHex) followList else repository.fetchFollowList(myPubkeyHex)
-                val isFollowing = if (targetPubkey == myPubkeyHex) false else myFollowList.contains(targetPubkey)
-
-                _uiState.update {
-                    it.copy(
-                        profile = profile,
-                        posts = enrichedPosts,
-                        likedPosts = enrichedLikes,
-                        followCount = followList.size,
-                        followList = followList,
-                        badges = badges,
-                        isFollowing = isFollowing,
-                        isRefreshing = false
-                    )
-                }
-
-                val refreshNip05 = profile?.nip05
-                if (refreshNip05 != null) {
-                    launch {
-                        val verified = Nip05Utils.verifyNip05(refreshNip05, targetPubkey)
-                        _uiState.update { it.copy(isNip05Verified = verified) }
+                val success = repository.deleteEvent(eventId)
+                if (success) {
+                    deletedPostIds.add(eventId)
+                    _uiState.update { state ->
+                        state.copy(
+                            posts = state.posts.filter { it.event.id != eventId },
+                            likedPosts = state.likedPosts.filter { it.event.id != eventId }
+                        )
                     }
-                } else {
-                    _uiState.update { it.copy(isNip05Verified = false) }
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isRefreshing = false) }
+                _uiState.update { it.copy(error = "削除に失敗しました") }
             }
         }
     }
@@ -320,24 +328,6 @@ class HomeViewModel(
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message, isActionLoading = false) }
-            }
-        }
-    }
-
-    fun deletePost(eventId: String) {
-        viewModelScope.launch {
-            try {
-                val success = repository.deleteEvent(eventId)
-                if (success) {
-                    _uiState.update { state ->
-                        state.copy(
-                            posts = state.posts.filter { it.event.id != eventId },
-                            likedPosts = state.likedPosts.filter { it.event.id != eventId }
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = "削除に失敗しました") }
             }
         }
     }

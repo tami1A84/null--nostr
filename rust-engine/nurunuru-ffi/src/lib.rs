@@ -717,6 +717,20 @@ impl NuruNuruClient {
         Ok(core_encrypted_msg_to_ffi(data))
     }
 
+    /// Merge the pending MLS commit after successfully publishing the commit event to relays.
+    ///
+    /// Must be called after `mls_add_member`, `mls_remove_member`, or `mls_leave_group`
+    /// once the commit event has been published. Without this, subsequent operations on the
+    /// same group will fail with "Can't execute operation because a pending commit exists".
+    pub fn mls_merge_pending_commit(
+        &self,
+        group_id_hex: String,
+    ) -> Result<(), NuruNuruFfiError> {
+        self.runtime
+            .block_on(self.engine.mls_merge_pending_commit(&group_id_hex))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))
+    }
+
     // ─── Search / Feed ─────────────────────────────────────────────────────
 
     /// Full-text search (NIP-50). Returns matching event ID hex strings.

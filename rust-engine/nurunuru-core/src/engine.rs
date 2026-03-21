@@ -1175,4 +1175,9 @@ impl NuruNuruEngine {
     ) -> Result<EncryptedMessageData> {
         self.require_mls()?.remove_member(group_id_hex, member_pubkey)
     }
+
+    /// Merge the pending commit for a group after publishing to relays.
+    pub async fn mls_merge_pending_commit(&self, group_id_hex: &str) -> Result<()> {
+        self.require_mls()?.merge_pending_commit(group_id_hex)
+    }
 }
