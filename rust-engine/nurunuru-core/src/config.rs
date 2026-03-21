@@ -8,6 +8,10 @@ pub struct NuruNuruConfig {
     pub cache: CacheConfig,
     pub recommendation: RecommendationConfig,
     pub db_path: String,
+    /// SQLite path for MLS state (KeyPackages, group state, ratchet tree).
+    /// Default: `"{db_path}_mls.sqlite3"`.
+    /// This file contains forward-secret key material — exclude from cloud backup.
+    pub mls_db_path: String,
 }
 
 impl Default for NuruNuruConfig {
@@ -17,6 +21,7 @@ impl Default for NuruNuruConfig {
             cache: CacheConfig::default(),
             recommendation: RecommendationConfig::default(),
             db_path: "./nurunuru-db".to_string(),
+            mls_db_path: "./nurunuru-db_mls.sqlite3".to_string(),
         }
     }
 }

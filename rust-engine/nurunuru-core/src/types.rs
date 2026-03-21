@@ -106,6 +106,69 @@ pub struct RelayInfo {
     pub connected: bool,
 }
 
+// ─── NIP-EE / MLS Types ─────────────────────────────────────────────────────
+
+/// MLS group information (NIP-EE Kind 443/444/445).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MlsGroupInfo {
+    pub group_id_hex: String,
+    pub name: String,
+    pub description: String,
+    pub admin_pubkeys: Vec<String>,
+    pub member_pubkeys: Vec<String>,
+    pub relays: Vec<String>,
+    pub created_at: u64,
+    pub epoch: u64,
+    /// true if this is a 1:1 DM (2-person group)
+    pub is_dm: bool,
+}
+
+/// KeyPackage event data for Kind 443 publishing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyPackageEventData {
+    /// Serialised MLS KeyPackage (base64 or hex)
+    pub content: String,
+    /// Kind 443 tags
+    pub tags: Vec<Vec<String>>,
+}
+
+/// Result from adding a member to an MLS group.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddMemberResult {
+    /// Kind 445 commit event data (broadcast to all group relays)
+    pub commit_event_data: EncryptedMessageData,
+    /// Kind 444 welcome event data (sent to new member via NIP-59 gift-wrap)
+    pub welcome_event_data: WelcomeEventData,
+}
+
+/// Welcome event data for Kind 444 (gift-wrapped to new member).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WelcomeEventData {
+    pub recipient_pubkey: String,
+    pub content: String,
+    pub tags: Vec<Vec<String>>,
+}
+
+/// Encrypted MLS message data for Kind 445 publishing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EncryptedMessageData {
+    /// NIP-44 encrypted content (using MLS exporter secret)
+    pub content: String,
+    /// Tags including ["h", "<group_id_hex>"]
+    pub tags: Vec<Vec<String>>,
+    /// Ephemeral sender pubkey
+    pub ephemeral_pubkey: String,
+}
+
+/// Decrypted MLS message after processing a Kind 445 event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecryptedMessage {
+    pub sender_pubkey: String,
+    pub content: String,
+    pub timestamp: u64,
+    pub group_id_hex: String,
+}
+
 /// Japanese-friendly timestamp display
 pub fn format_timestamp_ja(timestamp: u64) -> String {
     let now = std::time::SystemTime::now()

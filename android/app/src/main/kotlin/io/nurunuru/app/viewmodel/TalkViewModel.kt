@@ -6,18 +6,34 @@ import androidx.lifecycle.viewModelScope
 import io.nurunuru.app.data.NostrClient
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.DmConversation
-import io.nurunuru.app.data.models.DmMessage
+import io.nurunuru.app.data.models.MlsGroup
+import io.nurunuru.app.data.models.MlsMessage
+import io.nurunuru.app.data.models.UserProfile
+import io.nurunuru.app.data.*
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class TalkUiState(
-    val conversations: List<DmConversation> = emptyList(),
+    val groups: List<MlsGroup> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val activeConversation: String? = null,
-    val messages: List<DmMessage> = emptyList(),
+    val activeGroupId: String? = null,
+    val activeGroup: MlsGroup? = null,
+    val messages: List<MlsMessage> = emptyList(),
     val messagesLoading: Boolean = false,
-    val sendingMessage: Boolean = false
+    val sendingMessage: Boolean = false,
+    // Legacy (read-only)
+    @Suppress("DEPRECATION")
+    val legacyConversations: List<DmConversation> = emptyList(),
+    val showLegacy: Boolean = false,
+    // Group management UI state
+    val showGroupInfo: Boolean = false,
+    val showCreateGroup: Boolean = false,
+    // Following list for member picker (loaded on demand)
+    val followingProfiles: List<UserProfile> = emptyList(),
+    val followingLoading: Boolean = false
 )
 
 class TalkViewModel(
@@ -29,52 +45,94 @@ class TalkViewModel(
     private val _uiState = MutableStateFlow(TalkUiState(isLoading = true))
     val uiState: StateFlow<TalkUiState> = _uiState.asStateFlow()
 
+    private var messageStreamJob: Job? = null
+
     init {
-        loadConversations()
+        loadGroups()
     }
 
-    fun loadConversations() {
+    fun clearStateAfterCacheClear() {
+        _uiState.update { it.copy(groups = emptyList(), messages = emptyList()) }
+    }
+
+    fun loadGroups() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            // キャッシュファースト: 即時表示
+            val cached = repository.getCachedMlsGroups()
+            if (cached.isNotEmpty()) {
+                _uiState.update { it.copy(groups = cached, isLoading = true, error = null) }
+            } else {
+                _uiState.update { it.copy(groups = emptyList(), isLoading = true, error = null) }
+            }
+            // バックグラウンドで最新データを取得してキャッシュを更新
             try {
-                val conversations = repository.fetchDmConversations(myPubkeyHex)
-                _uiState.update { it.copy(conversations = conversations, isLoading = false) }
+                val groups = repository.fetchMlsGroups()
+                @Suppress("DEPRECATION")
+                val legacy = try { repository.fetchDmConversations(myPubkeyHex) } catch (_: Exception) { emptyList() }
+                // 空リストで既存グループを消さない（Rust 未接続時のキャッシュ返却など）
+                _uiState.update {
+                    it.copy(
+                        groups = if (groups.isNotEmpty()) groups else it.groups,
+                        legacyConversations = legacy,
+                        isLoading = false
+                    )
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "トークの読み込みに失敗しました", isLoading = false) }
             }
         }
     }
 
-    fun openConversation(partnerPubkey: String) {
-        _uiState.update { it.copy(activeConversation = partnerPubkey, messagesLoading = true) }
+    fun openGroup(groupIdHex: String) {
+        val group = _uiState.value.groups.find { it.groupIdHex == groupIdHex }
+        _uiState.update {
+            it.copy(
+                activeGroupId = groupIdHex,
+                activeGroup = group,
+                messagesLoading = true
+            )
+        }
         viewModelScope.launch {
+            // Step 1: Rust ローカル履歴を即時表示（ネットワーク不要）
+            val local = repository.getLocalMlsMessages(groupIdHex)
+            if (local.isNotEmpty()) {
+                _uiState.update { it.copy(messages = local, messagesLoading = true) }
+            }
+            // Step 2: リレーから差分を取得して更新
             try {
-                val messages = repository.fetchDmMessages(
-                    myPubkeyHex = myPubkeyHex,
-                    partnerPubkeyHex = partnerPubkey,
-                    decryptNip04Fn = { counterparty, encrypted ->
-                        nostrClient.decryptNip04(counterparty, encrypted)
-                    },
-                    decryptNip44Fn = { counterparty, encrypted ->
-                        nostrClient.decryptNip44(counterparty, encrypted)
-                    }
-                )
+                val messages = repository.fetchMlsMessages(groupIdHex)
                 _uiState.update { it.copy(messages = messages, messagesLoading = false) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(messagesLoading = false, error = "メッセージの読み込みに失敗しました") }
             }
         }
+        startMessageStream(groupIdHex)
     }
 
-    fun sendMessage(recipientPubkey: String, content: String) {
+    fun closeGroup() {
+        messageStreamJob?.cancel()
+        messageStreamJob = null
+        _uiState.update {
+            it.copy(
+                activeGroupId = null,
+                activeGroup = null,
+                messages = emptyList(),
+                showGroupInfo = false
+            )
+        }
+    }
+
+    fun sendMessage(groupIdHex: String, content: String) {
         if (content.isBlank()) return
         _uiState.update { it.copy(sendingMessage = true) }
         viewModelScope.launch {
             try {
-                val success = repository.sendDm(recipientPubkey, content)
+                val success = repository.sendMlsMessage(groupIdHex, content)
                 if (success) {
-                    // Reload messages
-                    openConversation(recipientPubkey)
+                    val messages = repository.fetchMlsMessages(groupIdHex)
+                    _uiState.update { it.copy(messages = messages) }
+                } else {
+                    _uiState.update { it.copy(error = "送信に失敗しました") }
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "送信に失敗しました") }
@@ -84,13 +142,178 @@ class TalkViewModel(
         }
     }
 
-    fun closeConversation() {
-        _uiState.update { it.copy(activeConversation = null, messages = emptyList()) }
+    fun createDmConversation(partnerPubkey: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            try {
+                // Load groups if not yet fetched so we can check for existing DMs
+                val currentGroups = if (_uiState.value.groups.isEmpty()) {
+                    val fetched = repository.fetchMlsGroups()
+                    _uiState.update { it.copy(groups = fetched) }
+                    fetched
+                } else {
+                    _uiState.value.groups
+                }
+                // Reuse existing DM group if one already exists with this partner
+                val existing = currentGroups.find { g ->
+                    g.isDm && g.memberPubkeys.contains(partnerPubkey)
+                }
+                if (existing != null) {
+                    _uiState.update { it.copy(isLoading = false) }
+                    openGroup(existing.groupIdHex)
+                    return@launch
+                }
+                // No existing group — create a new one
+                val group = repository.createDmGroup(partnerPubkey)
+                if (group != null) {
+                    _uiState.update { it.copy(groups = currentGroups + group, isLoading = false) }
+                    openGroup(group.groupIdHex)
+                } else {
+                    _uiState.update { it.copy(isLoading = false, error = "相手がNIP-EEに対応していません") }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "トークの作成に失敗しました", isLoading = false) }
+            }
+        }
     }
 
-    fun clearError() {
-        _uiState.update { it.copy(error = null) }
+    fun createGroupChat(name: String, memberPubkeys: List<String>) {
+        if (name.isBlank() || memberPubkeys.isEmpty()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null, showCreateGroup = false) }
+            try {
+                val group = repository.createGroupChat(name, memberPubkeys)
+                if (group != null) {
+                    val groups = _uiState.value.groups + group
+                    _uiState.update { it.copy(groups = groups, isLoading = false) }
+                    openGroup(group.groupIdHex)
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "グループの作成に失敗しました"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "グループの作成に失敗しました", isLoading = false) }
+            }
+        }
     }
+
+    fun leaveGroup() {
+        val groupIdHex = _uiState.value.activeGroupId ?: return
+        viewModelScope.launch {
+            try {
+                val success = repository.leaveGroup(groupIdHex)
+                if (success) {
+                    val groups = _uiState.value.groups.filter { it.groupIdHex != groupIdHex }
+                    _uiState.update {
+                        it.copy(
+                            groups = groups,
+                            activeGroupId = null,
+                            activeGroup = null,
+                            messages = emptyList(),
+                            showGroupInfo = false
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(error = "グループの退出に失敗しました") }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "グループの退出に失敗しました") }
+            }
+        }
+    }
+
+    fun addMember(memberPubkey: String) {
+        val groupIdHex = _uiState.value.activeGroupId ?: return
+        viewModelScope.launch {
+            try {
+                val success = repository.addMemberToGroup(groupIdHex, memberPubkey)
+                if (success) {
+                    val groups = repository.fetchMlsGroups()
+                    val activeGroup = groups.find { it.groupIdHex == groupIdHex }
+                    _uiState.update { it.copy(groups = groups, activeGroup = activeGroup) }
+                } else {
+                    _uiState.update { it.copy(error = "メンバーの追加に失敗しました") }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "メンバーの追加に失敗しました") }
+            }
+        }
+    }
+
+    fun removeMember(memberPubkey: String) {
+        val groupIdHex = _uiState.value.activeGroupId ?: return
+        viewModelScope.launch {
+            try {
+                val success = repository.removeMemberFromGroup(groupIdHex, memberPubkey)
+                if (success) {
+                    val groups = repository.fetchMlsGroups()
+                    val activeGroup = groups.find { it.groupIdHex == groupIdHex }
+                    _uiState.update { it.copy(groups = groups, activeGroup = activeGroup) }
+                } else {
+                    _uiState.update { it.copy(error = "メンバーの削除に失敗しました") }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "メンバーの削除に失敗しました") }
+            }
+        }
+    }
+
+    private fun startMessageStream(groupIdHex: String) {
+        messageStreamJob?.cancel()
+        messageStreamJob = viewModelScope.launch {
+            while (true) {
+                delay(5_000)
+                if (_uiState.value.activeGroupId != groupIdHex) break
+                try {
+                    val messages = repository.fetchMlsMessages(groupIdHex)
+                    // Compare by latest message ID rather than count to catch any list changes
+                    if (messages.lastOrNull()?.id != _uiState.value.messages.lastOrNull()?.id) {
+                        _uiState.update { it.copy(messages = messages) }
+                    }
+                } catch (_: Exception) { /* ignore poll errors */ }
+            }
+        }
+    }
+
+    fun ensureKeyPackagePublished() {
+        viewModelScope.launch {
+            try {
+                repository.ensureKeyPackagePublished()
+            } catch (_: Exception) { /* non-critical */ }
+        }
+    }
+
+    fun showGroupInfo() { _uiState.update { it.copy(showGroupInfo = true) } }
+    fun hideGroupInfo() { _uiState.update { it.copy(showGroupInfo = false) } }
+    fun showCreateGroup() {
+        _uiState.update { it.copy(showCreateGroup = true) }
+        loadFollowingProfiles()
+    }
+    fun hideCreateGroup() { _uiState.update { it.copy(showCreateGroup = false) } }
+
+    private fun loadFollowingProfiles() {
+        if (_uiState.value.followingLoading || _uiState.value.followingProfiles.isNotEmpty()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(followingLoading = true) }
+            try {
+                val pubkeys = repository.fetchFollowList(myPubkeyHex)
+                val profiles = if (pubkeys.isNotEmpty()) repository.fetchProfiles(pubkeys.take(200))
+                               else emptyMap()
+                val profileList = pubkeys.take(200).map { pk ->
+                    profiles[pk] ?: UserProfile(pubkey = pk)
+                }
+                _uiState.update { it.copy(followingProfiles = profileList, followingLoading = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(followingLoading = false, error = "フォローリストの取得に失敗しました") }
+            }
+        }
+    }
+    fun toggleLegacy() { _uiState.update { it.copy(showLegacy = !it.showLegacy) } }
+    fun clearError() { _uiState.update { it.copy(error = null) } }
 
     class Factory(
         private val repository: NostrRepository,

@@ -81,6 +81,9 @@ class NostrCache(context: Context) {
     var badgeTtl:     Long    = Constants.CacheDuration.NOTIFICATION
     var badgeEnabled: Boolean = true
 
+    var mlsGroupsTtl:     Long    = 30L * 24 * 60 * 60 * 1000  // 30日
+    var mlsMessagesTtl:   Long    = 30L * 24 * 60 * 60 * 1000  // 30日
+
     fun applySettings(appPrefs: io.nurunuru.app.data.prefs.AppPreferences) {
         val day = Constants.CacheDuration.NOTIFICATION  // 1日 = 86_400_000
         profileTtl      = appPrefs.getCacheTtlMs("profile",      day)
@@ -99,6 +102,8 @@ class NostrCache(context: Context) {
         relayInfoEnabled = appPrefs.isCacheEnabled("relay")
         badgeTtl     = appPrefs.getCacheTtlMs("badge",       day)
         badgeEnabled = appPrefs.isCacheEnabled("badge")
+        mlsGroupsTtl   = appPrefs.getCacheTtlMs("mls_groups",   30L * day)
+        mlsMessagesTtl = appPrefs.getCacheTtlMs("mls_messages", 30L * day)
     }
 
     // ─── Generic localStorage-like Operations ────────────────────────────────
@@ -258,6 +263,28 @@ class NostrCache(context: Context) {
         setRaw("relaylist_$pubkey", relayListJson, relayInfoTtl)
     }
 
+    // ─── MLS / Talk Cache ────────────────────────────────────────────────────
+    // TTL チェックをスキップ（タイムライン方式）: 期限切れでも古いデータを見せ、
+    // fetchMlsGroups / fetchMlsMessages が成功するたびに上書きする。
+
+    fun getCachedMlsGroups(pubkey: String): String? {
+        val raw = prefs.getString(prefix + "mls_groups_$pubkey", null) ?: return null
+        return try { json.decodeFromString<CacheEntry>(raw).data } catch (_: Exception) { null }
+    }
+
+    fun setCachedMlsGroups(pubkey: String, data: String) {
+        setRaw("mls_groups_$pubkey", data, mlsGroupsTtl)
+    }
+
+    fun getCachedMlsMessages(groupId: String): String? {
+        val raw = prefs.getString(prefix + "mls_msgs_$groupId", null) ?: return null
+        return try { json.decodeFromString<CacheEntry>(raw).data } catch (_: Exception) { null }
+    }
+
+    fun setCachedMlsMessages(groupId: String, data: String) {
+        setRaw("mls_msgs_$groupId", data, mlsMessagesTtl)
+    }
+
     // ─── Cleanup ─────────────────────────────────────────────────────────────
 
     fun clearExpiredCache(): Int {
@@ -289,6 +316,27 @@ class NostrCache(context: Context) {
         editor.apply()
     }
 
+    // ── 退出済みグループ ブロックリスト（MLS キャッシュとは独立して永続） ────────
+
+    fun markGroupAsLeft(groupIdHex: String) {
+        val current = prefs.getStringSet("mls_left_groups", emptySet())?.toMutableSet() ?: mutableSetOf()
+        current.add(groupIdHex)
+        prefs.edit().putStringSet("mls_left_groups", current).apply()
+    }
+
+    fun getLeftGroupIds(): Set<String> =
+        prefs.getStringSet("mls_left_groups", emptySet()) ?: emptySet()
+
+    fun removeGroupFromCache(pubkey: String, groupIdHex: String, json: kotlinx.serialization.json.Json) {
+        val raw = getCachedMlsGroups(pubkey) ?: return
+        try {
+            val groups = json.decodeFromString<List<io.nurunuru.app.data.models.MlsGroup>>(raw)
+            val updated = groups.filter { it.groupIdHex != groupIdHex }
+            setCachedMlsGroups(pubkey, json.encodeToString(updated))
+        } catch (_: Exception) { }
+        removeRaw("mls_msgs_$groupIdHex")
+    }
+
     fun clearByType(typeId: String) {
         when (typeId) {
             "profile"      -> { profileCache.clear(); clearByPrefix("profile_") }
@@ -299,6 +347,8 @@ class NostrCache(context: Context) {
             "emoji"        -> clearByPrefix("emoji_")
             "relay"        -> clearByPrefix("relaylist_")
             "badge"        -> clearByPrefix("badge_")
+            "mls_groups"   -> clearByPrefix("mls_groups_")
+            "mls_messages" -> clearByPrefix("mls_msgs_")
         }
     }
 
@@ -320,6 +370,8 @@ class NostrCache(context: Context) {
             "emoji"        -> "emoji_"
             "relay"        -> "relaylist_"
             "badge"        -> "badge_"
+            "mls_groups"   -> "mls_groups_"
+            "mls_messages" -> "mls_msgs_"
             else           -> return 0
         }
         return prefs.all.keys.count { it.startsWith(prefix + sub) }

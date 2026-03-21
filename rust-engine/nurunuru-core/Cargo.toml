@@ -16,3 +16,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+mdk-core = { workspace = true }
+mdk-sqlite-storage = { workspace = true }
+mdk-storage-traits = { workspace = true }
+hex = { workspace = true }

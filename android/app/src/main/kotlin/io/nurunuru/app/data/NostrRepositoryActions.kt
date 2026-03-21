@@ -1,0 +1,328 @@
+package io.nurunuru.app.data
+
+import io.nurunuru.app.data.models.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+
+// ─── Actions ──────────────────────────────────────────────────────────────────
+
+/** Returns the reaction event ID on success, null on failure. */
+suspend fun NostrRepository.likePost(
+    eventId: String,
+    authorPubkey: String,
+    emoji: String = "+",
+    customTags: List<List<String>> = emptyList()
+): String? {
+    val rustClient = client.getRustClient() ?: return null
+    return try {
+        if (isExternalSigner()) {
+            val unsigned = rustClient.createUnsignedReaction(eventId, authorPubkey, emoji, myPubkeyHex)
+            signAndPublishGetId(unsigned).also { if (it != null) android.util.Log.d("NostrRepository", "Ext react OK: $eventId id=$it") }
+        } else {
+            val reactionId = rustClient.react(eventId, authorPubkey, emoji)
+            android.util.Log.d("NostrRepository", "Rust react OK: $eventId emoji=$emoji id=$reactionId")
+            reactionId.ifEmpty { null }
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("NostrRepository", "Rust react failed: ${e.message}")
+        null
+    }
+}
+
+/**
+ * Repost an event (Kind 6, NIP-18).
+ * `eventJson` must be the full serialised Nostr event JSON (with encodeDefaults=true).
+ * Returns the repost event ID on success, null on failure.
+ */
+suspend fun NostrRepository.repostPost(eventId: String, eventJson: String? = null): String? {
+    val rustClient = client.getRustClient() ?: return null
+    if (eventJson == null) {
+        android.util.Log.w("NostrRepository", "repostPost: eventJson is null, skipping $eventId")
+        return null
+    }
+    return try {
+        if (isExternalSigner()) {
+            val unsigned = rustClient.createUnsignedRepost(eventJson, myPubkeyHex)
+            signAndPublishGetId(unsigned).also { if (it != null) android.util.Log.d("NostrRepository", "Ext repost OK: $eventId id=$it") }
+        } else {
+            val repostId = rustClient.repost(eventJson)
+            android.util.Log.d("NostrRepository", "Rust repost OK: $eventId id=$repostId")
+            repostId.ifEmpty { null }
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("NostrRepository", "Rust repost failed: ${e.message}")
+        null
+    }
+}
+
+suspend fun NostrRepository.publishNote(
+    content: String,
+    replyToId: String? = null,
+    contentWarning: String? = null,
+    customTags: List<List<String>> = emptyList(),
+    kind: Int = NostrKind.TEXT_NOTE,
+    targetRelays: List<String>? = null,
+    nip70Protected: Boolean = false
+): NostrEvent? {
+    val tags = mutableListOf<List<String>>()
+    tags.addAll(customTags)
+
+    if (replyToId != null && tags.none { it.getOrNull(0) == "e" && it.getOrNull(1) == replyToId }) {
+        tags.add(listOf("e", replyToId, "", "reply"))
+    }
+    if (contentWarning != null && tags.none { it.getOrNull(0) == "content-warning" }) {
+        tags.add(listOf("content-warning", contentWarning))
+    }
+    if (nip70Protected && tags.none { it.getOrNull(0) == "-" }) {
+        tags.add(listOf("-"))
+    }
+    if (tags.none { it.getOrNull(0) == "client" }) {
+        tags.add(listOf("client", "nullnull"))
+    }
+
+    val rustClient = client.getRustClient() ?: return null
+
+    if (isExternalSigner()) {
+        return try {
+            val unsigned = withContext(Dispatchers.IO) {
+                rustClient.createUnsignedEvent(kind.toUInt(), content, tags, myPubkeyHex)
+            }
+            android.util.Log.d("NostrRepository", "Ext publishNote: unsigned created (${unsigned.length} chars), signing...")
+            val signedJson = client.getSigner().signEvent(unsigned) ?: run {
+                android.util.Log.w("NostrRepository", "Ext publishNote: signer returned null")
+                return null
+            }
+            android.util.Log.d("NostrRepository", "Ext publishNote: signed (${signedJson.length} chars), publishing...")
+            withContext(Dispatchers.IO) { rustClient.publishRawEvent(signedJson) }
+            android.util.Log.d("NostrRepository", "Ext publishNote OK")
+            try { json.decodeFromString<NostrEvent>(signedJson) } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            android.util.Log.e("NostrRepository", "Ext publishNote failed: ${e.message}")
+            null
+        }
+    }
+
+    if (kind == NostrKind.TEXT_NOTE) {
+        return try {
+            val eventId = withContext(Dispatchers.IO) {
+                if (!targetRelays.isNullOrEmpty()) {
+                    android.util.Log.d("NostrRepository", "publishNote to ${targetRelays.size} relays: $targetRelays")
+                    rustClient.publishNoteWithTagsToRelays(content, tags, targetRelays)
+                } else {
+                    rustClient.publishNoteWithTags(content, tags)
+                }
+            }
+            android.util.Log.d("NostrRepository", "Rust publishNote OK: $eventId")
+            withContext(Dispatchers.IO) {
+                rustClient.queryLocal(listOf(prefs.publicKeyHex ?: ""), 1u)
+                    .firstOrNull()
+                    ?.let { try { Json.decodeFromString<NostrEvent>(it) } catch (_: Exception) { null } }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("NostrRepository", "Rust publishNote failed: ${e.message}")
+            null
+        }
+    }
+
+    // Non-Kind-1: use generic publishEvent
+    return try {
+        val eventId = withContext(Dispatchers.IO) { rustClient.publishEvent(kind.toUInt(), content, tags) }
+        android.util.Log.d("NostrRepository", "Rust publishEvent(kind=$kind) OK id=$eventId tags=${tags.size}")
+        NostrEvent(id = eventId, kind = kind, tags = tags, content = content)
+    } catch (e: Exception) {
+        android.util.Log.e("NostrRepository", "Rust publishEvent(kind=$kind) failed: ${e.message}")
+        null
+    }
+}
+
+suspend fun NostrRepository.sendDm(recipientPubkeyHex: String, content: String): Boolean =
+    client.sendEncryptedDm(recipientPubkeyHex, content)
+
+suspend fun NostrRepository.deleteEvent(eventId: String, reason: String = ""): Boolean {
+    val rustClient = client.getRustClient() ?: return false
+    return try {
+        if (isExternalSigner()) {
+            val tags = listOf(listOf("e", eventId))
+            val unsigned = rustClient.createUnsignedEvent(5u, reason, tags, myPubkeyHex)
+            signAndPublish(unsigned).also { if (it) android.util.Log.d("NostrRepository", "Ext deleteEvent OK: $eventId") }
+        } else {
+            rustClient.deleteEvent(eventId, reason.ifEmpty { null })
+            android.util.Log.d("NostrRepository", "Rust deleteEvent OK: $eventId")
+            true
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("NostrRepository", "Rust deleteEvent failed: ${e.message}")
+        false
+    }
+}
+
+suspend fun NostrRepository.reportEvent(targetPubkey: String, eventId: String?, reportType: String, content: String): Boolean {
+    val rustClient = client.getRustClient() ?: return false
+    val tags = mutableListOf(listOf("p", targetPubkey, reportType))
+    eventId?.let { tags.add(listOf("e", it, reportType)) }
+    return try {
+        if (isExternalSigner()) {
+            val unsigned = rustClient.createUnsignedEvent(1984u, content, tags, myPubkeyHex)
+            signAndPublish(unsigned)
+        } else {
+            rustClient.publishEvent(1984u, content, tags)
+            true
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("NostrRepository", "reportEvent failed: ${e.message}")
+        false
+    }
+}
+
+suspend fun NostrRepository.publishBirdwatchLabel(eventId: String, authorPubkey: String, contextType: String, content: String, sourceUrl: String = ""): Boolean {
+    val rustClient = client.getRustClient() ?: return false
+    val fullContent = if (sourceUrl.isNotBlank()) "$content\n\nソース: $sourceUrl" else content
+    val tags = listOf(
+        listOf("L", "birdwatch"),
+        listOf("l", contextType, "birdwatch"),
+        listOf("e", eventId),
+        listOf("p", authorPubkey)
+    )
+    return try {
+        if (isExternalSigner()) {
+            val unsigned = rustClient.createUnsignedEvent(1985u, fullContent, tags, myPubkeyHex)
+            signAndPublish(unsigned)
+        } else {
+            rustClient.publishEvent(1985u, fullContent, tags)
+            true
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("NostrRepository", "publishBirdwatchLabel failed: ${e.message}")
+        false
+    }
+}
+
+suspend fun NostrRepository.fetchMuteList(pubkeyHex: String): MuteListData {
+    val filter = NostrClient.Filter(
+        kinds = listOf(NostrKind.MUTE_LIST),
+        authors = listOf(pubkeyHex),
+        limit = 1
+    )
+    val events = client.fetchEvents(filter, timeoutMs = 4_000)
+    val event = events.maxByOrNull { it.createdAt }
+
+    if (event != null) {
+        cache.setCachedMuteList(pubkeyHex, json.encodeToString(NostrEvent.serializer(), event))
+        return MuteListData(
+            pubkeys = event.getTagValues("p"),
+            eventIds = event.getTagValues("e"),
+            hashtags = event.getTagValues("t"),
+            words = event.getTagValues("word")
+        )
+    }
+
+    return getCachedMuteList(pubkeyHex) ?: MuteListData()
+}
+
+suspend fun NostrRepository.fetchNip65WriteRelays(pubkeyHex: String): List<String> {
+    return try {
+        OutboxModel(client).fetchUserRelayList(pubkeyHex).write
+    } catch (_: Exception) { emptyList() }
+}
+
+/**
+ * NIP-65 kind 10002 から最寄りリレーを取得し、mainRelay に保存する。
+ */
+suspend fun NostrRepository.syncNip65Relays(pubkeyHex: String) {
+    val writeRelays = fetchNip65WriteRelays(pubkeyHex)
+    val main = writeRelays.firstOrNull() ?: return
+    if (main != prefs.mainRelay) {
+        prefs.mainRelay = main
+        android.util.Log.d("NostrRepository", "NIP-65 main relay synced: $main")
+    }
+}
+
+suspend fun NostrRepository.removeFromMuteList(pubkeyHex: String, type: String, value: String): Boolean {
+    val rustClient = client.getRustClient() ?: return false
+    val filter = NostrClient.Filter(kinds = listOf(NostrKind.MUTE_LIST), authors = listOf(pubkeyHex), limit = 1)
+    val latest = client.fetchEvents(filter, timeoutMs = 4_000).maxByOrNull { it.createdAt } ?: return true
+
+    val tagType = when (type) {
+        "pubkey" -> "p"; "event" -> "e"; "hashtag" -> "t"; "word" -> "word"
+        else -> return false
+    }
+    val newTags = latest.tags.filter { !(it.firstOrNull() == tagType && it.getOrNull(1) == value) }
+    if (newTags.size == latest.tags.size) return true
+
+    return try {
+        if (isExternalSigner()) {
+            val unsigned = rustClient.createUnsignedEvent(NostrKind.MUTE_LIST.toUInt(), latest.content, newTags, myPubkeyHex)
+            signAndPublish(unsigned)
+        } else {
+            rustClient.publishEvent(NostrKind.MUTE_LIST.toUInt(), latest.content, newTags)
+            true
+        }
+    } catch (e: Exception) { false }
+}
+
+suspend fun NostrRepository.muteUser(pubkeyHex: String): Boolean {
+    val rustClient = client.getRustClient() ?: return false
+    val filter = NostrClient.Filter(
+        kinds = listOf(NostrKind.MUTE_LIST),
+        authors = listOf(prefs.publicKeyHex ?: return false),
+        limit = 1
+    )
+    val latest = client.fetchEvents(filter, timeoutMs = 4_000).maxByOrNull { it.createdAt }
+    val tags = latest?.tags?.toMutableList() ?: mutableListOf()
+    if (tags.any { it.firstOrNull() == "p" && it.getOrNull(1) == pubkeyHex }) return true
+    tags.add(listOf("p", pubkeyHex))
+    return try {
+        if (isExternalSigner()) {
+            val unsigned = rustClient.createUnsignedEvent(NostrKind.MUTE_LIST.toUInt(), latest?.content ?: "", tags, myPubkeyHex)
+            signAndPublish(unsigned)
+        } else {
+            rustClient.publishEvent(NostrKind.MUTE_LIST.toUInt(), latest?.content ?: "", tags)
+            true
+        }
+    } catch (e: Exception) { false }
+}
+
+suspend fun NostrRepository.followUser(myPubkeyHex: String, targetPubkeyHex: String): Boolean {
+    val rustClient = client.getRustClient() ?: return false
+    return try {
+        if (isExternalSigner()) {
+            val contactsFilter = NostrClient.Filter(kinds = listOf(NostrKind.CONTACT_LIST), authors = listOf(myPubkeyHex), limit = 1)
+            val latest = client.fetchEvents(contactsFilter, timeoutMs = 4_000).maxByOrNull { it.createdAt }
+            val tags = latest?.tags?.toMutableList() ?: mutableListOf()
+            if (tags.any { it.firstOrNull() == "p" && it.getOrNull(1) == targetPubkeyHex }) return true
+            tags.add(listOf("p", targetPubkeyHex))
+            val unsigned = rustClient.createUnsignedEvent(NostrKind.CONTACT_LIST.toUInt(), latest?.content ?: "", tags, myPubkeyHex)
+            signAndPublish(unsigned).also { if (it) android.util.Log.d("NostrRepository", "Ext followUser OK: $targetPubkeyHex") }
+        } else {
+            rustClient.followUser(targetPubkeyHex)
+            android.util.Log.d("NostrRepository", "Rust followUser OK: $targetPubkeyHex")
+            true
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("NostrRepository", "Rust followUser failed: ${e.message}")
+        false
+    }
+}
+
+suspend fun NostrRepository.unfollowUser(myPubkeyHex: String, targetPubkeyHex: String): Boolean {
+    val rustClient = client.getRustClient() ?: return false
+    return try {
+        if (isExternalSigner()) {
+            val contactsFilter = NostrClient.Filter(kinds = listOf(NostrKind.CONTACT_LIST), authors = listOf(myPubkeyHex), limit = 1)
+            val latest = client.fetchEvents(contactsFilter, timeoutMs = 4_000).maxByOrNull { it.createdAt } ?: return true
+            val newTags = latest.tags.filter { !(it.firstOrNull() == "p" && it.getOrNull(1) == targetPubkeyHex) }
+            if (newTags.size == latest.tags.size) return true
+            val unsigned = rustClient.createUnsignedEvent(NostrKind.CONTACT_LIST.toUInt(), latest.content, newTags, myPubkeyHex)
+            signAndPublish(unsigned).also { if (it) android.util.Log.d("NostrRepository", "Ext unfollowUser OK: $targetPubkeyHex") }
+        } else {
+            rustClient.unfollowUser(targetPubkeyHex)
+            android.util.Log.d("NostrRepository", "Rust unfollowUser OK: $targetPubkeyHex")
+            true
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("NostrRepository", "Rust unfollowUser failed: ${e.message}")
+        false
+    }
+}

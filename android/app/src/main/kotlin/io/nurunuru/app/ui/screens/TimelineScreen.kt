@@ -45,7 +45,8 @@ fun TimelineScreen(
     prefs: AppPreferences,
     myPubkey: String,
     myPictureUrl: String?,
-    myDisplayName: String
+    myDisplayName: String,
+    onStartDM: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
@@ -148,7 +149,7 @@ fun TimelineScreen(
             viewModel = homeViewModel,
             repository = repository,
             onDismiss = { viewingPubkey = null },
-            onStartDM = { /* TODO */ }
+            onStartDM = { pk -> viewingPubkey = null; onStartDM(pk) }
         )
     }
 

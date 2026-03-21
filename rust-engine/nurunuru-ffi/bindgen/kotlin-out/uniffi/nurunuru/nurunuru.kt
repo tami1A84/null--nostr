@@ -804,6 +804,28 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -862,6 +884,28 @@ fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_get_recommended_feed(
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_login(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mark_not_interested(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_add_member(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_create_group(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_create_key_package(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_create_message(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_get_group_info(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_get_message_history(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_leave_group(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_list_groups(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_message(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_welcome(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_remove_member(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_nip04_decrypt(
 ): Short
@@ -1008,6 +1052,28 @@ fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_login(`ptr`: Pointer,`pubkey
 ): Unit
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mark_not_interested(`ptr`: Pointer,`eventId`: RustBuffer.ByValue,`authorPubkey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_add_member(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,`keyPackageEventJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_create_group(`ptr`: Pointer,`name`: RustBuffer.ByValue,`adminPubkeys`: RustBuffer.ByValue,`relays`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_create_key_package(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_create_message(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,`content`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_get_group_info(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_get_message_history(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,`limit`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_leave_group(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_list_groups(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_process_message(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,`eventJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_process_welcome(`ptr`: Pointer,`welcomeEventJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_remove_member(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,`memberPubkey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_nip04_decrypt(`ptr`: Pointer,`senderPubkeyHex`: RustBuffer.ByValue,`ciphertext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_nip04_encrypt(`ptr`: Pointer,`recipientPubkeyHex`: RustBuffer.ByValue,`plaintext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1244,6 +1310,39 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mark_not_interested() != 2204.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_add_member() != 48700.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_create_group() != 54959.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_create_key_package() != 65379.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_create_message() != 27676.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_get_group_info() != 37817.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_get_message_history() != 22075.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_leave_group() != 53476.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_list_groups() != 21675.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_message() != 43277.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_welcome() != 9374.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_remove_member() != 34670.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_nip04_decrypt() != 5575.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1292,7 +1391,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_search() != 16969.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_send_dm() != 48383.toShort()) {
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_send_dm() != 32235.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_start_live_subscription() != 15505.toShort()) {
@@ -1522,6 +1621,29 @@ public object FfiConverterDouble: FfiConverter<Double, Double> {
 
     override fun write(value: Double, buf: ByteBuffer) {
         buf.putDouble(value)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterBoolean: FfiConverter<Boolean, Byte> {
+    override fun lift(value: Byte): Boolean {
+        return value.toInt() != 0
+    }
+
+    override fun read(buf: ByteBuffer): Boolean {
+        return lift(buf.get())
+    }
+
+    override fun lower(value: Boolean): Byte {
+        return if (value) 1.toByte() else 0.toByte()
+    }
+
+    override fun allocationSize(value: Boolean) = 1UL
+
+    override fun write(value: Boolean, buf: ByteBuffer) {
+        buf.put(lower(value))
     }
 }
 
@@ -1836,6 +1958,67 @@ public interface NuruNuruClientInterface {
     fun `markNotInterested`(`eventId`: kotlin.String, `authorPubkey`: kotlin.String)
     
     /**
+     * Add a member to a group using their Kind-443 KeyPackage event JSON.
+     *
+     * Returns commit (Kind 445) and welcome (Kind 444) event data.
+     */
+    fun `mlsAddMember`(`groupIdHex`: kotlin.String, `keyPackageEventJson`: kotlin.String): FfiAddMemberResult
+    
+    /**
+     * Create a new MLS group.
+     */
+    fun `mlsCreateGroup`(`name`: kotlin.String, `adminPubkeys`: List<kotlin.String>, `relays`: List<kotlin.String>): FfiMlsGroupInfo
+    
+    /**
+     * Generate a fresh MLS KeyPackage and return Kind-443 event data.
+     *
+     * The caller builds an unsigned Kind-443 event via `create_unsigned_event`,
+     * signs it (internal key or Amber), then publishes via `publish_raw_event`.
+     */
+    fun `mlsCreateKeyPackage`(): FfiKeyPackageEventData
+    
+    /**
+     * Encrypt an application message for a group (Kind 445 event data).
+     */
+    fun `mlsCreateMessage`(`groupIdHex`: kotlin.String, `content`: kotlin.String): FfiEncryptedMessageData
+    
+    /**
+     * Get metadata for a single MLS group.
+     */
+    fun `mlsGetGroupInfo`(`groupIdHex`: kotlin.String): FfiMlsGroupInfo
+    
+    /**
+     * Retrieve decrypted message history for a group from MDK's local SQLite.
+     * Use this on app startup to restore history without re-processing relay events.
+     */
+    fun `mlsGetMessageHistory`(`groupIdHex`: kotlin.String, `limit`: kotlin.ULong): List<FfiDecryptedMessage>
+    
+    /**
+     * Leave a group. Returns the Kind-445 commit event data to publish.
+     */
+    fun `mlsLeaveGroup`(`groupIdHex`: kotlin.String): FfiEncryptedMessageData
+    
+    /**
+     * List all MLS groups the user belongs to.
+     */
+    fun `mlsListGroups`(): List<FfiMlsGroupInfo>
+    
+    /**
+     * Process an incoming Kind-445 event and return the decrypted message.
+     */
+    fun `mlsProcessMessage`(`groupIdHex`: kotlin.String, `eventJson`: kotlin.String): FfiDecryptedMessage
+    
+    /**
+     * Process an incoming Kind-444 Welcome event and join the group.
+     */
+    fun `mlsProcessWelcome`(`welcomeEventJson`: kotlin.String): FfiMlsGroupInfo
+    
+    /**
+     * Remove a member from a group. Returns the Kind-445 commit event data.
+     */
+    fun `mlsRemoveMember`(`groupIdHex`: kotlin.String, `memberPubkey`: kotlin.String): FfiEncryptedMessageData
+    
+    /**
      * NIP-04 decrypt a message from a sender (legacy DM, Kind 4).
      *
      * Only available for internal-signer clients.
@@ -1958,6 +2141,10 @@ public interface NuruNuruClientInterface {
     
     /**
      * Send an encrypted DM (NIP-17).
+     *
+     * **Deprecated**: Use MLS group messaging (`mls_create_message`) for new
+     * conversations.  This method is kept for backwards compatibility during
+     * the NIP-17 → NIP-EE migration period.
      */
     fun `sendDm`(`recipientHex`: kotlin.String, `content`: kotlin.String)
     
@@ -2466,6 +2653,188 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
 
     
     /**
+     * Add a member to a group using their Kind-443 KeyPackage event JSON.
+     *
+     * Returns commit (Kind 445) and welcome (Kind 444) event data.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsAddMember`(`groupIdHex`: kotlin.String, `keyPackageEventJson`: kotlin.String): FfiAddMemberResult {
+            return FfiConverterTypeFfiAddMemberResult.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_add_member(
+        it, FfiConverterString.lower(`groupIdHex`),FfiConverterString.lower(`keyPackageEventJson`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Create a new MLS group.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsCreateGroup`(`name`: kotlin.String, `adminPubkeys`: List<kotlin.String>, `relays`: List<kotlin.String>): FfiMlsGroupInfo {
+            return FfiConverterTypeFfiMlsGroupInfo.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_create_group(
+        it, FfiConverterString.lower(`name`),FfiConverterSequenceString.lower(`adminPubkeys`),FfiConverterSequenceString.lower(`relays`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Generate a fresh MLS KeyPackage and return Kind-443 event data.
+     *
+     * The caller builds an unsigned Kind-443 event via `create_unsigned_event`,
+     * signs it (internal key or Amber), then publishes via `publish_raw_event`.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsCreateKeyPackage`(): FfiKeyPackageEventData {
+            return FfiConverterTypeFfiKeyPackageEventData.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_create_key_package(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Encrypt an application message for a group (Kind 445 event data).
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsCreateMessage`(`groupIdHex`: kotlin.String, `content`: kotlin.String): FfiEncryptedMessageData {
+            return FfiConverterTypeFfiEncryptedMessageData.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_create_message(
+        it, FfiConverterString.lower(`groupIdHex`),FfiConverterString.lower(`content`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Get metadata for a single MLS group.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsGetGroupInfo`(`groupIdHex`: kotlin.String): FfiMlsGroupInfo {
+            return FfiConverterTypeFfiMlsGroupInfo.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_get_group_info(
+        it, FfiConverterString.lower(`groupIdHex`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Retrieve decrypted message history for a group from MDK's local SQLite.
+     * Use this on app startup to restore history without re-processing relay events.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsGetMessageHistory`(`groupIdHex`: kotlin.String, `limit`: kotlin.ULong): List<FfiDecryptedMessage> {
+            return FfiConverterSequenceTypeFfiDecryptedMessage.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_get_message_history(
+        it, FfiConverterString.lower(`groupIdHex`),FfiConverterULong.lower(`limit`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Leave a group. Returns the Kind-445 commit event data to publish.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsLeaveGroup`(`groupIdHex`: kotlin.String): FfiEncryptedMessageData {
+            return FfiConverterTypeFfiEncryptedMessageData.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_leave_group(
+        it, FfiConverterString.lower(`groupIdHex`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * List all MLS groups the user belongs to.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsListGroups`(): List<FfiMlsGroupInfo> {
+            return FfiConverterSequenceTypeFfiMlsGroupInfo.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_list_groups(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Process an incoming Kind-445 event and return the decrypted message.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsProcessMessage`(`groupIdHex`: kotlin.String, `eventJson`: kotlin.String): FfiDecryptedMessage {
+            return FfiConverterTypeFfiDecryptedMessage.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_process_message(
+        it, FfiConverterString.lower(`groupIdHex`),FfiConverterString.lower(`eventJson`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Process an incoming Kind-444 Welcome event and join the group.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsProcessWelcome`(`welcomeEventJson`: kotlin.String): FfiMlsGroupInfo {
+            return FfiConverterTypeFfiMlsGroupInfo.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_process_welcome(
+        it, FfiConverterString.lower(`welcomeEventJson`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Remove a member from a group. Returns the Kind-445 commit event data.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsRemoveMember`(`groupIdHex`: kotlin.String, `memberPubkey`: kotlin.String): FfiEncryptedMessageData {
+            return FfiConverterTypeFfiEncryptedMessageData.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_remove_member(
+        it, FfiConverterString.lower(`groupIdHex`),FfiConverterString.lower(`memberPubkey`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * NIP-04 decrypt a message from a sender (legacy DM, Kind 4).
      *
      * Only available for internal-signer clients.
@@ -2761,6 +3130,10 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
     
     /**
      * Send an encrypted DM (NIP-17).
+     *
+     * **Deprecated**: Use MLS group messaging (`mls_create_message`) for new
+     * conversations.  This method is kept for backwards compatibility during
+     * the NIP-17 → NIP-EE migration period.
      */
     @Throws(NuruNuruFfiException::class)override fun `sendDm`(`recipientHex`: kotlin.String, `content`: kotlin.String)
         = 
@@ -2905,6 +3278,38 @@ public object FfiConverterTypeNuruNuruClient: FfiConverter<NuruNuruClient, Point
 
 
 
+data class FfiAddMemberResult (
+    var `commitEventData`: FfiEncryptedMessageData, 
+    var `welcomeEventData`: FfiWelcomeEventData
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiAddMemberResult: FfiConverterRustBuffer<FfiAddMemberResult> {
+    override fun read(buf: ByteBuffer): FfiAddMemberResult {
+        return FfiAddMemberResult(
+            FfiConverterTypeFfiEncryptedMessageData.read(buf),
+            FfiConverterTypeFfiWelcomeEventData.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiAddMemberResult) = (
+            FfiConverterTypeFfiEncryptedMessageData.allocationSize(value.`commitEventData`) +
+            FfiConverterTypeFfiWelcomeEventData.allocationSize(value.`welcomeEventData`)
+    )
+
+    override fun write(value: FfiAddMemberResult, buf: ByteBuffer) {
+            FfiConverterTypeFfiEncryptedMessageData.write(value.`commitEventData`, buf)
+            FfiConverterTypeFfiWelcomeEventData.write(value.`welcomeEventData`, buf)
+    }
+}
+
+
+
 data class FfiConnectionStats (
     var `connectedRelays`: kotlin.UInt, 
     var `totalRelays`: kotlin.UInt
@@ -2932,6 +3337,174 @@ public object FfiConverterTypeFfiConnectionStats: FfiConverterRustBuffer<FfiConn
     override fun write(value: FfiConnectionStats, buf: ByteBuffer) {
             FfiConverterUInt.write(value.`connectedRelays`, buf)
             FfiConverterUInt.write(value.`totalRelays`, buf)
+    }
+}
+
+
+
+data class FfiDecryptedMessage (
+    var `senderPubkey`: kotlin.String, 
+    var `content`: kotlin.String, 
+    var `timestamp`: kotlin.ULong, 
+    var `groupIdHex`: kotlin.String
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiDecryptedMessage: FfiConverterRustBuffer<FfiDecryptedMessage> {
+    override fun read(buf: ByteBuffer): FfiDecryptedMessage {
+        return FfiDecryptedMessage(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiDecryptedMessage) = (
+            FfiConverterString.allocationSize(value.`senderPubkey`) +
+            FfiConverterString.allocationSize(value.`content`) +
+            FfiConverterULong.allocationSize(value.`timestamp`) +
+            FfiConverterString.allocationSize(value.`groupIdHex`)
+    )
+
+    override fun write(value: FfiDecryptedMessage, buf: ByteBuffer) {
+            FfiConverterString.write(value.`senderPubkey`, buf)
+            FfiConverterString.write(value.`content`, buf)
+            FfiConverterULong.write(value.`timestamp`, buf)
+            FfiConverterString.write(value.`groupIdHex`, buf)
+    }
+}
+
+
+
+data class FfiEncryptedMessageData (
+    var `content`: kotlin.String, 
+    var `tags`: List<List<kotlin.String>>, 
+    var `ephemeralPubkey`: kotlin.String
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiEncryptedMessageData: FfiConverterRustBuffer<FfiEncryptedMessageData> {
+    override fun read(buf: ByteBuffer): FfiEncryptedMessageData {
+        return FfiEncryptedMessageData(
+            FfiConverterString.read(buf),
+            FfiConverterSequenceSequenceString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiEncryptedMessageData) = (
+            FfiConverterString.allocationSize(value.`content`) +
+            FfiConverterSequenceSequenceString.allocationSize(value.`tags`) +
+            FfiConverterString.allocationSize(value.`ephemeralPubkey`)
+    )
+
+    override fun write(value: FfiEncryptedMessageData, buf: ByteBuffer) {
+            FfiConverterString.write(value.`content`, buf)
+            FfiConverterSequenceSequenceString.write(value.`tags`, buf)
+            FfiConverterString.write(value.`ephemeralPubkey`, buf)
+    }
+}
+
+
+
+data class FfiKeyPackageEventData (
+    var `content`: kotlin.String, 
+    var `tags`: List<List<kotlin.String>>
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiKeyPackageEventData: FfiConverterRustBuffer<FfiKeyPackageEventData> {
+    override fun read(buf: ByteBuffer): FfiKeyPackageEventData {
+        return FfiKeyPackageEventData(
+            FfiConverterString.read(buf),
+            FfiConverterSequenceSequenceString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiKeyPackageEventData) = (
+            FfiConverterString.allocationSize(value.`content`) +
+            FfiConverterSequenceSequenceString.allocationSize(value.`tags`)
+    )
+
+    override fun write(value: FfiKeyPackageEventData, buf: ByteBuffer) {
+            FfiConverterString.write(value.`content`, buf)
+            FfiConverterSequenceSequenceString.write(value.`tags`, buf)
+    }
+}
+
+
+
+data class FfiMlsGroupInfo (
+    var `groupIdHex`: kotlin.String, 
+    var `name`: kotlin.String, 
+    var `description`: kotlin.String, 
+    var `adminPubkeys`: List<kotlin.String>, 
+    var `memberPubkeys`: List<kotlin.String>, 
+    var `relays`: List<kotlin.String>, 
+    var `createdAt`: kotlin.ULong, 
+    var `epoch`: kotlin.ULong, 
+    var `isDm`: kotlin.Boolean
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiMlsGroupInfo: FfiConverterRustBuffer<FfiMlsGroupInfo> {
+    override fun read(buf: ByteBuffer): FfiMlsGroupInfo {
+        return FfiMlsGroupInfo(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiMlsGroupInfo) = (
+            FfiConverterString.allocationSize(value.`groupIdHex`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterString.allocationSize(value.`description`) +
+            FfiConverterSequenceString.allocationSize(value.`adminPubkeys`) +
+            FfiConverterSequenceString.allocationSize(value.`memberPubkeys`) +
+            FfiConverterSequenceString.allocationSize(value.`relays`) +
+            FfiConverterULong.allocationSize(value.`createdAt`) +
+            FfiConverterULong.allocationSize(value.`epoch`) +
+            FfiConverterBoolean.allocationSize(value.`isDm`)
+    )
+
+    override fun write(value: FfiMlsGroupInfo, buf: ByteBuffer) {
+            FfiConverterString.write(value.`groupIdHex`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterString.write(value.`description`, buf)
+            FfiConverterSequenceString.write(value.`adminPubkeys`, buf)
+            FfiConverterSequenceString.write(value.`memberPubkeys`, buf)
+            FfiConverterSequenceString.write(value.`relays`, buf)
+            FfiConverterULong.write(value.`createdAt`, buf)
+            FfiConverterULong.write(value.`epoch`, buf)
+            FfiConverterBoolean.write(value.`isDm`, buf)
     }
 }
 
@@ -3029,6 +3602,42 @@ public object FfiConverterTypeFfiUserProfile: FfiConverterRustBuffer<FfiUserProf
 
 
 
+data class FfiWelcomeEventData (
+    var `recipientPubkey`: kotlin.String, 
+    var `content`: kotlin.String, 
+    var `tags`: List<List<kotlin.String>>
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiWelcomeEventData: FfiConverterRustBuffer<FfiWelcomeEventData> {
+    override fun read(buf: ByteBuffer): FfiWelcomeEventData {
+        return FfiWelcomeEventData(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceSequenceString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiWelcomeEventData) = (
+            FfiConverterString.allocationSize(value.`recipientPubkey`) +
+            FfiConverterString.allocationSize(value.`content`) +
+            FfiConverterSequenceSequenceString.allocationSize(value.`tags`)
+    )
+
+    override fun write(value: FfiWelcomeEventData, buf: ByteBuffer) {
+            FfiConverterString.write(value.`recipientPubkey`, buf)
+            FfiConverterString.write(value.`content`, buf)
+            FfiConverterSequenceSequenceString.write(value.`tags`, buf)
+    }
+}
+
+
+
 
 
 sealed class NuruNuruFfiException: kotlin.Exception() {
@@ -3057,6 +3666,16 @@ sealed class NuruNuruFfiException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    /**
+     * Returned by `mls_process_message` for Commit / Proposal messages.
+     * MDK already updated local MLS state; the message is not displayable.
+     */
+    class MlsStateUpdate(
+        ) : NuruNuruFfiException() {
+        override val message
+            get() = ""
+    }
+    
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<NuruNuruFfiException> {
         override fun lift(error_buf: RustBuffer.ByValue): NuruNuruFfiException = FfiConverterTypeNuruNuruFfiError.lift(error_buf)
@@ -3082,6 +3701,7 @@ public object FfiConverterTypeNuruNuruFfiError : FfiConverterRustBuffer<NuruNuru
             3 -> NuruNuruFfiException.EngineException(
                 FfiConverterString.read(buf),
                 )
+            4 -> NuruNuruFfiException.MlsStateUpdate()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -3103,6 +3723,10 @@ public object FfiConverterTypeNuruNuruFfiError : FfiConverterRustBuffer<NuruNuru
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is NuruNuruFfiException.MlsStateUpdate -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -3121,6 +3745,10 @@ public object FfiConverterTypeNuruNuruFfiError : FfiConverterRustBuffer<NuruNuru
             is NuruNuruFfiException.EngineException -> {
                 buf.putInt(3)
                 FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is NuruNuruFfiException.MlsStateUpdate -> {
+                buf.putInt(4)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -3216,6 +3844,62 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterString.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeFfiDecryptedMessage: FfiConverterRustBuffer<List<FfiDecryptedMessage>> {
+    override fun read(buf: ByteBuffer): List<FfiDecryptedMessage> {
+        val len = buf.getInt()
+        return List<FfiDecryptedMessage>(len) {
+            FfiConverterTypeFfiDecryptedMessage.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiDecryptedMessage>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiDecryptedMessage.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiDecryptedMessage>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiDecryptedMessage.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeFfiMlsGroupInfo: FfiConverterRustBuffer<List<FfiMlsGroupInfo>> {
+    override fun read(buf: ByteBuffer): List<FfiMlsGroupInfo> {
+        val len = buf.getInt()
+        return List<FfiMlsGroupInfo>(len) {
+            FfiConverterTypeFfiMlsGroupInfo.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<FfiMlsGroupInfo>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeFfiMlsGroupInfo.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<FfiMlsGroupInfo>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeFfiMlsGroupInfo.write(it, buf)
         }
     }
 }

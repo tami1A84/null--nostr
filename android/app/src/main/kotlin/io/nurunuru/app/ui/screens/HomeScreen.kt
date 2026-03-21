@@ -32,7 +32,8 @@ import io.nurunuru.app.viewmodel.HomeViewModel
 fun HomeScreen(
     viewModel: HomeViewModel,
     repository: io.nurunuru.app.data.NostrRepository,
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    onStartDM: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val profile = uiState.profile
@@ -242,7 +243,7 @@ fun HomeScreen(
                 viewModel = homeViewModel,
                 repository = repository,
                 onDismiss = { viewingPubkey = null },
-                onStartDM = { /* TODO */ }
+                onStartDM = { pk -> viewingPubkey = null; onStartDM(pk) }
             )
         }
 

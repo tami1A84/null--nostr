@@ -146,7 +146,7 @@ fun PostHeader(
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Check,
+                        imageVector = NuruIcons.Check,
                         contentDescription = null,
                         tint = nuruColors.lineGreen,
                         modifier = Modifier.size(14.dp)
@@ -181,7 +181,7 @@ fun PostHeader(
                     modifier = Modifier.size(24.dp)
                 ) {
                     Icon(
-                        Icons.Default.MoreVert,
+                        NuruIcons.MoreVert,
                         contentDescription = "Menu",
                         tint = nuruColors.textTertiary,
                         modifier = Modifier.size(16.dp)
@@ -190,7 +190,7 @@ fun PostHeader(
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
-                    modifier = Modifier.background(nuruColors.bgPrimary)
+                    modifier = Modifier.background(nuruColors.bgSecondary)
                 ) {
                     if (onNotInterested != null && !isOwnPost) {
                         DropdownMenuItem(
@@ -201,44 +201,30 @@ fun PostHeader(
                     }
                     if (onBirdwatch != null && !isOwnPost) {
                         DropdownMenuItem(
-                            text = { Text("Birdwatch", color = Color(0xFF2196F3), fontWeight = FontWeight.Medium) },
+                            text = { Text("Birdwatch", color = nuruColors.textPrimary) },
                             onClick = { showMenu = false; onBirdwatch() },
-                            leadingIcon = {
-                                Box(
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .background(Color(0xFF2196F3), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(12.dp))
-                                }
-                            }
+                            leadingIcon = { Icon(NuruIcons.BirdwatchCheck, null, tint = nuruColors.textSecondary, modifier = Modifier.size(18.dp)) }
                         )
                     }
                     if (onReport != null && !isOwnPost) {
                         DropdownMenuItem(
-                            text = { Text("通報", color = Color(0xFFFF9800), fontWeight = FontWeight.Medium) },
+                            text = { Text("通報", color = nuruColors.textPrimary) },
                             onClick = { showMenu = false; onReport() },
-                            leadingIcon = { Icon(Icons.Default.Warning, null, tint = Color(0xFFFF9800), modifier = Modifier.size(18.dp)) }
+                            leadingIcon = { Icon(NuruIcons.Warning, null, tint = nuruColors.textSecondary, modifier = Modifier.size(18.dp)) }
                         )
                     }
                     if (onMute != null && !isOwnPost) {
                         DropdownMenuItem(
-                            text = { Text("ミュート", color = Color.Red, fontWeight = FontWeight.Medium) },
+                            text = { Text("ミュート", color = nuruColors.error) },
                             onClick = { showMenu = false; onMute() },
-                            leadingIcon = { Icon(Icons.Default.Block, null, tint = Color.Red, modifier = Modifier.size(18.dp)) }
+                            leadingIcon = { Icon(NuruIcons.Block, null, tint = nuruColors.error, modifier = Modifier.size(18.dp)) }
                         )
                     }
                     if (isOwnPost && onDelete != null) {
                         DropdownMenuItem(
-                            text = { Text("削除", color = Color.Red, fontWeight = FontWeight.Medium) },
-                            onClick = {
-                                showMenu = false
-                                onDelete()
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
-                            }
+                            text = { Text("削除", color = nuruColors.error) },
+                            onClick = { showMenu = false; onDelete() },
+                            leadingIcon = { Icon(NuruIcons.Trash, null, tint = nuruColors.error, modifier = Modifier.size(18.dp)) }
                         )
                     }
                 }

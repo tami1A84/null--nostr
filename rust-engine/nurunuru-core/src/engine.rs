@@ -35,6 +35,7 @@ use tokio::sync::{Mutex, RwLock};
 use crate::config::NuruNuruConfig;
 use crate::error::{NuruNuruError, Result};
 use crate::filters;
+use crate::mls::MlsManager;
 use crate::recommendation::RecommendationEngine;
 use crate::relay;
 use crate::types::*;
@@ -66,6 +67,9 @@ pub struct NuruNuruEngine {
 
     // SSE streaming subscriptions: sub_id → event buffer
     subscription_buffers: Arc<Mutex<HashMap<String, SubBuffer>>>,
+
+    // MLS / NIP-EE manager (None for read-only clients)
+    mls: Option<MlsManager>,
 }
 
 impl NuruNuruEngine {
@@ -102,6 +106,23 @@ impl NuruNuruEngine {
 
         let recommendation = RecommendationEngine::new(config.recommendation.clone());
 
+        // Initialise MLS manager if a non-empty mls_db_path is configured.
+        // Read-only clients (no private key) still get a manager for decryption.
+        let mls = if config.mls_db_path.is_empty() {
+            None
+        } else {
+            // The pubkey is not available yet at construction time (login() sets it).
+            // We open the DB now; the pubkey is set later when login() is called.
+            // Use an empty string as a placeholder — MDK must handle deferred identity.
+            match MlsManager::new(&config.mls_db_path, "") {
+                Ok(m) => Some(m),
+                Err(e) => {
+                    tracing::warn!("[NuruNuruEngine] MLS manager init failed (non-fatal): {e}");
+                    None
+                }
+            }
+        };
+
         let engine = Arc::new(Self {
             client,
             config,
@@ -114,6 +135,7 @@ impl NuruNuruEngine {
             not_interested_posts: RwLock::new(HashSet::new()),
             author_scores: RwLock::new(HashMap::new()),
             subscription_buffers: Arc::new(Mutex::new(HashMap::new())),
+            mls,
         });
 
         Ok(engine)
@@ -135,6 +157,12 @@ impl NuruNuruEngine {
         {
             let mut pk = self.user_pubkey.write().await;
             *pk = Some(pubkey);
+        }
+
+        // Propagate the user pubkey to the MLS manager so key-package
+        // and group-creation operations can sign on behalf of the user.
+        if let Some(mls) = &self.mls {
+            mls.set_user_pubkey(&pubkey.to_hex());
         }
 
         // Load follow list, mute list in parallel
@@ -1058,5 +1086,93 @@ impl NuruNuruEngine {
             .unsubscribe(&SubscriptionId::new(sub_id))
             .await;
         Ok(())
+    }
+
+    // ─── MLS / NIP-EE Delegation ─────────────────────────────────────────
+
+    fn require_mls(&self) -> Result<&MlsManager> {
+        self.mls
+            .as_ref()
+            .ok_or_else(|| NuruNuruError::MlsError("MLS not initialised for this client".into()))
+    }
+
+    /// Generate a fresh MLS KeyPackage (Kind 443 event data).
+    pub async fn mls_create_key_package(&self) -> Result<KeyPackageEventData> {
+        self.require_mls()?.create_key_package_event()
+    }
+
+    /// Create a new MLS group.
+    pub async fn mls_create_group(
+        &self,
+        name: String,
+        admin_pubkeys: Vec<String>,
+        relays: Vec<String>,
+    ) -> Result<MlsGroupInfo> {
+        self.require_mls()?.create_group(name, admin_pubkeys, relays)
+    }
+
+    /// Add a member to a group using their Kind-443 KeyPackage event JSON.
+    pub async fn mls_add_member(
+        &self,
+        group_id_hex: &str,
+        key_package_event_json: &str,
+    ) -> Result<AddMemberResult> {
+        self.require_mls()?.add_member(group_id_hex, key_package_event_json)
+    }
+
+    /// Encrypt an application message for a group (Kind 445).
+    pub async fn mls_create_message(
+        &self,
+        group_id_hex: &str,
+        content: &str,
+    ) -> Result<EncryptedMessageData> {
+        self.require_mls()?.create_message(group_id_hex, content)
+    }
+
+    /// Decrypt/process an incoming Kind-445 event.
+    pub async fn mls_process_message(
+        &self,
+        group_id_hex: &str,
+        event_json: &str,
+    ) -> Result<DecryptedMessage> {
+        self.require_mls()?.process_message(group_id_hex, event_json)
+    }
+
+    /// Process an incoming Kind-444 Welcome and join the group.
+    pub async fn mls_process_welcome(&self, welcome_event_json: &str) -> Result<MlsGroupInfo> {
+        self.require_mls()?.process_welcome(welcome_event_json)
+    }
+
+    /// Retrieve decrypted message history for a group from MDK's local SQLite.
+    pub async fn mls_get_message_history(
+        &self,
+        group_id_hex: &str,
+        limit: u64,
+    ) -> Result<Vec<DecryptedMessage>> {
+        self.require_mls()?.get_message_history(group_id_hex, limit)
+    }
+
+    /// List all MLS groups the user belongs to.
+    pub async fn mls_list_groups(&self) -> Result<Vec<MlsGroupInfo>> {
+        self.require_mls()?.list_groups()
+    }
+
+    /// Get metadata for a single MLS group.
+    pub async fn mls_get_group_info(&self, group_id_hex: &str) -> Result<MlsGroupInfo> {
+        self.require_mls()?.get_group_info(group_id_hex)
+    }
+
+    /// Leave a group (publishes self-removal commit event data).
+    pub async fn mls_leave_group(&self, group_id_hex: &str) -> Result<EncryptedMessageData> {
+        self.require_mls()?.leave_group(group_id_hex)
+    }
+
+    /// Remove a member from a group.
+    pub async fn mls_remove_member(
+        &self,
+        group_id_hex: &str,
+        member_pubkey: &str,
+    ) -> Result<EncryptedMessageData> {
+        self.require_mls()?.remove_member(group_id_hex, member_pubkey)
     }
 }

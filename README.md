@@ -63,9 +63,10 @@ Nostrは、特定の企業やサーバーに依存しない自由なSNSプロト
 - ProofMode対応: PGP署名とフレームハッシュで動画の真正性を証明
 - タップで音声のミュート解除
 
-**トーク（DM）**
-- NIP-17/44/59 に基づく暗号化プライベートメッセージ
-- LINE風のチャット画面
+**トーク（DM / グループ）**
+- NIP-EE (MLS) による End-to-End 暗号化: 1対1DM・グループチャットに対応
+- 旧DM (NIP-17/44/59) は読み取り専用で互換表示
+- LINE風のチャット画面・キャッシュファースト表示
 
 **セキュリティ**
 - パスキーログイン（パスワード不要）
@@ -96,7 +97,7 @@ npm run dev
 
 ### 対応NIP
 
-NIP-01, 02, 05, 07, 09, 11, 17, 19, 25, 27, 30, 32, 42, 44, 46, 50, 51, 57, 58, 59, 62, 65, 70, 71, 98
+NIP-01, 02, 05, 07, 09, 11, 17, 19, 25, 27, 30, 32, 42, 44, 46, 50, 51, 57, 58, 59, 62, 65, 70, 71, 98, NIP-EE (MLS)
 
 ### ライセンス
 
@@ -147,9 +148,10 @@ Nostr is an open protocol for censorship-resistant social networking. Your accou
 - ProofMode: PGP signatures and per-frame SHA-256 hashes to verify authenticity
 - Tap to unmute audio in feed
 
-**Talk (DMs)**
-- End-to-end encrypted messaging via NIP-17/44/59
-- LINE-style chat interface
+**Talk (DMs & Groups)**
+- End-to-end encrypted messaging via NIP-EE (MLS): 1-on-1 DMs and group chats
+- Legacy DMs (NIP-17/44/59) displayed read-only for compatibility
+- LINE-style chat interface with cache-first message loading
 
 **Security**
 - Passkey login (passwordless)
@@ -180,7 +182,7 @@ Open `http://localhost:3000` in your browser.
 
 ### Supported NIPs
 
-NIP-01, 02, 05, 07, 09, 11, 17, 19, 25, 27, 30, 32, 42, 44, 46, 50, 51, 57, 58, 59, 62, 65, 70, 71, 98
+NIP-01, 02, 05, 07, 09, 11, 17, 19, 25, 27, 30, 32, 42, 44, 46, 50, 51, 57, 58, 59, 62, 65, 70, 71, 98, NIP-EE (MLS)
 
 ### License
 

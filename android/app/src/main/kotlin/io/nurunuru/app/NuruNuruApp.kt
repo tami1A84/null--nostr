@@ -5,6 +5,8 @@ import android.util.Log
 import io.nurunuru.app.data.ExternalSigner
 import io.nurunuru.app.data.NostrClient
 import io.nurunuru.app.data.NostrKeyUtils
+import io.nurunuru.app.data.RecommendationEngine
+import io.nurunuru.app.data.cache.NostrCache
 import io.nurunuru.app.data.prefs.AppPreferences
 import uniffi.nurunuru.initEngine
 
@@ -17,9 +19,17 @@ class NuruNuruApp : Application() {
     var prewarmedNostrClient: NostrClient? = null
         private set
 
+    /** Pre-created cache and engine — avoids SharedPreferences disk I/O on first Compose frame. */
+    lateinit var nostrCache: NostrCache
+        private set
+    lateinit var recommendationEngine: RecommendationEngine
+        private set
+
     override fun onCreate() {
         super.onCreate()
         prefs = AppPreferences(this)
+        nostrCache = NostrCache(this).also { it.applySettings(prefs) }
+        recommendationEngine = RecommendationEngine(this)
 
         // Initialise the Rust core database path once at startup.
         // Must happen before any NuruNuruClient is created.

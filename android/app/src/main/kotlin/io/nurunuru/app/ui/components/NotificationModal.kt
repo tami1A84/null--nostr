@@ -17,12 +17,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,6 +42,7 @@ import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.data.models.NotificationItem
 import io.nurunuru.app.data.models.UserProfile
 import io.nurunuru.app.data.prefs.AppPreferences
+import io.nurunuru.app.data.*
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import kotlinx.coroutines.delay
@@ -87,6 +92,7 @@ fun NotificationModal(
     val nuruColors = LocalNuruColors.current
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val pullRefreshState = rememberPullToRefreshState()
 
     var notifications by remember { mutableStateOf<List<NotificationItem>>(emptyList()) }
     var profiles by remember { mutableStateOf<Map<String, UserProfile>>(emptyMap()) }
@@ -96,6 +102,20 @@ fun NotificationModal(
     var showKindSettings by remember { mutableStateOf(false) }
     var enabledKinds by remember { mutableStateOf(prefs.notificationEnabledKinds) }
     var emojiReactionEnabled by remember { mutableStateOf(prefs.notificationEmojiReactionEnabled) }
+
+    // プルリフレッシュ
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(Unit) {
+            try {
+                val fresh = repository.fetchNotifications(myPubkey, skipCache = true)
+                notifications = fresh.items
+                profiles = fresh.profiles
+                originalPosts = fresh.originalPosts
+                pendingNew = emptyList()
+            } catch (_: Exception) { }
+            pullRefreshState.endRefresh()
+        }
+    }
 
     // 初回フェッチ + ライブポーリング（10秒ごと）
     LaunchedEffect(Unit) {
@@ -231,7 +251,9 @@ fun NotificationModal(
                 HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
 
                 // ─── コンテンツ ─────────────────────────────────────────
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxSize()
+                    .nestedScroll(pullRefreshState.nestedScrollConnection)
+                    .clipToBounds()) {
                     when {
                         loading -> {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -239,32 +261,39 @@ fun NotificationModal(
                             }
                         }
                         notifications.isEmpty() -> {
-                            Column(
-                                modifier = Modifier.fillMaxSize().padding(32.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize()
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(72.dp)
-                                        .background(nuruColors.bgSecondary, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.Notifications,
-                                        null,
-                                        modifier = Modifier.size(36.dp),
-                                        tint = nuruColors.textTertiary
-                                    )
+                                item {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Spacer(Modifier.height(64.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(72.dp)
+                                                .background(nuruColors.bgSecondary, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Notifications,
+                                                null,
+                                                modifier = Modifier.size(36.dp),
+                                                tint = nuruColors.textTertiary
+                                            )
+                                        }
+                                        Spacer(Modifier.height(16.dp))
+                                        Text("通知はまだありません", color = nuruColors.textSecondary, fontSize = 15.sp)
+                                        Text(
+                                            "リアクションや返信が届くとここに表示されます",
+                                            color = nuruColors.textTertiary,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.padding(top = 4.dp)
+                                        )
+                                    }
                                 }
-                                Spacer(Modifier.height(16.dp))
-                                Text("通知はまだありません", color = nuruColors.textSecondary, fontSize = 15.sp)
-                                Text(
-                                    "リアクションや返信が届くとここに表示されます",
-                                    color = nuruColors.textTertiary,
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
                             }
                         }
                         else -> {
@@ -283,6 +312,13 @@ fun NotificationModal(
                             }
                         }
                     }
+
+                    PullToRefreshContainer(
+                        state = pullRefreshState,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        containerColor = nuruColors.bgSecondary,
+                        contentColor = LineGreen
+                    )
 
                     // ─── 新着ピル ───────────────────────────────────────
                     Column(

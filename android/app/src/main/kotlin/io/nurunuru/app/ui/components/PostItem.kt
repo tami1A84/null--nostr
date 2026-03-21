@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.nurunuru.app.data.models.ScoredPost
+import io.nurunuru.app.data.*
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import kotlinx.coroutines.launch
 

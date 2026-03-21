@@ -2,6 +2,7 @@ package io.nurunuru.app
 
 import android.content.Intent
 import android.os.Bundle
+import java.lang.ref.WeakReference
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -13,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.nurunuru.app.data.ExternalSigner
 import io.nurunuru.app.ui.screens.BiometricUnlockScreen
@@ -26,8 +28,8 @@ import io.nurunuru.app.viewmodel.AuthViewModel
 class MainActivity : ComponentActivity() {
 
     companion object {
-        var instance: MainActivity? = null
-            private set
+        private var instanceRef: WeakReference<MainActivity>? = null
+        val instance: MainActivity? get() = instanceRef?.get()
     }
 
     private var authViewModel: AuthViewModel? = null
@@ -39,8 +41,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // installSplashScreen は super.onCreate() より前に呼ぶ必要がある
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-        instance = this
+        instanceRef = WeakReference(this)
         enableEdgeToEdge()
 
         // Official NIP-55 Proxy Server from rust-nostr
@@ -64,6 +68,14 @@ class MainActivity : ComponentActivity() {
         }
 
         val app = application as NuruNuruApp
+
+        // AuthState.Checking の間はスプラッシュ画面を維持する。
+        // Checking → LoggedIn/LoggedOut/BiometricRequired に遷移した瞬間にスプラッシュが消える。
+        // これにより起動直後の白画面フラッシュとフレームドロップがスプラッシュで隠れる。
+        val authVmForSplash = androidx.lifecycle.ViewModelProvider(this)[AuthViewModel::class.java]
+        splashScreen.setKeepOnScreenCondition {
+            authVmForSplash.authState.value is AuthState.Checking
+        }
 
         setContent {
             NuruNuruTheme {
@@ -107,7 +119,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (instance == this) instance = null
+        if (instanceRef?.get() == this) instanceRef = null
         // signerProxy?.stop()
         // signerProxy = null
         // メモリ上の秘密鍵をゼロ化

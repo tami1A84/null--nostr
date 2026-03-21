@@ -631,6 +631,81 @@ object NuruIcons {
         }.build()
     }
 
+    val Send: ImageVector = ImageVector.Builder(
+        name = "Send",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // <line x1="22" y1="2" x2="11" y2="13"/>
+        moveTo(22f, 2f)
+        lineTo(11f, 13f)
+        // <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        moveTo(22f, 2f)
+        lineTo(15f, 22f)
+        lineTo(11f, 13f)
+        lineTo(2f, 9f)
+        close()
+    }.build()
+
+    val Check: ImageVector = ImageVector.Builder(
+        name = "Check",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 2f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        moveTo(20f, 6f)
+        lineTo(9f, 17f)
+        lineTo(4f, 12f)
+    }.build()
+
+    val MoreVert: ImageVector = ImageVector.Builder(
+        name = "MoreVert",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = SolidColor(Color.White),
+        stroke = null
+    ) {
+        // Dot 1
+        moveTo(12f, 3.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, 1.5f, 1.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, -1.5f, 1.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, -1.5f, -1.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, 1.5f, -1.5f)
+        close()
+        // Dot 2
+        moveTo(12f, 10.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, 1.5f, 1.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, -1.5f, 1.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, -1.5f, -1.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, 1.5f, -1.5f)
+        close()
+        // Dot 3
+        moveTo(12f, 17.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, 1.5f, 1.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, -1.5f, 1.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, -1.5f, -1.5f)
+        arcToRelative(1.5f, 1.5f, 0f, false, true, 1.5f, -1.5f)
+        close()
+    }.build()
+
     val NotInterested: ImageVector = ImageVector.Builder(
         name = "NotInterested",
         defaultWidth = 24.dp,

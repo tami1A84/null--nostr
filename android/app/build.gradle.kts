@@ -33,8 +33,8 @@ android {
         applicationId = "io.nurunuru.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.3.9"
+        versionCode = 13
+        versionName = "1.4.0"
     }
 
     buildTypes {
@@ -64,6 +64,7 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

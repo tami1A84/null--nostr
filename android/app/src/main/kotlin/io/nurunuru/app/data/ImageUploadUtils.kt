@@ -15,9 +15,10 @@ import rust.nostr.sdk.*
 
 object ImageUploadUtils {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
-        .writeTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(90, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
         .build()
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -111,11 +112,11 @@ object ImageUploadUtils {
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string() ?: ""
                 if (!response.isSuccessful) {
-                    Log.w("ImageUploadUtils", "Upload failed: ${response.code} ${response.message} body: $body")
+                    Log.w("ImageUploadUtils", "Upload failed: ${response.code} ${response.message}")
                     return@withContext null
                 }
 
-                Log.d("ImageUploadUtils", "Upload response: $body")
+                Log.d("ImageUploadUtils", "Upload response: ${response.code}")
                 val root = json.parseToJsonElement(body).jsonObject
 
                 // nostr.build V2 response handling
@@ -124,7 +125,7 @@ object ImageUploadUtils {
                     return@withContext data?.get("url")?.jsonPrimitive?.content
                 } else {
                     // Fallback for different response formats or errors
-                    Log.w("ImageUploadUtils", "Upload status not success: $body")
+                    Log.w("ImageUploadUtils", "Upload status not success: ${response.code}")
                     val url = root["url"]?.jsonPrimitive?.content
                     if (url != null) return@withContext url
                 }
@@ -183,7 +184,7 @@ object ImageUploadUtils {
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string() ?: ""
                 if (!response.isSuccessful) {
-                    Log.w("ImageUploadUtils", "Yabu upload failed: ${response.code} body: $body")
+                    Log.w("ImageUploadUtils", "Yabu upload failed: ${response.code}")
                     return@withContext null
                 }
 

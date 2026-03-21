@@ -64,6 +64,16 @@ pub enum NuruNuruError {
     #[error("データベースエラー: {0}")]
     DatabaseError(String),
 
+    // --- MLS / NIP-EE (7xxx) ---
+    #[error("MLSエラー: {0}")]
+    MlsError(String),
+
+    /// Returned by `process_message` for Commit / Proposal messages.
+    /// MDK already updated local state; the caller should skip display but
+    /// NOT treat this as an error worth logging at warn/error level.
+    #[error("MLS state update (not displayable)")]
+    MlsStateUpdate,
+
     // --- Wrapped upstream errors ---
     #[error(transparent)]
     NostrSdk(#[from] nostr_sdk::client::Error),

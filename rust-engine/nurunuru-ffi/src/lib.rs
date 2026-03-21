@@ -87,9 +87,20 @@ impl NuruNuruClient {
             let sk = keys.secret_key().clone();
 
             let mut config = NuruNuruConfig::default();
+            config.mls_db_path = format!("{}_mls.sqlite3", db_path);
             config.db_path = db_path;
 
             let engine = NuruNuruEngine::new(keys, config)
+                .await
+                .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+
+            // Set the user's public key so follow-list, MLS, and recommendation
+            // queries operate with the correct identity from the start.
+            let pk = nostr::Keys::parse(&secret_key_hex)
+                .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?
+                .public_key();
+            engine
+                .login(pk)
                 .await
                 .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
 
@@ -119,6 +130,7 @@ impl NuruNuruClient {
             let keys = nostr::Keys::generate();
 
             let mut config = NuruNuruConfig::default();
+            config.mls_db_path = format!("{}_mls.sqlite3", db_path);
             config.db_path = db_path;
 
             let engine = NuruNuruEngine::new(keys, config)
@@ -518,9 +530,14 @@ impl NuruNuruClient {
             .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))
     }
 
-    // ─── DMs ───────────────────────────────────────────────────────────────
+    // ─── DMs (NIP-17, legacy) ──────────────────────────────────────────────
 
     /// Send an encrypted DM (NIP-17).
+    ///
+    /// **Deprecated**: Use MLS group messaging (`mls_create_message`) for new
+    /// conversations.  This method is kept for backwards compatibility during
+    /// the NIP-17 → NIP-EE migration period.
+    #[deprecated(note = "Use mls_create_message for new conversations (NIP-EE)")]
     pub fn send_dm(
         &self,
         recipient_hex: String,
@@ -531,6 +548,173 @@ impl NuruNuruClient {
         self.runtime
             .block_on(self.engine.send_dm(pk, &content))
             .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))
+    }
+
+    // ─── MLS / NIP-EE ──────────────────────────────────────────────────────
+
+    /// Generate a fresh MLS KeyPackage and return Kind-443 event data.
+    ///
+    /// The caller builds an unsigned Kind-443 event via `create_unsigned_event`,
+    /// signs it (internal key or Amber), then publishes via `publish_raw_event`.
+    pub fn mls_create_key_package(&self) -> Result<FfiKeyPackageEventData, NuruNuruFfiError> {
+        let data = self
+            .runtime
+            .block_on(self.engine.mls_create_key_package())
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(FfiKeyPackageEventData {
+            content: data.content,
+            tags: data.tags,
+        })
+    }
+
+    /// Create a new MLS group.
+    pub fn mls_create_group(
+        &self,
+        name: String,
+        admin_pubkeys: Vec<String>,
+        relays: Vec<String>,
+    ) -> Result<FfiMlsGroupInfo, NuruNuruFfiError> {
+        let info = self
+            .runtime
+            .block_on(self.engine.mls_create_group(name, admin_pubkeys, relays))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(core_group_info_to_ffi(info))
+    }
+
+    /// Add a member to a group using their Kind-443 KeyPackage event JSON.
+    ///
+    /// Returns commit (Kind 445) and welcome (Kind 444) event data.
+    pub fn mls_add_member(
+        &self,
+        group_id_hex: String,
+        key_package_event_json: String,
+    ) -> Result<FfiAddMemberResult, NuruNuruFfiError> {
+        let result = self
+            .runtime
+            .block_on(self.engine.mls_add_member(&group_id_hex, &key_package_event_json))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(FfiAddMemberResult {
+            commit_event_data: core_encrypted_msg_to_ffi(result.commit_event_data),
+            welcome_event_data: FfiWelcomeEventData {
+                recipient_pubkey: result.welcome_event_data.recipient_pubkey,
+                content: result.welcome_event_data.content,
+                tags: result.welcome_event_data.tags,
+            },
+        })
+    }
+
+    /// Encrypt an application message for a group (Kind 445 event data).
+    pub fn mls_create_message(
+        &self,
+        group_id_hex: String,
+        content: String,
+    ) -> Result<FfiEncryptedMessageData, NuruNuruFfiError> {
+        let data = self
+            .runtime
+            .block_on(self.engine.mls_create_message(&group_id_hex, &content))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(core_encrypted_msg_to_ffi(data))
+    }
+
+    /// Process an incoming Kind-445 event and return the decrypted message.
+    pub fn mls_process_message(
+        &self,
+        group_id_hex: String,
+        event_json: String,
+    ) -> Result<FfiDecryptedMessage, NuruNuruFfiError> {
+        let msg = self
+            .runtime
+            .block_on(self.engine.mls_process_message(&group_id_hex, &event_json))
+            .map_err(|e| match e {
+                nurunuru_core::NuruNuruError::MlsStateUpdate => NuruNuruFfiError::MlsStateUpdate,
+                other => NuruNuruFfiError::EngineError(other.to_string()),
+            })?;
+        Ok(FfiDecryptedMessage {
+            sender_pubkey: msg.sender_pubkey,
+            content: msg.content,
+            timestamp: msg.timestamp,
+            group_id_hex: msg.group_id_hex,
+        })
+    }
+
+    /// Process an incoming Kind-444 Welcome event and join the group.
+    pub fn mls_process_welcome(
+        &self,
+        welcome_event_json: String,
+    ) -> Result<FfiMlsGroupInfo, NuruNuruFfiError> {
+        let info = self
+            .runtime
+            .block_on(self.engine.mls_process_welcome(&welcome_event_json))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(core_group_info_to_ffi(info))
+    }
+
+    /// Retrieve decrypted message history for a group from MDK's local SQLite.
+    /// Use this on app startup to restore history without re-processing relay events.
+    pub fn mls_get_message_history(
+        &self,
+        group_id_hex: String,
+        limit: u64,
+    ) -> Result<Vec<FfiDecryptedMessage>, NuruNuruFfiError> {
+        let msgs = self
+            .runtime
+            .block_on(self.engine.mls_get_message_history(&group_id_hex, limit))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(msgs
+            .into_iter()
+            .map(|m| FfiDecryptedMessage {
+                sender_pubkey: m.sender_pubkey,
+                content: m.content,
+                timestamp: m.timestamp,
+                group_id_hex: m.group_id_hex,
+            })
+            .collect())
+    }
+
+    /// List all MLS groups the user belongs to.
+    pub fn mls_list_groups(&self) -> Result<Vec<FfiMlsGroupInfo>, NuruNuruFfiError> {
+        let groups = self
+            .runtime
+            .block_on(self.engine.mls_list_groups())
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(groups.into_iter().map(core_group_info_to_ffi).collect())
+    }
+
+    /// Get metadata for a single MLS group.
+    pub fn mls_get_group_info(
+        &self,
+        group_id_hex: String,
+    ) -> Result<FfiMlsGroupInfo, NuruNuruFfiError> {
+        let info = self
+            .runtime
+            .block_on(self.engine.mls_get_group_info(&group_id_hex))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(core_group_info_to_ffi(info))
+    }
+
+    /// Leave a group. Returns the Kind-445 commit event data to publish.
+    pub fn mls_leave_group(
+        &self,
+        group_id_hex: String,
+    ) -> Result<FfiEncryptedMessageData, NuruNuruFfiError> {
+        let data = self
+            .runtime
+            .block_on(self.engine.mls_leave_group(&group_id_hex))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(core_encrypted_msg_to_ffi(data))
+    }
+
+    /// Remove a member from a group. Returns the Kind-445 commit event data.
+    pub fn mls_remove_member(
+        &self,
+        group_id_hex: String,
+        member_pubkey: String,
+    ) -> Result<FfiEncryptedMessageData, NuruNuruFfiError> {
+        let data = self
+            .runtime
+            .block_on(self.engine.mls_remove_member(&group_id_hex, &member_pubkey))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(core_encrypted_msg_to_ffi(data))
     }
 
     // ─── Search / Feed ─────────────────────────────────────────────────────
@@ -986,6 +1170,81 @@ pub struct FfiConnectionStats {
     pub total_relays: u32,
 }
 
+// ─── MLS FFI Record types ───────────────────────────────────────────────────
+
+#[derive(uniffi::Record)]
+pub struct FfiMlsGroupInfo {
+    pub group_id_hex: String,
+    pub name: String,
+    pub description: String,
+    pub admin_pubkeys: Vec<String>,
+    pub member_pubkeys: Vec<String>,
+    pub relays: Vec<String>,
+    pub created_at: u64,
+    pub epoch: u64,
+    pub is_dm: bool,
+}
+
+#[derive(uniffi::Record)]
+pub struct FfiKeyPackageEventData {
+    pub content: String,
+    pub tags: Vec<Vec<String>>,
+}
+
+#[derive(uniffi::Record)]
+pub struct FfiEncryptedMessageData {
+    pub content: String,
+    pub tags: Vec<Vec<String>>,
+    pub ephemeral_pubkey: String,
+}
+
+#[derive(uniffi::Record)]
+pub struct FfiWelcomeEventData {
+    pub recipient_pubkey: String,
+    pub content: String,
+    pub tags: Vec<Vec<String>>,
+}
+
+#[derive(uniffi::Record)]
+pub struct FfiAddMemberResult {
+    pub commit_event_data: FfiEncryptedMessageData,
+    pub welcome_event_data: FfiWelcomeEventData,
+}
+
+#[derive(uniffi::Record)]
+pub struct FfiDecryptedMessage {
+    pub sender_pubkey: String,
+    pub content: String,
+    pub timestamp: u64,
+    pub group_id_hex: String,
+}
+
+// ─── MLS conversion helpers ─────────────────────────────────────────────────
+
+fn core_group_info_to_ffi(info: nurunuru_core::types::MlsGroupInfo) -> FfiMlsGroupInfo {
+    FfiMlsGroupInfo {
+        group_id_hex: info.group_id_hex,
+        name: info.name,
+        description: info.description,
+        admin_pubkeys: info.admin_pubkeys,
+        member_pubkeys: info.member_pubkeys,
+        relays: info.relays,
+        created_at: info.created_at,
+        epoch: info.epoch,
+        is_dm: info.is_dm,
+    }
+}
+
+fn core_encrypted_msg_to_ffi(
+    data: nurunuru_core::types::EncryptedMessageData,
+) -> FfiEncryptedMessageData {
+    FfiEncryptedMessageData {
+        content: data.content,
+        tags: data.tags,
+        ephemeral_pubkey: data.ephemeral_pubkey,
+    }
+}
+
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum NuruNuruFfiError {
     #[error("Runtime error: {0}")]
@@ -994,4 +1253,8 @@ pub enum NuruNuruFfiError {
     KeyError(String),
     #[error("Engine error: {0}")]
     EngineError(String),
+    /// Returned by `mls_process_message` for Commit / Proposal messages.
+    /// MDK already updated local MLS state; the message is not displayable.
+    #[error("MLS state update (not displayable)")]
+    MlsStateUpdate,
 }

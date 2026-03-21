@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.MuteListData
 import io.nurunuru.app.data.models.UserProfile
+import io.nurunuru.app.data.*
 import io.nurunuru.app.ui.components.UserAvatar
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import kotlinx.coroutines.launch

@@ -1,5 +1,6 @@
 package io.nurunuru.app.ui.components
 
+import io.nurunuru.app.ui.icons.NuruIcons
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -115,7 +116,7 @@ fun UserProfileModal(
                             var showMenu by remember { mutableStateOf(false) }
                             Box {
                                 IconButton(onClick = { showMenu = true }) {
-                                    Icon(Icons.Default.MoreVert, "メニュー", tint = Color.White)
+                                    Icon(NuruIcons.MoreVert, "メニュー", tint = Color.White)
                                 }
                                 DropdownMenu(
                                     expanded = showMenu,
@@ -123,13 +124,13 @@ fun UserProfileModal(
                                     modifier = Modifier.background(nuruColors.bgSecondary)
                                 ) {
                                     DropdownMenuItem(
-                                        text = { Text("ミュート", color = Color.Red) },
+                                        text = { Text("ミュート", color = nuruColors.error) },
                                         onClick = {
                                             showMenu = false
                                             viewModel.muteUser(pubkey)
                                             onDismiss()
                                         },
-                                        leadingIcon = { Icon(Icons.Default.Block, null, tint = Color.Red) }
+                                        leadingIcon = { Icon(NuruIcons.Block, null, tint = nuruColors.error) }
                                     )
                                 }
                             }
@@ -197,29 +198,12 @@ fun UserProfileModal(
                                 if (uiState.isFollowing) viewModel.unfollowUser(pubkey)
                                 else viewModel.followUser(pubkey)
                             },
+                            onMessageClick = if (!uiState.isOwnProfile) ({ onStartDM(pubkey) }) else null,
                             onFollowListClick = {
                                 viewModel.loadFollowProfiles()
                             },
                             clipboardManager = clipboardManager
                         )
-
-                        if (!uiState.isOwnProfile) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = { onStartDM(pubkey) },
-                                    modifier = Modifier.weight(1f),
-                                    colors = ButtonDefaults.buttonColors(containerColor = nuruColors.bgSecondary, contentColor = Color.White),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(Icons.Default.Mail, null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("メッセージ")
-                                }
-                            }
-                        }
                     }
 
                     item {

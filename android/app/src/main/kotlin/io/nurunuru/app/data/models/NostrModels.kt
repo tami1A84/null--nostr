@@ -65,6 +65,8 @@ data class ScoredPost(
     val myRepostEventId: String? = null
 )
 
+/** NIP-17 DM conversation — legacy, kept for read-only display during migration. */
+@Deprecated("Use MlsGroup for new conversations (NIP-EE)")
 data class DmConversation(
     val partnerPubkey: String,
     val partnerProfile: UserProfile? = null,
@@ -73,11 +75,46 @@ data class DmConversation(
     val unreadCount: Int = 0
 )
 
+/** NIP-17 DM message — legacy, kept for read-only display during migration. */
+@Deprecated("Use MlsMessage for new conversations (NIP-EE)")
 data class DmMessage(
     val event: NostrEvent,
     val content: String,
     val isMine: Boolean,
     val timestamp: Long
+)
+
+// ─── NIP-EE / MLS (Marmot) ──────────────────────────────────────────────────
+
+/** MLS group backed by NIP-EE (Kind 443/444/445). */
+@Serializable
+data class MlsGroup(
+    val groupIdHex: String,
+    val name: String,
+    val description: String = "",
+    val adminPubkeys: List<String>,
+    val memberPubkeys: List<String>,
+    val relays: List<String>,
+    val createdAt: Long,
+    val epoch: Long,
+    /** true if this is a 1:1 DM (2-person group) */
+    val isDm: Boolean,
+    // Enriched UI fields (not stored in Rust layer)
+    val memberProfiles: Map<String, UserProfile> = emptyMap(),
+    val lastMessage: String = "",
+    val lastMessageTime: Long = 0L,
+    val unreadCount: Int = 0
+)
+
+/** Decrypted MLS application message. */
+@Serializable
+data class MlsMessage(
+    val id: String,
+    val senderPubkey: String,
+    val content: String,
+    val timestamp: Long,
+    val groupIdHex: String,
+    val senderProfile: UserProfile? = null
 )
 
 @Serializable
@@ -206,4 +243,9 @@ object NostrKind {
     const val DATE_CANDIDATE = 31926
     const val TIME_BASED_EVENT = 31927
     const val CHRONOSTR_EVENT = 31928
+    // NIP-EE / MLS (Marmot)
+    const val MLS_KEY_PACKAGE = 443
+    const val MLS_WELCOME = 444
+    const val MLS_GROUP_MESSAGE = 445
+    const val MLS_KEY_PACKAGE_RELAYS = 10051
 }

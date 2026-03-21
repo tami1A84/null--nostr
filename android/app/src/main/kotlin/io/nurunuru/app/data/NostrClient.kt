@@ -8,9 +8,14 @@ import kotlinx.coroutines.flow.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import rust.nostr.sdk.PublicKey
-import uniffi.nurunuru.NuruNuruClient
+import uniffi.nurunuru.FfiAddMemberResult
+import uniffi.nurunuru.FfiDecryptedMessage
+import uniffi.nurunuru.FfiEncryptedMessageData
+import uniffi.nurunuru.FfiKeyPackageEventData
+import uniffi.nurunuru.FfiMlsGroupInfo
 import uniffi.nurunuru.FfiScoredPost
 import uniffi.nurunuru.FfiUserProfile
+import uniffi.nurunuru.NuruNuruClient
 import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "NostrClient"
@@ -68,7 +73,7 @@ class NostrClient(
                         publicKeyHex
                     }
                     if (hexPubkey.length != 64 || hexPubkey.any { it !in '0'..'9' && it !in 'a'..'f' && it !in 'A'..'F' }) {
-                        Log.e(TAG, "Invalid pubkey for Rust client (len=${hexPubkey.length}): ${hexPubkey.take(12)}…")
+                        Log.e(TAG, "Invalid pubkey for Rust client (len=${hexPubkey.length})")
                         return@launch
                     }
                     NuruNuruClient.newReadOnly(hexPubkey)
@@ -263,5 +268,91 @@ class NostrClient(
             }
         }
         return signer.nip44Encrypt(receiverPubkeyHex, content)
+    }
+
+    // ─── MLS / NIP-EE ────────────────────────────────────────────────────────
+
+    suspend fun mlsCreateKeyPackage(): FfiKeyPackageEventData? {
+        return withContext(Dispatchers.IO) {
+            try { ensureClient()?.mlsCreateKeyPackage() }
+            catch (e: Exception) { Log.w(TAG, "mlsCreateKeyPackage failed: ${e.message}"); null }
+        }
+    }
+
+    suspend fun mlsCreateGroup(
+        name: String,
+        adminPubkeys: List<String>,
+        relays: List<String>
+    ): FfiMlsGroupInfo? {
+        return withContext(Dispatchers.IO) {
+            try { ensureClient()?.mlsCreateGroup(name, adminPubkeys, relays) }
+            catch (e: Exception) { Log.w(TAG, "mlsCreateGroup failed: ${e.message}"); null }
+        }
+    }
+
+    suspend fun mlsAddMember(
+        groupIdHex: String,
+        keyPackageEventJson: String
+    ): FfiAddMemberResult? {
+        return withContext(Dispatchers.IO) {
+            try { ensureClient()?.mlsAddMember(groupIdHex, keyPackageEventJson) }
+            catch (e: Exception) { Log.w(TAG, "mlsAddMember failed: ${e.message}"); null }
+        }
+    }
+
+    suspend fun mlsGetMessageHistory(groupIdHex: String, limit: Long = 200L): List<FfiDecryptedMessage> {
+        return withContext(Dispatchers.IO) {
+            try { ensureClient()?.mlsGetMessageHistory(groupIdHex, limit.toULong()) ?: emptyList() }
+            catch (e: Exception) { Log.w(TAG, "mlsGetMessageHistory failed: ${e.message}"); emptyList() }
+        }
+    }
+
+    suspend fun mlsListGroups(): List<FfiMlsGroupInfo> {
+        return withContext(Dispatchers.IO) {
+            try { ensureClient()?.mlsListGroups() ?: emptyList() }
+            catch (e: Exception) { Log.w(TAG, "mlsListGroups failed: ${e.message}"); emptyList() }
+        }
+    }
+
+    suspend fun mlsGetGroupInfo(groupIdHex: String): FfiMlsGroupInfo? {
+        return withContext(Dispatchers.IO) {
+            try { ensureClient()?.mlsGetGroupInfo(groupIdHex) }
+            catch (e: Exception) { Log.w(TAG, "mlsGetGroupInfo failed: ${e.message}"); null }
+        }
+    }
+
+    suspend fun mlsLeaveGroup(groupIdHex: String): FfiEncryptedMessageData? {
+        return withContext(Dispatchers.IO) {
+            try { ensureClient()?.mlsLeaveGroup(groupIdHex) }
+            catch (e: Exception) { Log.w(TAG, "mlsLeaveGroup failed: ${e.message}"); null }
+        }
+    }
+
+    suspend fun mlsRemoveMember(groupIdHex: String, memberPubkey: String): FfiEncryptedMessageData? {
+        return withContext(Dispatchers.IO) {
+            try { ensureClient()?.mlsRemoveMember(groupIdHex, memberPubkey) }
+            catch (e: Exception) { Log.w(TAG, "mlsRemoveMember failed: ${e.message}"); null }
+        }
+    }
+
+    suspend fun mlsCreateMessage(groupIdHex: String, content: String): FfiEncryptedMessageData? {
+        return withContext(Dispatchers.IO) {
+            try { ensureClient()?.mlsCreateMessage(groupIdHex, content) }
+            catch (e: Exception) { Log.w(TAG, "mlsCreateMessage failed: ${e.message}"); null }
+        }
+    }
+
+    suspend fun mlsProcessMessage(groupIdHex: String, eventJson: String): FfiDecryptedMessage? {
+        return withContext(Dispatchers.IO) {
+            try { ensureClient()?.mlsProcessMessage(groupIdHex, eventJson) }
+            catch (e: Exception) { Log.w(TAG, "mlsProcessMessage failed: ${e.message}"); null }
+        }
+    }
+
+    suspend fun mlsProcessWelcome(welcomeEventJson: String): FfiMlsGroupInfo? {
+        return withContext(Dispatchers.IO) {
+            try { ensureClient()?.mlsProcessWelcome(welcomeEventJson) }
+            catch (e: Exception) { Log.w(TAG, "mlsProcessWelcome failed: ${e.message}"); null }
+        }
     }
 }

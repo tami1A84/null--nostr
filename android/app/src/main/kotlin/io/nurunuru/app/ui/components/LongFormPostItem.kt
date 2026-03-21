@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import io.nurunuru.app.data.models.ScoredPost
+import io.nurunuru.app.data.*
 import io.nurunuru.app.ui.theme.LocalNuruColors
 
 @Composable

@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.nurunuru.app.data.NostrRepository
+import io.nurunuru.app.data.*
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import kotlinx.coroutines.CompletableDeferred
@@ -350,7 +351,13 @@ private class NostrJsBridge(
     }
 
     private fun resolve(id: String, jsonValue: String) {
-        val safeId = id.replace("\\", "\\\\").replace("'", "\\'")
+        val safeId = id
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("`", "\\`")
+            .replace("\u0000", "")
         webViewState.value?.post {
             webViewState.value?.evaluateJavascript(
                 "window.__nostr_resolve('$safeId', $jsonValue)", null
@@ -359,7 +366,13 @@ private class NostrJsBridge(
     }
 
     private fun reject(id: String, message: String) {
-        val safeId = id.replace("\\", "\\\\").replace("'", "\\'")
+        val safeId = id
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("`", "\\`")
+            .replace("\u0000", "")
         val safeMsg = message.replace("\\", "\\\\").replace("'", "\\'")
         webViewState.value?.post {
             webViewState.value?.evaluateJavascript(

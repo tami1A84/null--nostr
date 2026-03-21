@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Router
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.NostrKind
+import io.nurunuru.app.data.*
 import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
@@ -100,6 +101,13 @@ fun PostModal(
     ) { hasMicPermission = it }
 
     val speechRecognizer = remember { SpeechRecognizer.createSpeechRecognizer(context) }
+
+    DisposableEffect(speechRecognizer) {
+        onDispose {
+            speechRecognizer.destroy()
+        }
+    }
+
     val sttIntent = remember {
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)

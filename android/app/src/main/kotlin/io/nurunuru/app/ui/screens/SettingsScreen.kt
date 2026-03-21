@@ -103,7 +103,8 @@ fun SettingsScreen(
     prefs: AppPreferences,
     pubkeyHex: String,
     pictureUrl: String?,
-    onExternalAppOpenChanged: (Boolean) -> Unit = {}
+    onExternalAppOpenChanged: (Boolean) -> Unit = {},
+    onMlsCacheCleared: () -> Unit = {}
 ) {
     val nuruColors = LocalNuruColors.current
     var showLogoutDialog by remember { mutableStateOf(false) }
@@ -151,7 +152,8 @@ fun SettingsScreen(
             repository = repository,
             pubkeyHex = pubkeyHex,
             prefs = prefs,
-            onBack = { selectedApp = null }
+            onBack = { selectedApp = null },
+            onMlsCacheCleared = onMlsCacheCleared
         )
         return
     }
@@ -673,7 +675,8 @@ private fun MiniAppDetailView(
     repository: NostrRepository,
     pubkeyHex: String,
     prefs: AppPreferences,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onMlsCacheCleared: () -> Unit = {}
 ) {
     val nuruColors = LocalNuruColors.current
     val title = when(app.id) {
@@ -727,7 +730,7 @@ private fun MiniAppDetailView(
                 "elevenlabs" -> ElevenLabsSettings(prefs = prefs)
                 "backup" -> EventBackupSettings(pubkey = pubkeyHex, repository = repository)
                 "vanish" -> VanishRequest(pubkey = pubkeyHex, repository = repository)
-                "cache" -> CacheSettings(prefs = prefs, repository = repository)
+                "cache" -> CacheSettings(prefs = prefs, repository = repository, onMlsCacheCleared = onMlsCacheCleared)
                 "scheduler" -> SchedulerApp(pubkey = pubkeyHex, repository = repository)
                 else -> {
                     Column(

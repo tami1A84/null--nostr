@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-03-21
+
+### Added (Android)
+- NIP-EE (MLS) トーク実装: Kind-443 (KeyPackage) / Kind-444 (Welcome) / Kind-445 (GroupMessage) による End-to-End 暗号化グループメッセージ
+- トークメッセージのキャッシュファースト表示: Rust SQLite ローカル履歴を即時表示し、リレーから差分を非同期更新
+- SplashScreen API 導入: `AuthState.Checking` 中はシステムスプラッシュを維持し、起動時の白画面フラッシュを解消
+
+### Fixed (Android)
+- トーク一覧のグループ名・トーク画面タイトルが hex 公開鍵になる問題: DM は Rust 内部グループ名を無視し、パートナーのプロフィール名を表示
+- トーク一覧が時間経過で消える問題: Rust クライアント未接続時に `fetchMlsGroups()` がキャッシュを返すよう修正、空リストで既存リストを上書きしないよう保護
+- トーク開封時にローディングアニメーションがキャッシュより先に表示される問題: メッセージがある場合はスケルトンをスキップ
+- 起動時の重複 `loadGroups()` 呼び出しを排除
+
+### Changed (Android)
+- `NostrRepository` を機能別ファイルに分割 (Timeline / Actions / Notifications / Profiles / Reactions / Talk / Backup / LiveStream)
+- `NostrCache` と `RecommendationEngine` を `Application.onCreate()` で事前生成し、初回 Compose 測定から SharedPreferences I/O を除外
+
 ## [1.3.9] - 2026-03-21
 
 ### Added (Android)

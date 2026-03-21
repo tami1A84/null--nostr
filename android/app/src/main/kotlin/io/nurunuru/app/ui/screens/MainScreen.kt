@@ -58,7 +58,9 @@ fun MainScreen(
     var isExternalAppOpen by remember { mutableStateOf(false) }
 
     // Create shared NostrClient and Repository
-    val recommendationEngine = remember { io.nurunuru.app.data.RecommendationEngine(context) }
+    // NostrCache と RecommendationEngine は NuruNuruApp.onCreate() で事前生成済み。
+    // remember { } は参照を保持するだけで SharedPreferences I/O は発生しない。
+    val recommendationEngine = remember { app.recommendationEngine }
     val nostrClient = remember {
         if (!hasInternalKey && app.prewarmedNostrClient != null) {
             // Reuse the client pre-warmed in Application.onCreate() — relay
@@ -79,9 +81,7 @@ fun MainScreen(
             ).also { it.connect() }
         }
     }
-    val nostrCache = remember {
-        io.nurunuru.app.data.cache.NostrCache(context).also { it.applySettings(app.prefs) }
-    }
+    val nostrCache = remember { app.nostrCache }
     val repository = remember { NostrRepository(nostrClient, app.prefs, nostrCache, recommendationEngine) }
 
     // ViewModels
@@ -104,10 +104,9 @@ fun MainScreen(
 
     // ── バックグラウンドプリフェッチ ─────────────────────────────────────────
     // タイムライン表示中に他タブのデータをバックグラウンドで取得しておく。
-    // 各 ViewModel は内部でキャッシュファーストのため、タブ切り替えが瞬時になる。
+    // talkVM.loadGroups() は TalkViewModel.init 内で既に呼ばれているため不要。
     LaunchedEffect(pubkeyHex) {
         launch { homeVM.loadMyProfile() }
-        launch { talkVM.loadConversations() }
     }
 
     // Disconnect on dispose
@@ -159,7 +158,7 @@ fun MainScreen(
                                         if (activeTab == tab) {
                                             when (tab) {
                                                 BottomTab.TIMELINE -> timelineVM.refresh()
-                                                BottomTab.TALK -> talkVM.loadConversations()
+                                                BottomTab.TALK -> talkVM.loadGroups()
                                                 BottomTab.HOME -> homeVM.refresh()
                                                 BottomTab.MINIAPP -> {}
                                             }
@@ -208,7 +207,11 @@ fun MainScreen(
                     prefs = app.prefs,
                     myPubkey = pubkeyHex,
                     myPictureUrl = myProfile?.picture,
-                    myDisplayName = myProfile?.displayedName ?: ""
+                    myDisplayName = myProfile?.displayedName ?: "",
+                    onStartDM = { partnerPubkey ->
+                        talkVM.createDmConversation(partnerPubkey)
+                        activeTab = BottomTab.TALK
+                    }
                 )
             }
 
@@ -219,7 +222,14 @@ fun MainScreen(
                 exit  = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)),
                 modifier = Modifier.fillMaxSize()
             ) {
-                HomeScreen(viewModel = homeVM, repository = repository)
+                HomeScreen(
+                    viewModel = homeVM,
+                    repository = repository,
+                    onStartDM = { partnerPubkey ->
+                        talkVM.createDmConversation(partnerPubkey)
+                        activeTab = BottomTab.TALK
+                    }
+                )
             }
 
             // ── TALK ──────────────────────────────────────────────────────────
@@ -229,7 +239,7 @@ fun MainScreen(
                 exit  = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)),
                 modifier = Modifier.fillMaxSize()
             ) {
-                TalkScreen(viewModel = talkVM)
+                TalkScreen(viewModel = talkVM, myPubkeyHex = pubkeyHex, repository = repository)
             }
 
             // ── MINIAPP (Settings) — 軽量なため都度レンダリングで問題なし ────
@@ -240,7 +250,8 @@ fun MainScreen(
                     prefs = app.prefs,
                     pubkeyHex = pubkeyHex,
                     pictureUrl = myProfile?.picture,
-                    onExternalAppOpenChanged = { isExternalAppOpen = it }
+                    onExternalAppOpenChanged = { isExternalAppOpen = it },
+                    onMlsCacheCleared = { talkVM.clearStateAfterCacheClear() }
                 )
             }
         }

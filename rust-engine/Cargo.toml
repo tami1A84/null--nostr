@@ -20,6 +20,13 @@ thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
+mdk-core = "0.7"
+mdk-sqlite-storage = "0.7"
+mdk-storage-traits = "0.7"
+hex = "0.4"
+
+[patch.crates-io]
+mdk-sqlite-storage = { path = "vendor/mdk-sqlite-storage" }
 
 [profile.release]
 lto = true

@@ -1,6 +1,7 @@
 package io.nurunuru.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -45,6 +46,7 @@ fun ProfileHeader(
     badges: List<io.nurunuru.app.data.models.NostrEvent>,
     onEditClick: () -> Unit,
     onFollowClick: () -> Unit,
+    onMessageClick: (() -> Unit)? = null,
     onFollowListClick: () -> Unit,
     clipboardManager: ClipboardManager
 ) {
@@ -73,7 +75,7 @@ fun ProfileHeader(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth()
-                .padding(top = 64.dp),
+                .padding(top = 56.dp),
             shape = RoundedCornerShape(16.dp),
             color = bgPrimary,
             shadowElevation = 2.dp
@@ -91,16 +93,18 @@ fun ProfileHeader(
                     Spacer(modifier = Modifier.width(12.dp))
 
                     Column(modifier = Modifier.weight(1f).padding(top = 8.dp)) {
+                        // 名前行：ユーザー名 + ボタン群（右端）
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = profile?.displayedName ?: "Anonymous",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
                                 color = TextPrimary,
-                                maxLines = 1
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f)
                             )
                             if (isOwnProfile) {
                                 Icon(
@@ -108,9 +112,46 @@ fun ProfileHeader(
                                     contentDescription = "編集",
                                     tint = TextTertiary,
                                     modifier = Modifier
+                                        .padding(start = 6.dp)
                                         .size(16.dp)
                                         .clickable { onEditClick() }
                                 )
+                            }
+                            if (!isOwnProfile) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                ) {
+                                    if (onMessageClick != null) {
+                                        Button(
+                                            onClick = onMessageClick,
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color.Transparent,
+                                                contentColor = TextPrimary
+                                            ),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                                            shape = RoundedCornerShape(20.dp),
+                                            modifier = Modifier.height(34.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp)
+                                        ) {
+                                            Icon(Icons.Default.Mail, contentDescription = "メッセージ", modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                    Button(
+                                        onClick = onFollowClick,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (isFollowing) Color.Transparent else LineGreen,
+                                            contentColor = if (isFollowing) TextPrimary else Color.White
+                                        ),
+                                        border = if (isFollowing) androidx.compose.foundation.BorderStroke(1.dp, BorderColor) else null,
+                                        shape = RoundedCornerShape(20.dp),
+                                        modifier = Modifier.height(34.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp)
+                                    ) {
+                                        Text(if (isFollowing) "解除" else "フォロー", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
                             }
                         }
 
@@ -122,7 +163,7 @@ fun ProfileHeader(
                             ) {
                                 if (isNip05Verified) {
                                     Icon(
-                                        imageVector = Icons.Default.Check,
+                                        imageVector = NuruIcons.Check,
                                         contentDescription = null,
                                         tint = LineGreen,
                                         modifier = Modifier.size(14.dp)
@@ -154,22 +195,6 @@ fun ProfileHeader(
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                             )
                             Icon(Icons.Default.ContentCopy, null, tint = TextTertiary, modifier = Modifier.size(12.dp))
-                        }
-                    }
-
-                    if (!isOwnProfile) {
-                        Button(
-                            onClick = onFollowClick,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isFollowing) Color.Transparent else LineGreen,
-                                contentColor = if (isFollowing) TextPrimary else Color.White
-                            ),
-                            border = if (isFollowing) androidx.compose.foundation.BorderStroke(1.dp, BorderColor) else null,
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.height(34.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp)
-                        ) {
-                            Text(if (isFollowing) "解除" else "フォロー", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

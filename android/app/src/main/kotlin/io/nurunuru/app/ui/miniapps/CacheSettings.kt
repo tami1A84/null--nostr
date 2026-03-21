@@ -53,6 +53,8 @@ private val CACHE_TYPES = listOf(
     CacheTypeConfig("emoji",        "絵文字",               "kind 10030",         86_400_000L),
     CacheTypeConfig("relay",        "リレーリスト",         "kind 10002",         86_400_000L),
     CacheTypeConfig("badge",        "プロフィールバッジ",   "kind 8, 30009",      86_400_000L),
+    CacheTypeConfig("mls_groups",   "トーク（グループ）",   "kind 443 / 444",     2_592_000_000L),
+    CacheTypeConfig("mls_messages", "トーク（メッセージ）", "kind 445",           2_592_000_000L),
 )
 
 private fun formatTtl(ms: Long): String {
@@ -81,7 +83,7 @@ private fun formatBytes(bytes: Long): String = when {
 // ── メイン UI ────────────────────────────────────────────────────────────────
 
 @Composable
-fun CacheSettings(prefs: AppPreferences, repository: NostrRepository) {
+fun CacheSettings(prefs: AppPreferences, repository: NostrRepository, onMlsCacheCleared: () -> Unit = {}) {
     val nuruColors = LocalNuruColors.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -158,6 +160,7 @@ fun CacheSettings(prefs: AppPreferences, repository: NostrRepository) {
                                     withContext(Dispatchers.Main) {
                                         refreshStats()
                                         clearing = false
+                                        onMlsCacheCleared()
                                     }
                                 }
                             },
@@ -280,6 +283,9 @@ fun CacheSettings(prefs: AppPreferences, repository: NostrRepository) {
                                             withContext(Dispatchers.Main) {
                                                 count = 0
                                                 refreshStats()
+                                                if (cfg.id == "mls_groups" || cfg.id == "mls_messages") {
+                                                    onMlsCacheCleared()
+                                                }
                                             }
                                         }
                                     },

@@ -24,7 +24,8 @@ private val DarkColorScheme = darkColorScheme(
     outline = BorderColor,
     outlineVariant = BorderColorStrong,
     error = ColorError,
-    onError = BgPrimary
+    onError = BgPrimary,
+    surfaceTint = Color.Transparent
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -42,7 +43,8 @@ private val LightColorScheme = lightColorScheme(
     onSurfaceVariant = TextSecondaryLight,
     outline = BorderColorLight,
     error = Color(0xFFE57373),
-    onError = Color.White
+    onError = Color.White,
+    surfaceTint = Color.Transparent
 )
 
 // Custom colors accessible via LocalNuruColors.current

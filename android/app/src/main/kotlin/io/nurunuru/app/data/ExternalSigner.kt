@@ -113,7 +113,7 @@ object ExternalSigner : AppSigner {
     }
 
     suspend fun signEvent(context: Context?, eventJson: String, pubkey: String): String? {
-        Log.d(TAG, "Requesting signature (pubkey: ${pubkey.take(12)}...)")
+        Log.d(TAG, "Requesting signature")
         val intent = createSignEventIntent(context, eventJson, pubkey)
         val result = request(context, intent) ?: run {
             Log.w(TAG, "Signing request failed or cancelled")
@@ -333,9 +333,10 @@ object ExternalSigner : AppSigner {
     fun onResult(intent: Intent?) {
         Log.d(TAG, "onResult called: intent=${if (intent != null) "non-null (extras: ${intent.extras?.keySet()?.joinToString()})" else "null"}")
         if (intent != null) {
-            pendingRequest?.complete(intent)
+            pendingRequest?.takeIf { !it.isCompleted }?.complete(intent)
         } else {
-            pendingRequest?.cancel()
+            pendingRequest?.takeIf { !it.isCompleted }?.cancel()
         }
+        pendingRequest = null
     }
 }

@@ -1,16 +1,25 @@
 package io.nurunuru.app.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,44 +27,67 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.nurunuru.app.data.NostrKeyUtils
-import io.nurunuru.app.data.models.DmConversation
-import io.nurunuru.app.data.models.DmMessage
+import io.nurunuru.app.data.NostrRepository
+import io.nurunuru.app.data.models.MlsGroup
+import io.nurunuru.app.data.models.MlsMessage
 import io.nurunuru.app.ui.components.*
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.TalkViewModel
 
 @Composable
-fun TalkScreen(viewModel: TalkViewModel) {
+fun TalkScreen(viewModel: TalkViewModel, myPubkeyHex: String, repository: NostrRepository) {
     val uiState by viewModel.uiState.collectAsState()
 
-    if (uiState.activeConversation != null) {
-        ConversationScreen(
+    LaunchedEffect(Unit) {
+        viewModel.ensureKeyPackagePublished()
+    }
+
+    if (uiState.activeGroupId != null && uiState.activeGroup != null) {
+        GroupChatScreen(
             viewModel = viewModel,
-            partnerPubkey = uiState.activeConversation!!,
+            group = uiState.activeGroup!!,
             messages = uiState.messages,
             isLoading = uiState.messagesLoading,
-            isSending = uiState.sendingMessage
+            isSending = uiState.sendingMessage,
+            myPubkeyHex = myPubkeyHex,
+            repository = repository
         )
     } else {
-        ConversationListScreen(
+        GroupListScreen(
             viewModel = viewModel,
-            conversations = uiState.conversations,
-            isLoading = uiState.isLoading
+            groups = uiState.groups,
+            isLoading = uiState.isLoading,
+            myPubkeyHex = myPubkeyHex
         )
     }
 }
 
+private enum class TalkFilter { ALL, FRIENDS, GROUPS }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConversationListScreen(
+private fun GroupListScreen(
     viewModel: TalkViewModel,
-    conversations: List<DmConversation>,
-    isLoading: Boolean
+    groups: List<MlsGroup>,
+    isLoading: Boolean,
+    myPubkeyHex: String
 ) {
     val nuruColors = LocalNuruColors.current
+    val uiState by viewModel.uiState.collectAsState()
     var showNewChatModal by remember { mutableStateOf(false) }
+    var showAddMenu by remember { mutableStateOf(false) }
+    var activeFilter by remember { mutableStateOf(TalkFilter.ALL) }
+
+    val filteredGroups = remember(groups, activeFilter) {
+        when (activeFilter) {
+            TalkFilter.ALL     -> groups
+            TalkFilter.FRIENDS -> groups.filter { it.isDm }
+            TalkFilter.GROUPS  -> groups.filter { !it.isDm }
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -64,49 +96,84 @@ private fun ConversationListScreen(
                 windowInsets = WindowInsets.statusBars,
                 title = { Text("トーク", fontWeight = FontWeight.SemiBold) },
                 actions = {
-                    IconButton(
-                        onClick = { showNewChatModal = true },
-                        modifier = Modifier
-                            .padding(end = 8.dp)
-                            .size(32.dp)
-                            .background(LineGreen, CircleShape)
-                    ) {
-                        Icon(Icons.Default.Add, "新規トーク", tint = Color.White, modifier = Modifier.size(20.dp))
+                    Box {
+                        IconButton(
+                            onClick = { showAddMenu = true },
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .size(32.dp)
+                                .background(LineGreen, CircleShape)
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                "新規トーク",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showAddMenu,
+                            onDismissRequest = { showAddMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("新しいトーク") },
+                                onClick = { showAddMenu = false; showNewChatModal = true }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("グループ作成") },
+                                onClick = { showAddMenu = false; viewModel.showCreateGroup() }
+                            )
+                        }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
+        // 新しいトーク (1:1 DM) modal
         if (showNewChatModal) {
             NewChatModal(
                 onDismiss = { showNewChatModal = false },
                 onStartChat = { pubkey ->
                     showNewChatModal = false
-                    viewModel.openConversation(pubkey)
+                    viewModel.createDmConversation(pubkey)
                 }
             )
         }
 
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            when {
-                isLoading -> {
-                    Column {
-                        repeat(8) {
-                            ListItemSkeleton()
-                        }
-                    }
-                }
-                conversations.isEmpty() -> TalkEmptyState()
-                else -> {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(conversations, key = { it.partnerPubkey }) { conversation ->
+        // グループ作成 modal
+        if (uiState.showCreateGroup) {
+            CreateGroupModal(
+                followingProfiles = uiState.followingProfiles,
+                isLoadingFollowing = uiState.followingLoading,
+                onCreate = { name, members ->
+                    viewModel.createGroupChat(name, members)
+                },
+                onDismiss = { viewModel.hideCreateGroup() }
+            )
+        }
+
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // ── サブヘッダー（フィルタータブ） ────────────────────────────
+            TalkFilterBar(active = activeFilter, onSelect = { activeFilter = it })
+            HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+
+            // ── リスト ────────────────────────────────────────────────────
+            Box(modifier = Modifier.fillMaxSize()) {
+                when {
+                    isLoading && groups.isEmpty() -> Column { repeat(8) { ListItemSkeleton() } }
+                    filteredGroups.isEmpty() -> TalkEmptyState()
+                    else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(filteredGroups, key = { it.groupIdHex }) { group ->
                             Surface(color = MaterialTheme.colorScheme.background) {
                                 Column {
-                                    ConversationItem(
-                                        conversation = conversation,
-                                        onClick = { viewModel.openConversation(conversation.partnerPubkey) }
+                                    GroupItem(
+                                        group = group,
+                                        myPubkeyHex = myPubkeyHex,
+                                        onClick = { viewModel.openGroup(group.groupIdHex) }
                                     )
                                     HorizontalDivider(
                                         modifier = Modifier.padding(horizontal = 16.dp),
@@ -123,22 +190,71 @@ private fun ConversationListScreen(
     }
 }
 
+@Composable
+private fun TalkFilterBar(active: TalkFilter, onSelect: (TalkFilter) -> Unit) {
+    val nuruColors = LocalNuruColors.current
+    val filters = listOf(
+        TalkFilter.ALL     to "すべて",
+        TalkFilter.FRIENDS to "友だち",
+        TalkFilter.GROUPS  to "グループ"
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        filters.forEach { (filter, label) ->
+            val selected = active == filter
+            Surface(
+                onClick = { onSelect(filter) },
+                shape = RoundedCornerShape(20.dp),
+                color = if (selected) LineGreen else nuruColors.bgSecondary,
+                modifier = Modifier.height(32.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = label,
+                        fontSize = 13.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (selected) Color.White else nuruColors.textPrimary
+                    )
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConversationScreen(
+private fun GroupChatScreen(
     viewModel: TalkViewModel,
-    partnerPubkey: String,
-    messages: List<DmMessage>,
+    group: MlsGroup,
+    messages: List<MlsMessage>,
     isLoading: Boolean,
-    isSending: Boolean
+    isSending: Boolean,
+    myPubkeyHex: String,
+    repository: NostrRepository
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
-    ) { uris -> /* TODO */ }
+    ) { _ -> /* TODO: image upload */ }
 
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+    }
+
+    val title = if (!group.isDm && group.name.isNotBlank()) {
+        group.name
+    } else {
+        val partnerPubkey = group.memberPubkeys.firstOrNull { it != myPubkeyHex } ?: ""
+        group.memberProfiles[partnerPubkey]?.displayedName
+            ?: NostrKeyUtils.shortenPubkey(partnerPubkey).ifEmpty { group.groupIdHex.take(8) }
     }
 
     Scaffold(
@@ -146,24 +262,29 @@ private fun ConversationScreen(
         topBar = {
             TopAppBar(
                 windowInsets = WindowInsets.statusBars,
-                title = { Text(NostrKeyUtils.shortenPubkey(partnerPubkey), fontWeight = FontWeight.SemiBold) },
+                title = { Text(title, fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    IconButton(onClick = { viewModel.closeConversation() }) {
+                    IconButton(onClick = { viewModel.closeGroup() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "戻る")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                actions = {
+                    IconButton(onClick = { viewModel.showGroupInfo() }) {
+                        Icon(Icons.Outlined.Info, contentDescription = "グループ情報")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
             )
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             Box(modifier = Modifier.weight(1f)) {
-                if (isLoading) {
+                if (isLoading && messages.isEmpty()) {
                     Column(Modifier.padding(top = 16.dp)) {
-                        repeat(5) { i ->
-                            MessageSkeleton(alignRight = i % 2 == 1)
-                        }
+                        repeat(5) { i -> MessageSkeleton(alignRight = i % 2 == 1) }
                     }
                 } else {
                     LazyColumn(
@@ -172,22 +293,36 @@ private fun ConversationScreen(
                         contentPadding = PaddingValues(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(messages, key = { it.event.id }) { message ->
-                            MessageBubble(message = message)
+                        items(messages, key = { it.id }) { message ->
+                            MlsMessageBubble(message = message, myPubkeyHex = myPubkeyHex)
                         }
                     }
                 }
             }
 
-            HorizontalDivider(color = LocalNuruColors.current.border, thickness = 0.5.dp)
+            HorizontalDivider(
+                color = LocalNuruColors.current.border,
+                thickness = 0.5.dp
+            )
             MessageInputBar(
-                onSendMessage = { text, cw ->
-                    val finalContent = if (cw != null) "[CW: $cw]\n\n$text" else text
-                    viewModel.sendMessage(partnerPubkey, finalContent)
+                onSendMessage = { text ->
+                    viewModel.sendMessage(group.groupIdHex, text)
                 },
                 onImageAttach = { imagePickerLauncher.launch("image/*") },
-                isSending = isSending
+                isSending = isSending,
+                myPubkeyHex = myPubkeyHex,
+                repository = repository
             )
         }
+    }
+
+    // Group info modal
+    if (uiState.showGroupInfo) {
+        GroupInfoModal(
+            group = group,
+            myPubkeyHex = myPubkeyHex,
+            onDismiss = { viewModel.hideGroupInfo() },
+            onLeave = { viewModel.leaveGroup() }
+        )
     }
 }

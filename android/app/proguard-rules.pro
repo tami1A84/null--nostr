@@ -3,6 +3,15 @@
 # Keep Nostr data models
 -keep class io.nurunuru.app.data.models.** { *; }
 
+# Compose runtime: SnapshotStateList lock verification warnings (R8 optimization issue)
+-keep class androidx.compose.runtime.snapshots.SnapshotStateList {
+    boolean conditionalUpdate(boolean, kotlin.jvm.functions.Function1);
+    boolean conditionalUpdate$default(...);
+    java.lang.Object mutate(kotlin.jvm.functions.Function1);
+    void update(boolean, kotlin.jvm.functions.Function1);
+    void update$default(...);
+}
+
 # Keep kotlinx.serialization
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.AnnotationsKt
