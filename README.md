@@ -29,30 +29,32 @@ Nostrは、特定の企業やサーバーに依存しない自由なSNSプロト
 
 ### 主な機能
 
-タイムラインはフォロー中とおすすめを切り替えて表示できます。画像・動画・カスタム絵文字・長文記事（NIP-23）に対応しています。
-
-投稿は最大3枚の並列画像アップロードが可能で、投稿先リレーをイベント単位で選択できます。NIP-70（保護投稿）にも対応しています。
-
-いいね・リアクションはカスタム絵文字に対応しており、2回タップで取り消しができます。リポストは長押しで引用リポストに切り替わります。
-
-通知はリアクション・Zap・リポスト・返信・メンション・誕生日をリアルタイムで受信します。
-
-トークはNIP-EE（MLS）によるE2E暗号化のDMとグループチャットに対応しています。旧来のNIP-17 DMの読み取りも可能です。
-
-Zapはインボイス生成・送信に対応し、金額はBIP-177（₿）表記で表示します。
-
-検索はNIP-50全文検索で、`#タグ` `from:npub` `filter:image` などのコマンドに対応しています。
-
-ミニアプリとしてカスタム絵文字管理、プロフィールバッジ設定、リレー設定、ミュートリスト、Zap設定、調整くん（スケジュール調整）、音声入力、バックアップ、削除リクエスト、キャッシュ設定を提供しています。
-
-ログインはnsec・外部署名アプリ（Amber、NIP-55）に対応しています。
-
 <div align="center">
 <img src="https://blossom.primal.net/07c92011f73f301d3dfe0e642f8d6c09547b934e4b8cb51ab0781f4288e5e370.png" width="23%" />
 <img src="https://blossom.primal.net/08e58108054026805ba15fec73907598354647af5051505483eab71d74e5e265.png" width="23%" />
 <img src="https://blossom.primal.net/51245134a6f922b4b22eeb65f0ee7c6aa96a5021596917e34b18a792b73ea540.png" width="23%" />
 <img src="https://blossom.primal.net/3251a2a0816281515f2e115527037f4f0ce257bc555649717ddfaaee24f51dd4.png" width="23%" />
 </div>
+
+アプリはホーム・タイムライン・トーク・ミニアプリの4タブ構成です。
+
+タイムラインはフォロー中の投稿を表示します。画像・動画・カスタム絵文字・長文記事に対応しています。ホームタブでは自分の投稿といいねした投稿を切り替えて確認できます。
+
+投稿は最大3枚の画像を同時にアップロードできます。投稿先のリレーをその都度選べます。
+
+いいねはカスタム絵文字に対応しています。2回タップで取り消せます。
+
+通知はリアクション・Zap・リポスト・返信・メンション・誕生日をリアルタイムで受信します。
+
+トークはE2E暗号化のDMとグループチャットに対応しています。
+
+ZapはLightningインボイスの生成・送信に対応しています。
+
+検索は全文検索で、`#タグ` `from:npub` `filter:image` などのコマンドに対応しています。
+
+ミニアプリとしてカスタム絵文字、プロフィールバッジ、リレー設定、ミュートリスト、Zap設定、調整くん、音声入力設定、バックアップ、削除リクエスト、キャッシュ設定を提供しています。
+
+ログインはnsec・外部署名アプリ（Amber）に対応しています。
 
 ### 対応NIP
 
@@ -107,30 +109,32 @@ Also available via [zapstore](https://zapstore.dev).
 
 ### Features
 
-The timeline supports Following and Recommended feeds with images, videos, custom emoji, and long-form articles (NIP-23).
-
-Posts support up to 3 parallel image uploads, per-event relay targeting, and NIP-70 protected posts.
-
-Likes and reactions support custom emoji. Double-tap to undo. Long-press the repost button for quote repost.
-
-Notifications deliver reactions, Zaps, reposts, replies, mentions, and birthdays in real time.
-
-Talk provides E2E encrypted DMs and group chats via NIP-EE (MLS), with read-only support for legacy NIP-17 DMs.
-
-Zaps support invoice generation and sending, with amounts displayed in BIP-177 (₿) notation.
-
-Search uses NIP-50 full-text with commands: `#tag`, `from:npub`, `filter:image`.
-
-Mini-apps cover custom emoji, profile badges, relay settings, mute list, Zap settings, scheduling, voice input, backup, vanish request, and cache settings.
-
-Login supports nsec and external signers (Amber, NIP-55).
-
 <div align="center">
 <img src="https://blossom.primal.net/07c92011f73f301d3dfe0e642f8d6c09547b934e4b8cb51ab0781f4288e5e370.png" width="23%" />
 <img src="https://blossom.primal.net/08e58108054026805ba15fec73907598354647af5051505483eab71d74e5e265.png" width="23%" />
 <img src="https://blossom.primal.net/51245134a6f922b4b22eeb65f0ee7c6aa96a5021596917e34b18a792b73ea540.png" width="23%" />
 <img src="https://blossom.primal.net/3251a2a0816281515f2e115527037f4f0ce257bc555649717ddfaaee24f51dd4.png" width="23%" />
 </div>
+
+The app has four tabs: Home, Timeline, Talk, and Mini-apps.
+
+The timeline shows posts from accounts you follow, with support for images, videos, custom emoji, and long-form articles. The Home tab shows your own posts and posts you've liked.
+
+Posts support up to 3 image uploads at once. You can choose which relays to publish to per post.
+
+Likes support custom emoji and can be undone with a double-tap.
+
+Notifications deliver reactions, Zaps, reposts, replies, mentions, and birthdays in real time.
+
+Talk provides E2E encrypted DMs and group chats.
+
+Zaps support Lightning invoice generation and sending.
+
+Search supports full-text with commands: `#tag`, `from:npub`, `filter:image`.
+
+Mini-apps include custom emoji, profile badges, relay settings, mute list, Zap settings, scheduling, voice input settings, backup, vanish request, and cache settings.
+
+Login supports nsec and external signers (Amber).
 
 ### Supported NIPs
 

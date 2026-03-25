@@ -3,67 +3,7 @@
 
 name: ぬるぬる
 identifier: io.nurunuru.app
-summary: LINE風のNostrクライアント — シンプルで可愛い、みんなのためのNostr
-description: |
-  🌟 概要
-
-  「ぬるぬる」は、親しみやすいチャット風インターフェースを備えた、ユーザーフレンドリーなNostrクライアントです。パフォーマンス、セキュリティ、そして心地よいユーザー体験に重点を置いて開発されています。
-
-  ✨ 特徴
-
-  📱 タイムライン
-  - 推奨フィード: アルゴリズムによる「おすすめ」と「フォロー中」の切り替え。
-  - Birdwatch: コミュニティによるコンテキスト追加と評価 (NIP-32)。
-  - リッチメディア: 画像、カスタム絵文字、ループ動画 (NIP-71) に対応。
-
-  ✍️ 投稿
-  - 投稿先リレーを選択して送信（特定のリレーのみへの投稿に対応）。
-  - NIP-70 プロテクト対応：他クライアントによる再共有を防止する `-` タグ。
-  - 最大3枚の画像を並列アップロード。
-
-  🎥 動画投稿 (NIP-71 / Kind 34236)
-  - 最大6.3秒のループ動画を撮影・投稿。
-  - タップでミュート解除、フィードで音声再生。
-  - ProofModeバッジ: verified_web (PGP署名 + フレームハッシュ) で動画の真正性を証明。
-
-  🛡 ProofMode
-  - PGP署名 (Bouncy Castle Ed25519) による動画認証。
-  - フレームSHA-256ハッシュ + センサーデータで改ざん検出。
-  - 将来的にverified_mobile (Play Integrity API) に対応予定。
-
-  💬 トーク
-  - 安全なDM: NIP-17/44/59 に基づく暗号化されたプライベートメッセージ。
-  - チャット画面: 使い慣れた操作感のデザイン。
-
-  🔒 セキュリティ
-  - パスキー対応: パスワード不要の安全なログイン。
-  - セキュアな鍵管理: 秘密鍵は安全に保護され、外部に露出しません。
-  - 外部署名 (Amber等) 対応。
-
-  🧩 ミニアプリ
-  - エンタメ: カスタム絵文字、プロフィールバッジ、調整くん。
-  - ツール: ミュートリスト、Zap設定、リレー設定、バックアップなど。
-  - その他: 外部WebアプリをNostrセッション付きで起動。
-
-  ## 対応NIP
-  NIP-01, NIP-02, NIP-05, NIP-07, NIP-09, NIP-11, NIP-17, NIP-19,
-  NIP-25, NIP-27, NIP-30, NIP-32, NIP-42, NIP-44, NIP-46, NIP-50, NIP-51,
-  NIP-57, NIP-58, NIP-59, NIP-62, NIP-65, NIP-70, NIP-71, NIP-98
-
-repository: https://github.com/tami1A84/null--nostr
-homepage:
-license: Unlicense
-tags:
-  - nostr
-  - social
-  - messaging
-  - line
-  - japan
-  - video
-  - proofmode
-
-icon: public/favicon-512.png
-changelog: CHANGELOG.md
+summary: シンプルで使いやすいNostrクライアント
 
 screenshots:
   - fastlane/metadata/android/ja-JP/images/phoneScreenshots/1_timeline.png
@@ -72,6 +12,44 @@ screenshots:
   - fastlane/metadata/android/ja-JP/images/phoneScreenshots/4_miniapp.png
   - fastlane/metadata/android/ja-JP/images/phoneScreenshots/5_post.png
   - fastlane/metadata/android/ja-JP/images/phoneScreenshots/6_post_keyboard.png
+
+description: |
+  「ぬるぬる」は、シンプルで使いやすいNostrクライアントです。
+
+  📱 タイムライン
+  フォロー中の投稿を表示。画像・動画・カスタム絵文字・長文記事に対応。
+  ホームタブで自分の投稿といいね一覧を切り替え表示。
+
+  ✍️ 投稿
+  最大3枚の画像を同時アップロード。投稿先リレーをその都度選択可能。
+
+  💬 トーク
+  E2E暗号化のDMとグループチャット（NIP-EE / MLS）。旧来のDMの読み取りにも対応。
+
+  ⚡ Zap
+  LightningインボイスをアプリからそのままZap送信。
+
+  🔍 検索
+  全文検索で #タグ、from:npub、filter:image などのコマンドに対応。
+
+  🧩 ミニアプリ
+  カスタム絵文字、プロフィールバッジ、リレー設定、ミュートリスト、Zap設定、
+  調整くん、音声入力設定、バックアップ、削除リクエスト、キャッシュ設定。
+
+  🔑 ログイン
+  nsec・外部署名アプリ（Amber）に対応。
+
+repository: https://github.com/tami1A84/null--nostr
+homepage:
+license: Unlicense
+tags:
+  - nostr
+  - social
+  - messaging
+  - japan
+
+icon: public/favicon-512.png
+changelog: CHANGELOG.md
 
 # Assets from GitHub releases
 assets:
