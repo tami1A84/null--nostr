@@ -5,13 +5,11 @@ name: ぬるぬる
 identifier: io.nurunuru.app
 summary: シンプルで使いやすいNostrクライアント
 
-screenshots:
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/1_timeline.png
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/2_talk.png
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/3_timeline_feed.png
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/4_miniapp.png
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/5_post.png
-  - fastlane/metadata/android/ja-JP/images/phoneScreenshots/6_post_keyboard.png
+images:
+  - https://blossom.primal.net/07c92011f73f301d3dfe0e642f8d6c09547b934e4b8cb51ab0781f4288e5e370.png
+  - https://blossom.primal.net/08e58108054026805ba15fec73907598354647af5051505483eab71d74e5e265.png
+  - https://blossom.primal.net/51245134a6f922b4b22eeb65f0ee7c6aa96a5021596917e34b18a792b73ea540.png
+  - https://blossom.primal.net/3251a2a0816281515f2e115527037f4f0ce257bc555649717ddfaaee24f51dd4.png
 
 description: |
   「ぬるぬる」は、シンプルで使いやすいNostrクライアントです。
