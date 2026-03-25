@@ -9,11 +9,14 @@ import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,6 +39,7 @@ import io.nurunuru.app.ui.components.*
 import io.nurunuru.app.ui.theme.LineGreen
 import io.nurunuru.app.ui.theme.LocalNuruColors
 import io.nurunuru.app.viewmodel.TalkViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun TalkScreen(viewModel: TalkViewModel, myPubkeyHex: String, repository: NostrRepository) {
@@ -67,7 +71,7 @@ fun TalkScreen(viewModel: TalkViewModel, myPubkeyHex: String, repository: NostrR
 
 private enum class TalkFilter { ALL, FRIENDS, GROUPS }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun GroupListScreen(
     viewModel: TalkViewModel,
@@ -79,14 +83,11 @@ private fun GroupListScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showNewChatModal by remember { mutableStateOf(false) }
     var showAddMenu by remember { mutableStateOf(false) }
-    var activeFilter by remember { mutableStateOf(TalkFilter.ALL) }
+    val pagerState = rememberPagerState { 3 }
+    val coroutineScope = rememberCoroutineScope()
 
-    val filteredGroups = remember(groups, activeFilter) {
-        when (activeFilter) {
-            TalkFilter.ALL     -> groups
-            TalkFilter.FRIENDS -> groups.filter { it.isDm }
-            TalkFilter.GROUPS  -> groups.filter { !it.isDm }
-        }
+    val activeFilter = remember(pagerState.currentPage) {
+        listOf(TalkFilter.ALL, TalkFilter.FRIENDS, TalkFilter.GROUPS)[pagerState.currentPage]
     }
 
     Scaffold(
@@ -158,28 +159,47 @@ private fun GroupListScreen(
 
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             // ── サブヘッダー（フィルタータブ） ────────────────────────────
-            TalkFilterBar(active = activeFilter, onSelect = { activeFilter = it })
+            TalkFilterBar(
+                active = activeFilter,
+                onSelect = { filter ->
+                    val page = listOf(TalkFilter.ALL, TalkFilter.FRIENDS, TalkFilter.GROUPS).indexOf(filter)
+                    if (page >= 0) coroutineScope.launch { pagerState.animateScrollToPage(page) }
+                }
+            )
             HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
 
-            // ── リスト ────────────────────────────────────────────────────
-            Box(modifier = Modifier.fillMaxSize()) {
-                when {
-                    isLoading && groups.isEmpty() -> Column { repeat(8) { ListItemSkeleton() } }
-                    filteredGroups.isEmpty() -> TalkEmptyState()
-                    else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(filteredGroups, key = { it.groupIdHex }) { group ->
-                            Surface(color = MaterialTheme.colorScheme.background) {
-                                Column {
-                                    GroupItem(
-                                        group = group,
-                                        myPubkeyHex = myPubkeyHex,
-                                        onClick = { viewModel.openGroup(group.groupIdHex) }
-                                    )
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(horizontal = 16.dp),
-                                        color = nuruColors.border,
-                                        thickness = 0.5.dp
-                                    )
+            // ── スワイプページャー ─────────────────────────────────────────
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f)
+            ) { page ->
+                val pageFilter = listOf(TalkFilter.ALL, TalkFilter.FRIENDS, TalkFilter.GROUPS)[page]
+                val filteredGroups = remember(groups, pageFilter) {
+                    when (pageFilter) {
+                        TalkFilter.ALL     -> groups
+                        TalkFilter.FRIENDS -> groups.filter { it.isDm }
+                        TalkFilter.GROUPS  -> groups.filter { !it.isDm }
+                    }
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when {
+                        isLoading && groups.isEmpty() -> Column { repeat(8) { ListItemSkeleton() } }
+                        filteredGroups.isEmpty() -> TalkEmptyState()
+                        else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            items(filteredGroups, key = { it.groupIdHex }) { group ->
+                                Surface(color = MaterialTheme.colorScheme.background) {
+                                    Column {
+                                        GroupItem(
+                                            group = group,
+                                            myPubkeyHex = myPubkeyHex,
+                                            onClick = { viewModel.openGroup(group.groupIdHex) }
+                                        )
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                            color = nuruColors.border,
+                                            thickness = 0.5.dp
+                                        )
+                                    }
                                 }
                             }
                         }

@@ -183,7 +183,7 @@ fun LongFormPostItem(
                                     val invoice = repository.fetchLightningInvoice(lud16, amount)
                                     if (invoice != null) {
                                         clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(invoice))
-                                        toastState.show("⚡ ${amount} sats のインボイスをコピーしました", ToastType.SUCCESS)
+                                        toastState.show("⚡ ₿${amount} のインボイスをコピーしました", ToastType.SUCCESS)
                                     } else {
                                         toastState.show("インボイスの作成に失敗しました", ToastType.ERROR)
                                     }

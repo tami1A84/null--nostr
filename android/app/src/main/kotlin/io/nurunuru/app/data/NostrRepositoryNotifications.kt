@@ -1,8 +1,15 @@
 package io.nurunuru.app.data
 
 import io.nurunuru.app.data.models.*
+import kotlinx.coroutines.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import java.util.concurrent.TimeUnit
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 
@@ -67,16 +74,29 @@ suspend fun NostrRepository.fetchNotifications(pubkeyHex: String, limit: Int = 5
     val emojiReactionEnabled = prefs.notificationEmojiReactionEnabled
     android.util.Log.d("NostrRepository",
         "fetchNotifications: enabledKinds=${enabledKinds.sorted()} emojiReaction=$emojiReactionEnabled")
+
+    // Use NIP-65 read relays if configured; fall back to default client.fetchEvents
+    val readRelayUrls = prefs.nip65Relays.filter { it.read }.map { it.url }.takeIf { it.isNotEmpty() }
+    android.util.Log.d("NostrRepository", "fetchNotifications: readRelays=${readRelayUrls?.size ?: 0}")
+
+    suspend fun fetchWith(filter: NostrClient.Filter): List<NostrEvent> {
+        return if (readRelayUrls != null) {
+            fetchNotificationEventsFromRelays(readRelayUrls, filter, timeoutMs = 6_000)
+        } else {
+            client.fetchEvents(filter, timeoutMs = 5_000)
+        }
+    }
+
     val reactions = if (NostrKind.REACTION in enabledKinds || emojiReactionEnabled)
-        client.fetchEvents(reactionFilter, timeoutMs = 5_000) else emptyList()
+        fetchWith(reactionFilter) else emptyList()
     val zaps = if (NostrKind.ZAP_RECEIPT in enabledKinds)
-        client.fetchEvents(zapFilter, timeoutMs = 5_000) else emptyList()
+        fetchWith(zapFilter) else emptyList()
     val reposts = if (NostrKind.REPOST in enabledKinds)
-        client.fetchEvents(repostFilter, timeoutMs = 5_000) else emptyList()
+        fetchWith(repostFilter) else emptyList()
     val mentions = if (NostrKind.TEXT_NOTE in enabledKinds)
-        client.fetchEvents(replyFilter, timeoutMs = 5_000) else emptyList()
+        fetchWith(replyFilter) else emptyList()
     val badges = if (NostrKind.BADGE_AWARD in enabledKinds)
-        client.fetchEvents(badgeFilter, timeoutMs = 5_000) else emptyList()
+        fetchWith(badgeFilter) else emptyList()
     android.util.Log.d("NostrRepository",
         "fetchNotifications: reactions=${reactions.size} zaps=${zaps.size} reposts=${reposts.size} mentions=${mentions.size} badges=${badges.size}")
 
@@ -232,6 +252,74 @@ suspend fun NostrRepository.fetchNotifications(pubkeyHex: String, limit: Int = 5
     } catch (_: Exception) { }
 
     return result
+}
+
+/**
+ * Fetch notification events from specific relay URLs via OkHttp WebSocket.
+ * Connects to each relay in parallel and aggregates results.
+ */
+private suspend fun NostrRepository.fetchNotificationEventsFromRelays(
+    relayUrls: List<String>,
+    filter: NostrClient.Filter,
+    timeoutMs: Long = 6_000
+): List<NostrEvent> = coroutineScope {
+    val filterJson = buildString {
+        append("{")
+        filter.kinds?.let { append("\"kinds\":${it},") }
+        filter.since?.let { append("\"since\":$it,") }
+        filter.limit?.let { append("\"limit\":$it,") }
+        filter.tags?.forEach { (key, values) ->
+            append("\"#$key\":${values.map { "\"$it\"" }},")
+        }
+        if (endsWith(",")) deleteCharAt(length - 1)
+        append("}")
+    }
+
+    val allEvents = java.util.concurrent.ConcurrentHashMap<String, NostrEvent>()
+
+    relayUrls.map { relayUrl ->
+        async(Dispatchers.IO) {
+            try {
+                val done = kotlinx.coroutines.CompletableDeferred<Unit>()
+                val subId = "notif-${System.currentTimeMillis()}-${relayUrl.hashCode()}"
+                val reqMsg = """["REQ","$subId",$filterJson]"""
+                val wsClient = OkHttpClient.Builder()
+                    .connectTimeout(5, TimeUnit.SECONDS)
+                    .build()
+                val request = Request.Builder().url(relayUrl).build()
+                val listener = object : WebSocketListener() {
+                    override fun onOpen(ws: WebSocket, response: Response) { ws.send(reqMsg) }
+                    override fun onMessage(ws: WebSocket, text: String) {
+                        if (done.isCompleted) return
+                        try {
+                            val arr = Json.parseToJsonElement(text).jsonArray
+                            when (arr[0].jsonPrimitive.content) {
+                                "EVENT" -> {
+                                    val ev = Json { ignoreUnknownKeys = true }
+                                        .decodeFromString<NostrEvent>(arr[2].toString())
+                                    allEvents[ev.id] = ev
+                                }
+                                "EOSE" -> { ws.close(1000, "done"); done.complete(Unit) }
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+                        if (!done.isCompleted) done.complete(Unit)
+                    }
+                    override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+                        if (!done.isCompleted) done.complete(Unit)
+                    }
+                }
+                val ws = wsClient.newWebSocket(request, listener)
+                try {
+                    withTimeout(timeoutMs) { done.await() }
+                } catch (_: kotlinx.coroutines.TimeoutCancellationException) { }
+                ws.cancel()
+            } catch (_: Exception) {}
+        }
+    }.awaitAll()
+
+    allEvents.values.toList()
 }
 
 /** Fetch a specific event by ID. */

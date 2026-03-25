@@ -95,25 +95,21 @@ class TimelineViewModel(
             val followListJob = launch { loadFollowList() }
             val globalJob = launch { loadGlobalTimeline() }
 
-            // バックグラウンドで設定をプリフェッチ（UIをブロックしない）
+            // バックグラウンドで設定をプリフェッチ（UIをブロックしない・すべて並列実行）
             launch(Dispatchers.IO) {
                 val pk = pubkeyHex.ifEmpty { return@launch }
                 listOf(
-                    suspend { repository.fetchMuteList(pk) },
-                    suspend { repository.fetchEmojiList(pk) },
-                    suspend { repository.fetchProfileBadgesInfo(pk) }
-                ).forEach { fetch ->
-                    try { fetch() }
-                    catch (e: Exception) {
-                        android.util.Log.w("TimelineViewModel", "Settings prefetch failed: ${e.message}")
-                    }
-                }
-                // NIP-65リレー同期
-                try {
-                    repository.syncNip65Relays(pk)
-                } catch (e: Exception) {
-                    android.util.Log.w("TimelineViewModel", "NIP-65 relay sync failed: ${e.message}")
-                }
+                    launch { try { repository.fetchMuteList(pk) }
+                             catch (e: Exception) { android.util.Log.w("TimelineViewModel", "fetchMuteList failed: ${e.message}") } },
+                    launch { try { repository.fetchEmojiList(pk) }
+                             catch (e: Exception) { android.util.Log.w("TimelineViewModel", "fetchEmojiList failed: ${e.message}") } },
+                    launch { try { repository.fetchProfileBadgesInfo(pk) }
+                             catch (e: Exception) { android.util.Log.w("TimelineViewModel", "fetchProfileBadgesInfo failed: ${e.message}") } },
+                    launch { try { repository.syncNip65Relays(pk) }
+                             catch (e: Exception) { android.util.Log.w("TimelineViewModel", "syncNip65Relays failed: ${e.message}") } },
+                    launch { try { repository.prefetchFollowRelayLists() }
+                             catch (e: Exception) { android.util.Log.w("TimelineViewModel", "prefetchFollowRelayLists failed: ${e.message}") } }
+                ).forEach { it.join() }
             }
 
             // Cache-first step 1: Try JSON cache (fully-enriched, instant decode)
@@ -215,7 +211,8 @@ class TimelineViewModel(
                     val existingGlobalIds = _uiState.value.globalPosts.mapTo(HashSet()) { it.event.id }
                     val pendingGlobalIds = _uiState.value.pendingGlobalPosts.mapTo(HashSet()) { it.event.id }
                     val newGlobal = scoredForGlobal.filter {
-                        it.event.id !in existingGlobalIds && it.event.id !in pendingGlobalIds
+                        it.event.id !in existingGlobalIds && it.event.id !in pendingGlobalIds &&
+                        it.event.getTagValues("e").isEmpty() // リプライ除外
                     }
                     if (newGlobal.isNotEmpty()) liveGlobalBuffer.addAll(newGlobal)
 
@@ -229,7 +226,8 @@ class TimelineViewModel(
                                 followSet.contains(it.event.pubkey) &&
                                 it.event.id !in existingFollowIds &&
                                 it.event.id !in pendingFollowIds &&
-                                it.event.pubkey !in mutedPubkeys
+                                it.event.pubkey !in mutedPubkeys &&
+                                it.event.getTagValues("e").isEmpty() // リプライ除外
                             }
 
                             // リレータブ: 3件たまったらピルを表示してバッファをクリア
@@ -595,6 +593,13 @@ class TimelineViewModel(
                         if (event.id in seenRelayEventIds) return@collect
                         seenRelayEventIds.add(event.id)
 
+                        // ミュートフィルタ
+                        val muteData = repository.getCachedMuteList(pubkeyHex)
+                        if (muteData != null) {
+                            if (event.pubkey in muteData.pubkeys.toSet()) return@collect
+                            if (event.id in muteData.eventIds.toSet()) return@collect
+                        }
+
                         val post = withContext(Dispatchers.IO) {
                             val profiles = repository.fetchProfiles(listOf(event.pubkey))
                             ScoredPost(
@@ -722,6 +727,28 @@ class TimelineViewModel(
             try {
                 repository.reportEvent(pubkey, eventId, type, content)
             } catch (e: Exception) { /* Silently ignore */ }
+        }
+    }
+
+    fun toggleBookmark(eventId: String, isCurrentlyBookmarked: Boolean) {
+        viewModelScope.launch {
+            try {
+                if (isCurrentlyBookmarked) {
+                    repository.removeBookmark(pubkeyHex, eventId)
+                } else {
+                    repository.addBookmark(pubkeyHex, eventId)
+                }
+                updatePostBookmark(eventId, !isCurrentlyBookmarked)
+            } catch (e: Exception) { }
+        }
+    }
+
+    private fun updatePostBookmark(eventId: String, isBookmarked: Boolean) {
+        _uiState.update { state ->
+            state.copy(
+                globalPosts = state.globalPosts.map { if (it.event.id == eventId) it.copy(isBookmarked = isBookmarked) else it },
+                followingPosts = state.followingPosts.map { if (it.event.id == eventId) it.copy(isBookmarked = isBookmarked) else it }
+            )
         }
     }
 

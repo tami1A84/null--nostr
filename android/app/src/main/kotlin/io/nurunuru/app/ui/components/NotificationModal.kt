@@ -509,7 +509,7 @@ fun NotificationRow(
                 "zap" -> {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            "⚡ ${notification.amount ?: 0} sats",
+                            "⚡ ₿${notification.amount ?: 0}",
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFFFC107),
                             fontSize = 13.sp
@@ -545,20 +545,32 @@ fun NotificationRow(
 
             // 対象投稿プレビュー（返信/リアクション/リポスト用）
             if (originalPost != null && notification.type in listOf("reaction", "emoji_reaction", "repost", "zap")) {
-                val previewText = removeImageUrls(originalPost.content).take(80).trim()
+                val previewText = removeImageUrls(originalPost.content).take(100).trim()
                 if (previewText.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        previewText,
-                        fontSize = 12.sp,
-                        color = nuruColors.textTertiary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                    Spacer(Modifier.height(8.dp))
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(nuruColors.bgSecondary, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(nuruColors.bgSecondary)
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(36.dp)
+                                .background(LineGreen, RoundedCornerShape(2.dp))
+                        )
+                        Text(
+                            previewText,
+                            fontSize = 12.sp,
+                            color = nuruColors.textSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }

@@ -43,8 +43,9 @@ fun ProfileHeader(
     isFollowing: Boolean,
     isNip05Verified: Boolean,
     followCount: Int,
-    badges: List<io.nurunuru.app.data.models.NostrEvent>,
+    badges: List<String>,
     onEditClick: () -> Unit,
+    onQRClick: (() -> Unit)? = null,
     onFollowClick: () -> Unit,
     onMessageClick: (() -> Unit)? = null,
     onFollowListClick: () -> Unit,
@@ -101,21 +102,32 @@ fun ProfileHeader(
                             Text(
                                 text = profile?.displayedName ?: "Anonymous",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
+                                fontSize = 22.sp,
                                 color = TextPrimary,
                                 maxLines = 1,
                                 modifier = Modifier.weight(1f)
                             )
                             if (isOwnProfile) {
-                                Icon(
-                                    NuruIcons.Edit,
-                                    contentDescription = "編集",
-                                    tint = TextTertiary,
-                                    modifier = Modifier
-                                        .padding(start = 6.dp)
-                                        .size(16.dp)
-                                        .clickable { onEditClick() }
-                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    if (onQRClick != null) {
+                                        Icon(
+                                            NuruIcons.QRCode,
+                                            contentDescription = "QRコード",
+                                            tint = TextTertiary,
+                                            modifier = Modifier
+                                                .size(22.dp)
+                                                .clickable { onQRClick() }
+                                        )
+                                    }
+                                    Icon(
+                                        NuruIcons.Edit,
+                                        contentDescription = "編集",
+                                        tint = TextTertiary,
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .clickable { onEditClick() }
+                                    )
+                                }
                             }
                             if (!isOwnProfile) {
                                 Row(
@@ -155,28 +167,29 @@ fun ProfileHeader(
                             }
                         }
 
+                        // NIP-05 row
                         if (!profile?.nip05.isNullOrBlank()) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
                                 modifier = Modifier.padding(top = 2.dp)
                             ) {
                                 if (isNip05Verified) {
                                     Icon(
-                                        imageVector = NuruIcons.Check,
+                                        imageVector = NuruIcons.Verified,
                                         contentDescription = null,
-                                        tint = LineGreen,
-                                        modifier = Modifier.size(14.dp)
+                                        tint = Color.Unspecified,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                                 Text(
-                                    text = formatNip05(profile.nip05!!),
-                                    fontSize = 13.sp,
-                                    color = if (isNip05Verified) LineGreen else TextTertiary
+                                    text = formatNip05Domain(profile!!.nip05!!),
+                                    fontSize = 16.sp,
+                                    color = if (isNip05Verified) LineGreen else TextTertiary,
+                                    maxLines = 1
                                 )
                             }
                         }
-
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -203,9 +216,26 @@ fun ProfileHeader(
                     ProfileAbout(about = profile!!.about!!)
                 }
 
+                if (badges.isNotEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(top = 12.dp)
+                    ) {
+                        badges.take(3).forEach { url ->
+                            AsyncImage(
+                                model = url,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                            )
+                        }
+                    }
+                }
+
                 Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!profile?.lud16.isNullOrBlank()) {
-                        MetaInfoItem(NuruIcons.Zap(false), profile!!.lud16!!)
+                        MetaInfoItem(NuruIcons.Bitcoin, profile!!.lud16!!)
                     }
                     if (!profile?.website.isNullOrBlank()) {
                         MetaInfoItem(NuruIcons.Website, profile!!.website!!, color = LineGreen)
@@ -241,26 +271,6 @@ fun ProfileHeader(
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                     )
                                 }
-                            }
-                        }
-                    }
-                }
-
-                if (badges.isNotEmpty()) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(top = 12.dp)
-                    ) {
-                        badges.take(3).forEach { badge ->
-                            val thumb = badge.getTagValue("thumb") ?: badge.getTagValue("image")
-                            if (thumb != null) {
-                                AsyncImage(
-                                    model = thumb,
-                                    contentDescription = badge.getTagValue("name"),
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                )
                             }
                         }
                     }
@@ -397,6 +407,11 @@ fun MetaInfoItem(icon: androidx.compose.ui.graphics.vector.ImageVector, text: St
 fun formatNip05(nip05: String): String {
     if (nip05.startsWith("_@")) return nip05.substring(2)
     return nip05
+}
+
+fun formatNip05Domain(nip05: String): String {
+    val atIdx = nip05.lastIndexOf('@')
+    return if (atIdx >= 0) nip05.substring(atIdx + 1) else nip05
 }
 
 @Composable

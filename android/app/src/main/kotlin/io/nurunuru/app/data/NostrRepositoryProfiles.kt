@@ -16,7 +16,8 @@ suspend fun NostrRepository.fetchProfile(pubkeyHex: String): UserProfile? {
     val events = client.fetchEvents(filter, timeoutMs = 4_000)
     val event = events.maxByOrNull { it.createdAt } ?: return getCachedProfile(pubkeyHex)
     val profile = parseProfile(event)
-    cache.setCachedProfile(pubkeyHex, profile)
+    val persist = pubkeyHex == myPubkeyHex || followingSet.contains(pubkeyHex)
+    cache.setCachedProfile(pubkeyHex, profile, persist)
     return profile
 }
 
@@ -106,37 +107,34 @@ suspend fun NostrRepository.fetchUserLikes(pubkeyHex: String, limit: Int = 30): 
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
 
-suspend fun NostrRepository.fetchBadges(pubkeyHex: String): List<NostrEvent> {
+suspend fun NostrRepository.fetchBadges(pubkeyHex: String): List<NostrEvent> = coroutineScope {
     val filter = NostrClient.Filter(
         kinds = listOf(NostrKind.PROFILE_BADGES),
         authors = listOf(pubkeyHex),
         limit = 1
     )
     val events = client.fetchEvents(filter, timeoutMs = 4_000)
-    val profileBadgeEvent = events.maxByOrNull { it.createdAt } ?: return emptyList()
+    val profileBadgeEvent = events.maxByOrNull { it.createdAt } ?: return@coroutineScope emptyList()
 
-    val badgeDefinitions = mutableListOf<NostrEvent>()
     val tags = profileBadgeEvent.tags
-    for (i in tags.indices) {
-        if (tags[i].getOrNull(0) == "a" && tags[i].getOrNull(1)?.startsWith("30009:") == true) {
-            val ref = tags[i][1]
-            val parts = ref.split(":")
-            if (parts.size < 3) continue
-            val creator = parts[1]
-            val dTag = parts.drop(2).joinToString(":")
+    val refs = tags
+        .filter { it.getOrNull(0) == "a" && it.getOrNull(1)?.startsWith("30009:") == true }
+        .take(3)
+        .mapNotNull { it.getOrNull(1) }
 
+    refs.map { ref ->
+        async {
+            val parts = ref.split(":")
+            if (parts.size < 3) return@async null
             val defFilter = NostrClient.Filter(
                 kinds = listOf(NostrKind.BADGE_DEFINITION),
-                authors = listOf(creator),
-                tags = mapOf("d" to listOf(dTag)),
+                authors = listOf(parts[1]),
+                tags = mapOf("d" to listOf(parts.drop(2).joinToString(":"))),
                 limit = 1
             )
-            val defEvents = client.fetchEvents(defFilter, timeoutMs = 2_000)
-            defEvents.maxByOrNull { it.createdAt }?.let { badgeDefinitions.add(it) }
+            client.fetchEvents(defFilter, timeoutMs = 2_000).maxByOrNull { it.createdAt }
         }
-        if (badgeDefinitions.size >= 3) break
-    }
-    return badgeDefinitions
+    }.awaitAll().filterNotNull()
 }
 
 // ─── Badge Cache helpers ───────────────────────────────────────────────────────
@@ -152,6 +150,16 @@ fun NostrRepository.getCachedAwardedBadgesList(pubkeyHex: String): List<BadgeInf
 }
 
 suspend fun NostrRepository.fetchProfileBadgesInfo(pubkeyHex: String): List<BadgeInfo> = coroutineScope {
+    // Cache-first: return immediately if fresh cache exists
+    val cached = getCachedProfileBadges(pubkeyHex)
+    if (cached.isNotEmpty()) {
+        // Refresh in background (fire and forget)
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try { refreshProfileBadgesInBackground(pubkeyHex) } catch (_: Exception) {}
+        }
+        return@coroutineScope cached
+    }
+
     val filter = NostrClient.Filter(
         kinds = listOf(NostrKind.PROFILE_BADGES),
         authors = listOf(pubkeyHex),
@@ -206,6 +214,39 @@ suspend fun NostrRepository.fetchProfileBadgesInfo(pubkeyHex: String): List<Badg
     val result = badgeRequests.awaitAll()
     try { cache.setCachedBadgeInfo(pubkeyHex, json.encodeToString(result)) } catch (_: Exception) {}
     result
+}
+
+private suspend fun NostrRepository.refreshProfileBadgesInBackground(pubkeyHex: String) = coroutineScope {
+    val filter = NostrClient.Filter(kinds = listOf(NostrKind.PROFILE_BADGES), authors = listOf(pubkeyHex), limit = 1)
+    val events = client.fetchEvents(filter, timeoutMs = 4_000)
+    val profileBadgeEvent = events.maxByOrNull { it.createdAt } ?: return@coroutineScope
+    val tags = profileBadgeEvent.tags
+    val badgeRequests = mutableListOf<Deferred<BadgeInfo>>()
+    val seenRefs = mutableSetOf<String>()
+    for (i in tags.indices) {
+        if (tags[i].getOrNull(0) == "a" && tags[i].getOrNull(1)?.startsWith("30009:") == true) {
+            val ref = tags[i][1]
+            if (!seenRefs.add(ref)) continue
+            val awardEventId = if (i + 1 < tags.size && tags[i + 1].getOrNull(0) == "e") tags[i + 1].getOrNull(1) else null
+            val parts = ref.split(":")
+            if (parts.size >= 3) {
+                val dTag = parts.getOrElse(2) { "" }
+                badgeRequests.add(async {
+                    try {
+                        val defFilter = NostrClient.Filter(kinds = listOf(NostrKind.BADGE_DEFINITION), authors = listOf(parts[1]), tags = mapOf("d" to listOf(dTag)), limit = 1)
+                        val defEvent = client.fetchEvents(defFilter, timeoutMs = 3_000).maxByOrNull { it.createdAt }
+                        if (defEvent != null) {
+                            BadgeInfo(ref = ref, awardEventId = awardEventId, name = defEvent.getTagValue("name") ?: dTag, image = defEvent.getTagValue("thumb") ?: defEvent.getTagValue("image") ?: "", description = defEvent.getTagValue("description") ?: "")
+                        } else BadgeInfo(ref = ref, awardEventId = awardEventId, name = dTag)
+                    } catch (_: Exception) { BadgeInfo(ref = ref, awardEventId = awardEventId, name = dTag) }
+                })
+            }
+        }
+    }
+    if (badgeRequests.isNotEmpty()) {
+        val result = badgeRequests.awaitAll()
+        try { cache.setCachedBadgeInfo(pubkeyHex, json.encodeToString(result)) } catch (_: Exception) {}
+    }
 }
 
 suspend fun NostrRepository.fetchAwardedBadges(pubkeyHex: String, currentBadgeRefs: Set<String>): List<BadgeInfo> = coroutineScope {

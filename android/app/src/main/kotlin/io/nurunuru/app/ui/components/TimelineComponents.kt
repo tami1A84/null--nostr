@@ -93,7 +93,7 @@ fun TimelineHeader(
                         shape = RoundedCornerShape(16.dp),
                         elevation = null
                     ) {
-                        Text(relayLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(relayLabel, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         if (savedRelayUrls.isNotEmpty()) {
                             Spacer(Modifier.width(2.dp))
                             Box(

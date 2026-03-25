@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
@@ -604,6 +605,181 @@ object NuruIcons {
         verticalLineTo(15f)
         arcToRelative(4f, 4f, 0f, false, true, -4f, 4f)
         horizontalLineTo(3f)
+    }.build()
+
+    /** Bitcoin ₿ アイコン（公式ロゴ logo-footer.svg の path3096 使用） */
+    val Bitcoin: ImageVector = ImageVector.Builder(
+        name = "Bitcoin",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).apply {
+        // 外周の丸（ストローク）
+        path(
+            fill = null,
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = 1.5f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ) {
+            moveTo(12f, 2f)
+            arcToRelative(10f, 10f, 0f, false, true, 0f, 20f)
+            arcToRelative(10f, 10f, 0f, false, true, 0f, -20f)
+        }
+        // 公式 ₿ シンボル（bitcoin.org logo-footer.svg path3096 そのまま使用）
+        addPath(
+            pathData = PathParser().parsePathString(
+                "M16.9161529,10.4683513 C17.1458171,8.93317029 15.9769452,8.10789335 " +
+                "14.3786696,7.55734818 L14.8971267,5.47775122 L13.6312694,5.16227838 " +
+                "L13.1265129,7.1870732 C12.7937341,7.10414891 12.4519418,7.02591165 " +
+                "12.1123128,6.94839546 L12.6206747,4.91026065 L11.3555385,4.59478782 " +
+                "L10.8367209,6.67366369 C10.561268,6.61092966 10.2908627,6.54891671 " +
+                "10.0283893,6.4836589 L10.0298315,6.47716918 L8.28409493,6.04127585 " +
+                "L7.94735021,7.3933023 C7.94735021,7.3933023 8.88655792,7.60854491 " +
+                "8.8667282,7.6218849 C9.37941663,7.74987674 9.47207551,8.08914525 " +
+                "9.45657227,8.35810838 L8.86600712,10.7272193 C8.90134008,10.7362328 " +
+                "8.94712871,10.7492122 8.99760436,10.7694025 C8.95542113,10.7589468 " +
+                "8.91035359,10.7474095 8.86384388,10.7362328 L8.03604315,14.055007 " +
+                "C7.97330912,14.2107605 7.81431081,14.4443906 7.45593366,14.3556977 " +
+                "C7.46855258,14.3740853 6.5358346,14.1260335 6.5358346,14.1260335 " +
+                "L5.9074127,15.5750453 L7.55472173,15.9857008 C7.86118106,16.0624959 " +
+                "8.1615112,16.1428964 8.45715432,16.2186099 L7.93328914,18.3220025 " +
+                "L9.19770427,18.6374754 L9.71652189,16.5564362 C10.0619196,16.6501767 " +
+                "10.3972221,16.7367064 10.7253139,16.8181886 L10.208299,18.8894931 " +
+                "L11.4741563,19.2049659 L11.9980215,17.1055392 C14.1565768,17.5140315 " +
+                "15.7797296,17.3492645 16.4629536,15.3969384 C17.0134988,13.8249823 " +
+                "16.4355525,12.9182232 15.2998503,12.326937 C16.12693,12.1362111 " +
+                "16.7499438,11.5921556 16.9161529,10.4683513 Z " +
+                "M14.0238979,14.5240701 C13.6327116,16.0960262 10.9859846,15.2462325 " +
+                "10.1278985,15.0331531 L10.8230203,12.2465364 C11.6811065,12.4606974 " +
+                "14.4327507,12.8846929 14.0238979,14.5240701 Z " +
+                "M14.4154448,10.4456372 C14.0585098,11.8755404 11.855608,11.1490515 " +
+                "11.141017,10.9709446 L11.7712416,8.44355645 C12.4858326,8.6216634 " +
+                "14.7871619,8.95408163 14.4154448,10.4456372 Z"
+            ).toNodes(),
+            fill = SolidColor(Color.White)
+        )
+    }.build()
+
+    /** Verified バッジ（塗りつぶし円 + 白チェックマーク） */
+    val Verified: ImageVector = ImageVector.Builder(
+        name = "Verified",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).apply {
+        // 塗りつぶし円
+        path(fill = SolidColor(Color(0xFF06C755)), stroke = null) {
+            moveTo(12f, 2f)
+            arcToRelative(10f, 10f, 0f, false, true, 0f, 20f)
+            arcToRelative(10f, 10f, 0f, false, true, 0f, -20f)
+        }
+        // 白チェックマーク
+        path(
+            fill = null,
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = 2.2f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ) {
+            moveTo(7f, 12f)
+            lineTo(10.5f, 15.5f)
+            lineTo(17f, 9f)
+        }
+    }.build()
+
+    /** ブックマーク（リボン形） */
+    fun Bookmark(filled: Boolean): ImageVector = ImageVector.Builder(
+        name = "Bookmark",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = if (filled) SolidColor(Color.White) else null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 1.8f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        moveTo(19f, 21f)
+        lineTo(12f, 16f)
+        lineTo(5f, 21f)
+        verticalLineTo(5f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, -2f)
+        horizontalLineTo(17f)
+        arcToRelative(2f, 2f, 0f, false, true, 2f, 2f)
+        close()
+    }.build()
+
+    /** QRコードアイコン */
+    val QRCode: ImageVector = ImageVector.Builder(
+        name = "QRCode",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).path(
+        fill = null,
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 1.8f,
+        strokeLineCap = StrokeCap.Round,
+        strokeLineJoin = StrokeJoin.Round
+    ) {
+        // 左上ブロック外枠 (2,2)→(10,10)
+        moveTo(2f, 2f)
+        horizontalLineTo(10f)
+        verticalLineTo(10f)
+        horizontalLineTo(2f)
+        close()
+        // 左上内ドット (4,4)→(8,8)
+        moveTo(4f, 4f)
+        horizontalLineTo(8f)
+        verticalLineTo(8f)
+        horizontalLineTo(4f)
+        close()
+        // 右上ブロック外枠 (14,2)→(22,10)
+        moveTo(14f, 2f)
+        horizontalLineTo(22f)
+        verticalLineTo(10f)
+        horizontalLineTo(14f)
+        close()
+        // 右上内ドット (16,4)→(20,8)
+        moveTo(16f, 4f)
+        horizontalLineTo(20f)
+        verticalLineTo(8f)
+        horizontalLineTo(16f)
+        close()
+        // 左下ブロック外枠 (2,14)→(10,22)
+        moveTo(2f, 14f)
+        horizontalLineTo(10f)
+        verticalLineTo(22f)
+        horizontalLineTo(2f)
+        close()
+        // 左下内ドット (4,16)→(8,20)
+        moveTo(4f, 16f)
+        horizontalLineTo(8f)
+        verticalLineTo(20f)
+        horizontalLineTo(4f)
+        close()
+        // 右下データパターン
+        moveTo(14f, 14f)
+        horizontalLineTo(16f)
+        verticalLineTo(16f)
+        horizontalLineTo(14f)
+        close()
+        moveTo(18f, 14f)
+        horizontalLineTo(22f)
+        verticalLineTo(16f)
+        horizontalLineTo(18f)
+        close()
+        moveTo(14f, 18f)
+        horizontalLineTo(22f)
+        verticalLineTo(22f)
+        horizontalLineTo(14f)
+        close()
     }.build()
 
     fun Zap(filled: Boolean): ImageVector {

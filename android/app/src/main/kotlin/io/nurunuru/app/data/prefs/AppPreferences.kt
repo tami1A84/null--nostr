@@ -133,6 +133,22 @@ class AppPreferences(context: Context) {
         get() = plainPrefs.getString(KEY_BLOSSOM_URL, "https://blossom.nostr.build") ?: "https://blossom.nostr.build"
         set(value) = plainPrefs.edit().putString(KEY_BLOSSOM_URL, value).apply()
 
+    var uploadedImages: List<String>
+        get() {
+            val jsonStr = plainPrefs.getString(KEY_UPLOADED_IMAGES, "[]") ?: "[]"
+            return try { Json.decodeFromString(jsonStr) } catch (_: Exception) { emptyList() }
+        }
+        set(value) = plainPrefs.edit().putString(KEY_UPLOADED_IMAGES, Json.encodeToString(value)).apply()
+
+    fun addUploadedImage(url: String) {
+        val current = uploadedImages.toMutableList()
+        if (!current.contains(url)) {
+            current.add(0, url) // newest first
+            if (current.size > 50) current.removeAt(current.size - 1) // keep max 50
+            uploadedImages = current
+        }
+    }
+
     var isExternalSigner: Boolean
         get() = securePrefs.getBoolean(KEY_IS_EXTERNAL_SIGNER, false)
         set(value) = securePrefs.edit().putBoolean(KEY_IS_EXTERNAL_SIGNER, value).apply()
@@ -281,6 +297,7 @@ class AppPreferences(context: Context) {
         private const val KEY_RELAYS = "relays"
         private const val KEY_UPLOAD_SERVER = "upload_server"
         private const val KEY_BLOSSOM_URL = "blossom_url"
+        private const val KEY_UPLOADED_IMAGES = "uploaded_images"
         private const val KEY_RECENT_SEARCHES = "recent_searches"
         private const val KEY_IS_EXTERNAL_SIGNER = "is_external_signer"
         private const val KEY_FAVORITE_APPS = "favorite_apps"

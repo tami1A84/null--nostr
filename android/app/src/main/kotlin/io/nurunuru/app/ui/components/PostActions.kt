@@ -30,17 +30,19 @@ fun PostActions(
     onLike: () -> Unit,
     onLikeLongPress: () -> Unit = {},
     onRepost: () -> Unit,
+    onQuoteRepost: (() -> Unit)? = null,
     onZap: () -> Unit,
-    onZapLongPress: () -> Unit = {}
+    onZapLongPress: () -> Unit = {},
+    onBookmark: (() -> Unit)? = null
 ) {
     val nuruColors = LocalNuruColors.current
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(32.dp),
+        horizontalArrangement = Arrangement.spacedBy(24.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Like (Thumbs up as per web)
+        // Like
         ActionButton(
             icon = NuruIcons.Like(post.isLiked),
             count = post.likeCount,
@@ -49,23 +51,34 @@ fun PostActions(
             tint = if (post.isLiked) nuruColors.lineGreen else nuruColors.textTertiary,
             animate = post.isLiked
         )
-        // Repost
+        // Repost (長押しで引用RT)
         ActionButton(
             icon = NuruIcons.Repost,
             count = post.repostCount,
             onClick = onRepost,
+            onLongClick = onQuoteRepost,
             tint = if (post.isReposted) nuruColors.lineGreen else nuruColors.textTertiary,
             animate = post.isReposted
         )
-        // Zap
+        // Zap (Bitcoin icon)
         ActionButton(
-            icon = NuruIcons.Zap(false),
+            icon = NuruIcons.Bitcoin,
             count = (post.zapAmount / 1000).toInt(),
             onClick = onZap,
             onLongClick = onZapLongPress,
             tint = nuruColors.textTertiary,
             animate = false
         )
+        // Bookmark
+        if (onBookmark != null) {
+            ActionButton(
+                icon = NuruIcons.Bookmark(post.isBookmarked),
+                count = 0,
+                onClick = onBookmark,
+                tint = if (post.isBookmarked) nuruColors.lineGreen else nuruColors.textTertiary,
+                animate = post.isBookmarked
+            )
+        }
 
         // Client tag (via)
         val client = post.event.getTagValue("client")
@@ -78,7 +91,7 @@ fun PostActions(
                 fontSize = 10.sp
             )
         } else {
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }

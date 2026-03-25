@@ -56,6 +56,13 @@ class NostrRepository(
 
     internal val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
+    /**
+     * フォロー中ユーザーの pubkey セット（メモリ）。
+     * fetchFollowList() 成功後に更新される。
+     * setCachedProfile の永続化判定に使用: フォロー中と自分のみ SharedPrefs に保存。
+     */
+    internal val followingSet: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     // ── MLS message cache ────────────────────────────────────────────────────
     // Each Kind-445 event must only be passed to process_message() once;
     // re-processing causes MLS epoch mismatches. We track processed event IDs
@@ -171,7 +178,8 @@ class NostrRepository(
                 }
                 ffiProfiles.forEach { ffi ->
                     val profile = ffi.toUserProfile()
-                    cache.setCachedProfile(ffi.pubkey, profile)
+                    val persist = ffi.pubkey == myPubkeyHex || followingSet.contains(ffi.pubkey)
+                    cache.setCachedProfile(ffi.pubkey, profile, persist)
                     results[ffi.pubkey] = profile
                 }
                 android.util.Log.d(
@@ -204,7 +212,8 @@ class NostrRepository(
             .mapValues { (_, evts) -> evts.maxByOrNull { it.createdAt }!! }
             .forEach { (pk, event) ->
                 val profile = parseProfile(event)
-                cache.setCachedProfile(pk, profile)
+                val persist = pk == myPubkeyHex || followingSet.contains(pk)
+                cache.setCachedProfile(pk, profile, persist)
                 results[pk] = profile
             }
     }
@@ -275,6 +284,11 @@ class NostrRepository(
         val event = events.maxByOrNull { it.createdAt } ?: return getCachedFollowList(pubkeyHex) ?: emptyList()
         val followList = event.getTagValues("p")
         cache.setCachedFollowList(pubkeyHex, followList)
+        // フォロー中セットを最新状態に同期（プロフィール永続化判定に使用）
+        if (pubkeyHex == myPubkeyHex) {
+            followingSet.clear()
+            followingSet.addAll(followList)
+        }
         return followList
     }
 
@@ -533,6 +547,15 @@ class NostrRepository(
     }
     fun applyCacheSettings() {
         cache.applySettings(prefs)
+        // 起動時にキャッシュ済みフォローリストを followingSet に復元
+        val pk = myPubkeyHex
+        if (pk.isNotEmpty()) {
+            val cached = cache.getCachedFollowList(pk)
+            if (!cached.isNullOrEmpty()) {
+                followingSet.clear()
+                followingSet.addAll(cached)
+            }
+        }
         android.util.Log.d("NostrRepository",
             "Cache settings applied: profile=${cache.profileEnabled}/${cache.profileTtl/86400000.0}d " +
             "timeline=${cache.timelineEnabled}/${cache.timelineTtl/86400000.0}d " +

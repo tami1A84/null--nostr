@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -128,6 +129,18 @@ fun PostModal(
     val remaining = MAX_NOTE_LENGTH - currentLength
     val canPost = (text.text.isNotBlank() || selectedImages.isNotEmpty()) && remaining >= 0 && !posting
 
+    // Build AnnotatedString with colored hashtags for the input field
+    fun buildHighlightedText(raw: String): AnnotatedString = buildAnnotatedString {
+        val hashtagRegex = Regex("#([\\w\\u3040-\\u309F\\u30A0-\\u30FF\\u4E00-\\u9FFF\\uFF00-\\uFFEF]+)")
+        var lastIdx = 0
+        hashtagRegex.findAll(raw).forEach { match ->
+            append(raw.substring(lastIdx, match.range.first))
+            withStyle(SpanStyle(color = nuruColors.lineGreen)) { append(match.value) }
+            lastIdx = match.range.last + 1
+        }
+        append(raw.substring(lastIdx))
+    }
+
     val scope = rememberCoroutineScope()
 
     fun handlePost() {
@@ -183,7 +196,7 @@ fun PostModal(
                     tags.add(listOf("emoji", emoji.shortcode, emoji.url))
                 }
 
-                val hashtags = Regex("#([\\w\\u3000]+)").findAll(finalContent).map { it.groupValues[1] }.distinct()
+                val hashtags = Regex("#([\\w\\u3040-\\u309F\\u30A0-\\u30FF\\u4E00-\\u9FFF\\uFF00-\\uFFEF]+)").findAll(finalContent).map { it.groupValues[1] }.distinct()
                 hashtags.forEach { tags.add(listOf("t", it.lowercase())) }
 
                 val targetRelayList = if (selectedRelays.size != allRelays.size) selectedRelays.toList() else null
@@ -228,7 +241,7 @@ fun PostModal(
                     val spokenText = matches[0]
                     val combinedText = text.text + (if (text.text.isEmpty()) "" else " ") + spokenText
                     if (combinedText.length <= MAX_NOTE_LENGTH) {
-                        text = TextFieldValue(combinedText, TextRange(combinedText.length))
+                        text = TextFieldValue(buildHighlightedText(combinedText), TextRange(combinedText.length))
                     }
                 }
             }
@@ -276,7 +289,10 @@ fun PostModal(
                             value = text,
                             onValueChange = {
                                 if (it.text.length <= MAX_NOTE_LENGTH) {
-                                    text = it
+                                    text = TextFieldValue(
+                                        annotatedString = buildHighlightedText(it.text),
+                                        selection = it.selection
+                                    )
                                 }
                             },
                             textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
@@ -304,6 +320,35 @@ fun PostModal(
                                     selectedImages = selectedImages.toMutableList().also { it.removeAt(index) }
                                 }
                             )
+                        }
+
+                        // Custom emoji preview row
+                        if (selectedCustomEmojis.isNotEmpty()) {
+                            androidx.compose.foundation.lazy.LazyRow(
+                                modifier = Modifier.padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                items(selectedCustomEmojis) { emoji ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier
+                                            .background(nuruColors.bgSecondary, RoundedCornerShape(12.dp))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        AsyncImage(
+                                            model = emoji.url,
+                                            contentDescription = emoji.shortcode,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = ":${emoji.shortcode}:",
+                                            fontSize = 11.sp,
+                                            color = nuruColors.textTertiary
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -359,7 +404,7 @@ fun PostModal(
                         onSelect = { emoji ->
                             val newText = text.text + ":${emoji.shortcode}:"
                             if (newText.length <= MAX_NOTE_LENGTH) {
-                                text = TextFieldValue(newText, TextRange(newText.length))
+                                text = TextFieldValue(buildHighlightedText(newText), TextRange(newText.length))
                                 if (!selectedCustomEmojis.any { it.shortcode == emoji.shortcode }) {
                                     selectedCustomEmojis = selectedCustomEmojis + emoji
                                 }

@@ -91,11 +91,13 @@ suspend fun NostrRepository.uploadImage(fileBytes: ByteArray, mimeType: String):
     val server = prefs.uploadServer
     val normalizedServer = server.removePrefix("https://").removePrefix("http://").removeSuffix("/")
 
-    return when {
+    val url = when {
         normalizedServer == "nostr.build" -> ImageUploadUtils.uploadToNostrBuild(fileBytes, mimeType, client.getSigner())
         normalizedServer == "share.yabu.me" -> ImageUploadUtils.uploadToYabuMe(fileBytes, mimeType, client.getSigner(), server)
         else -> ImageUploadUtils.uploadToBlossom(fileBytes, mimeType, client.getSigner(), server)
     }
+    if (url != null) prefs.addUploadedImage(url)
+    return url
 }
 
 suspend fun NostrRepository.updateRelayList(relays: List<Triple<String, Boolean, Boolean>>): Boolean {

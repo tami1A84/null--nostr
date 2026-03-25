@@ -227,6 +227,7 @@ fun SearchModal(
                                     onRepost = { viewModel.repostPost(post.event.id) },
                                     onProfileClick = { onProfileClick(post.event.pubkey) },
                                     repository = repository,
+                                    onBookmark = { viewModel.toggleBookmark(post.event.id, post.isBookmarked) },
                                     birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
                                     myPubkey = myPubkey
                                 )

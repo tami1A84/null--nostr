@@ -12,13 +12,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -35,9 +41,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.location.Location
+import kotlin.math.roundToInt
 import android.location.LocationManager
 import io.nurunuru.app.data.*
 import io.nurunuru.app.data.NostrKeyUtils
@@ -83,7 +99,7 @@ fun MiniAppData.getIcon(): ImageVector {
         "emoji" -> NuruIcons.Emoji
         "badge" -> NuruIcons.Badge
         "scheduler" -> NuruIcons.Scheduler
-        "zap" -> NuruIcons.Zap(false)
+        "zap" -> NuruIcons.Bitcoin
         "relay" -> NuruIcons.Relay
         "upload" -> NuruIcons.Image
         "mute" -> NuruIcons.Block
@@ -95,7 +111,7 @@ fun MiniAppData.getIcon(): ImageVector {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SettingsScreen(
     authViewModel: AuthViewModel,
@@ -108,7 +124,9 @@ fun SettingsScreen(
 ) {
     val nuruColors = LocalNuruColors.current
     var showLogoutDialog by remember { mutableStateOf(false) }
-    var activeCategory by remember { mutableStateOf("all") }
+    val categoryList = listOf("all" to "すべて", "entertainment" to "エンタメ", "tools" to "ツール", "others" to "その他")
+    val pagerState = rememberPagerState { categoryList.size }
+    val coroutineScope = rememberCoroutineScope()
     var searchQuery by remember { mutableStateOf("") }
     var selectedApp by remember { mutableStateOf<MiniAppData?>(null) }
     var showExternalAdd by remember { mutableStateOf(false) }
@@ -204,17 +222,157 @@ fun SettingsScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        LazyColumn(
+        val density = LocalDensity.current
+        val headerHeightPx = remember { mutableFloatStateOf(0f) }
+        val tabsHeightPx = remember { mutableFloatStateOf(0f) }
+        val headerOffsetPx = remember { mutableFloatStateOf(0f) }
+        val collapsingConnection = remember {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    val delta = available.y
+                    if (delta < 0f) {
+                        val old = headerOffsetPx.floatValue
+                        val new = (old + delta).coerceIn(-headerHeightPx.floatValue, 0f)
+                        headerOffsetPx.floatValue = new
+                        return Offset(0f, new - old)
+                    }
+                    return Offset.Zero
+                }
+
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                    val delta = available.y
+                    if (delta > 0f) {
+                        val old = headerOffsetPx.floatValue
+                        val new = (old + delta).coerceIn(-headerHeightPx.floatValue, 0f)
+                        headerOffsetPx.floatValue = new
+                        return Offset(0f, new - old)
+                    }
+                    return Offset.Zero
+                }
+            }
+        }
+        val favoriteAppData = (allApps + externalApps).filter { favorites.contains(it.id) }
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .imePadding(),
-            contentPadding = PaddingValues(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+                .imePadding()
+                .nestedScroll(collapsingConnection)
         ) {
-            // Login Status Section
-            item {
-                Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            val contentTopPadding = with(density) {
+                (headerHeightPx.floatValue + tabsHeightPx.floatValue + headerOffsetPx.floatValue).toDp()
+            }
+
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                beyondBoundsPageCount = 1
+            ) { page ->
+                val activeCategory = categoryList[page].first
+                val filteredApps = (allApps + externalApps).filter {
+                    (activeCategory == "all" || it.category == activeCategory) &&
+                    (searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true) || it.description.contains(searchQuery, ignoreCase = true))
+                }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(top = contentTopPadding)
+                ) {
+                    items(filteredApps, key = { it.id }) { app ->
+                        MiniAppRow(
+                            app = app,
+                            isFavorite = favorites.contains(app.id),
+                            onToggleFavorite = {
+                                if (favorites.contains(app.id)) favorites.remove(app.id) else favorites.add(app.id)
+                                prefs.favoriteApps = favorites.toList()
+                            },
+                            onClick = { selectedApp = app },
+                            onLongClick = if (app.type == "external") ({ editingApp = app }) else null
+                        )
+                    }
+                    item {
+                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
+                            if (showExternalAdd) {
+                                var externalName by remember { mutableStateOf("") }
+                                var externalUrl by remember { mutableStateOf("") }
+                                Column(
+                                    modifier = Modifier.background(nuruColors.bgSecondary, RoundedCornerShape(16.dp)).padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = externalName,
+                                        onValueChange = { externalName = it },
+                                        placeholder = { Text("アプリ名 (任意)", fontSize = 14.sp) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        OutlinedTextField(
+                                            value = externalUrl,
+                                            onValueChange = { externalUrl = it },
+                                            placeholder = { Text("https://...", fontSize = 14.sp) },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                        Button(
+                                            onClick = {
+                                                if (externalUrl.startsWith("http")) {
+                                                    val newApp = MiniAppData(
+                                                        id = "external_${System.currentTimeMillis()}",
+                                                        name = externalName.ifBlank { try { java.net.URL(externalUrl).host } catch(e:Exception) { "外部アプリ" } },
+                                                        description = "外部ミニアプリ",
+                                                        category = "others",
+                                                        type = "external",
+                                                        url = externalUrl
+                                                    )
+                                                    externalApps.add(newApp)
+                                                    prefs.externalApps = Json.encodeToString(externalApps.toList())
+                                                    showExternalAdd = false
+                                                }
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier.height(56.dp)
+                                        ) { Text("追加") }
+                                    }
+                                    TextButton(onClick = { showExternalAdd = false }, modifier = Modifier.fillMaxWidth()) {
+                                        Text("キャンセル", color = nuruColors.textTertiary, fontSize = 12.sp)
+                                    }
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(64.dp)
+                                        .background(Color.Transparent)
+                                        .border(2.dp, nuruColors.border, RoundedCornerShape(16.dp))
+                                        .clickable { showExternalAdd = true },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Icon(Icons.Default.Add, null, tint = nuruColors.textSecondary)
+                                        Text("外部ミニアプリを追加", color = nuruColors.textSecondary, fontSize = 14.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Header overlay — scrolls up with content
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { headerHeightPx.floatValue = it.size.height.toFloat() }
+                    .offset { IntOffset(0, headerOffsetPx.floatValue.roundToInt()) }
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                     Surface(
                         color = nuruColors.bgSecondary,
                         shape = RoundedCornerShape(16.dp),
@@ -225,11 +383,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Surface(
-                                color = LineGreen,
-                                shape = CircleShape,
-                                modifier = Modifier.size(40.dp)
-                            ) {
+                            Surface(color = LineGreen, shape = CircleShape, modifier = Modifier.size(40.dp)) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(NuruIcons.Lock, null, tint = Color.White, modifier = Modifier.size(20.dp))
                                 }
@@ -261,17 +415,11 @@ fun SettingsScreen(
                             }
                         }
                     }
-
-                    // Security Settings (only for internal signer)
                     if (!prefs.isExternalSigner) {
                         SecuritySettingsSection(authViewModel = authViewModel, prefs = prefs, pubkeyHex = pubkeyHex)
                     }
                 }
-            }
-
-            // Search Bar
-            item {
-                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
@@ -288,19 +436,17 @@ fun SettingsScreen(
                         )
                     )
                 }
-            }
-
-            // Favorites Section
-            val favoriteAppData = (allApps + externalApps).filter { favorites.contains(it.id) }
-            if (favoriteAppData.isNotEmpty()) {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (favoriteAppData.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("履歴・おすすめ", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("マイミニアプリ", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             Icon(Icons.Outlined.ChevronRight, null, tint = nuruColors.textTertiary, modifier = Modifier.size(16.dp))
                         }
                         LazyRow(
@@ -338,135 +484,43 @@ fun SettingsScreen(
                 }
             }
 
-            // Category Tabs
-            item {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        listOf("all" to "すべて", "entertainment" to "エンタメ", "tools" to "ツール", "others" to "その他").forEach { (id, label) ->
-                            val isSelected = activeCategory == id
-                            Column(
-                                modifier = Modifier
-                                    .clickable { activeCategory = id }
-                                    .padding(vertical = 8.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    label,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onBackground else nuruColors.textTertiary,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .height(2.dp)
-                                        .width(32.dp)
-                                        .background(if (isSelected) MaterialTheme.colorScheme.onBackground else Color.Transparent)
-                                )
-                            }
-                        }
-                    }
-                    HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
-                }
-            }
-
-            // App List
-            val filteredApps = (allApps + externalApps).filter {
-                (activeCategory == "all" || it.category == activeCategory) &&
-                (searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true) || it.description.contains(searchQuery, ignoreCase = true))
-            }
-
-            items(filteredApps) { app ->
-                MiniAppRow(
-                    app = app,
-                    isFavorite = favorites.contains(app.id),
-                    onToggleFavorite = {
-                        if (favorites.contains(app.id)) {
-                            favorites.remove(app.id)
-                        } else {
-                            favorites.add(app.id)
-                        }
-                        prefs.favoriteApps = favorites.toList()
-                    },
-                    onClick = { selectedApp = app },
-                    onLongClick = if (app.type == "external") ({ editingApp = app }) else null
-                )
-            }
-
-            // External App Add Button
-            item {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
-                    if (showExternalAdd) {
-                        var externalName by remember { mutableStateOf("") }
-                        var externalUrl by remember { mutableStateOf("") }
-
+            // Category tabs overlay — follows header bottom
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onGloballyPositioned { tabsHeightPx.floatValue = it.size.height.toFloat() }
+                    .offset { IntOffset(0, (headerHeightPx.floatValue + headerOffsetPx.floatValue).roundToInt()) }
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    categoryList.forEachIndexed { index, (_, label) ->
+                        val isSelected = pagerState.currentPage == index
                         Column(
-                            modifier = Modifier.background(nuruColors.bgSecondary, RoundedCornerShape(16.dp)).padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = externalName,
-                                onValueChange = { externalName = it },
-                                placeholder = { Text("アプリ名 (任意)", fontSize = 14.sp) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedTextField(
-                                    value = externalUrl,
-                                    onValueChange = { externalUrl = it },
-                                    placeholder = { Text("https://...", fontSize = 14.sp) },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                Button(
-                                    onClick = {
-                                        if (externalUrl.startsWith("http")) {
-                                            val newApp = MiniAppData(
-                                                id = "external_${System.currentTimeMillis()}",
-                                                name = externalName.ifBlank { try { java.net.URL(externalUrl).host } catch(e:Exception) { "外部アプリ" } },
-                                                description = "外部ミニアプリ",
-                                                category = "others",
-                                                type = "external",
-                                                url = externalUrl
-                                            )
-                                            externalApps.add(newApp)
-                                            prefs.externalApps = Json.encodeToString(externalApps.toList())
-                                            showExternalAdd = false
-                                        }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.height(56.dp)
-                                ) {
-                                    Text("追加")
-                                }
-                            }
-                            TextButton(onClick = { showExternalAdd = false }, modifier = Modifier.fillMaxWidth()) {
-                                Text("キャンセル", color = nuruColors.textTertiary, fontSize = 12.sp)
-                            }
-                        }
-                    } else {
-                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(64.dp)
-                                .background(Color.Transparent)
-                                .border(2.dp, nuruColors.border, RoundedCornerShape(16.dp))
-                                .clickable { showExternalAdd = true },
-                            contentAlignment = Alignment.Center
+                                .clickable { coroutineScope.launch { pagerState.animateScrollToPage(index) } }
+                                .padding(vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(Icons.Default.Add, null, tint = nuruColors.textSecondary)
-                                Text("外部ミニアプリを追加", color = nuruColors.textSecondary, fontSize = 14.sp)
-                            }
+                            Text(
+                                label,
+                                color = if (isSelected) MaterialTheme.colorScheme.onBackground else nuruColors.textTertiary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .height(2.dp)
+                                    .width(32.dp)
+                                    .background(if (isSelected) MaterialTheme.colorScheme.onBackground else Color.Transparent)
+                            )
                         }
                     }
                 }
+                HorizontalDivider(color = nuruColors.border, thickness = 0.5.dp)
             }
         }
     }
@@ -625,7 +679,7 @@ private fun MiniAppRow(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -826,7 +880,56 @@ private fun UploadSettingsView(prefs: AppPreferences) {
                 }
             }
         }
-        Text("現在: $uploadServer", fontSize = 12.sp, color = nuruColors.textTertiary, modifier = Modifier.padding(horizontal = 8.dp))
+        // Uploaded images gallery
+        val uploadedImages = remember { prefs.uploadedImages }
+        if (uploadedImages.isNotEmpty()) {
+            Surface(
+                color = nuruColors.bgSecondary,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("アップロード済み画像", fontWeight = FontWeight.Bold)
+                    androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                        columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(4),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.heightIn(max = 300.dp)
+                    ) {
+                        items(uploadedImages.size) { index ->
+                            val url = uploadedImages[index]
+                            Box(
+                                modifier = Modifier
+                                    .aspectRatio(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                            ) {
+                                coil.compose.AsyncImage(
+                                    model = url,
+                                    contentDescription = null,
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                Icon(
+                                    Icons.Default.Delete,
+                                    null,
+                                    tint = Color.White,
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                        .size(16.dp)
+                                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                        .clickable {
+                                            val newList = prefs.uploadedImages.toMutableList()
+                                            newList.remove(url)
+                                            prefs.uploadedImages = newList
+                                        }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -846,6 +949,9 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
     var loadingNip65 by remember { mutableStateOf(false) }
     var manualRelayUrl by remember { mutableStateOf("") }
     var mainRelayState by remember { mutableStateOf(prefs.mainRelay) }
+    var advancedExpanded by remember { mutableStateOf(false) }
+    var newRelayRead by remember { mutableStateOf(true) }
+    var newRelayWrite by remember { mutableStateOf(true) }
 
     val selectedRegion = remember(selectedRegionId) {
         RelayDiscovery.REGION_COORDINATES.find { it.id == selectedRegionId }
@@ -1134,72 +1240,6 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                         }
                     }
 
-                    // 手動リレー追加
-                    HorizontalDivider(color = nuruColors.border, modifier = Modifier.padding(vertical = 12.dp))
-                    Text("リレーを追加", fontSize = 10.sp, color = nuruColors.textTertiary,
-                        modifier = Modifier.padding(bottom = 4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = manualRelayUrl,
-                            onValueChange = { manualRelayUrl = it },
-                            placeholder = { Text("wss://relay.example.com", fontSize = 12.sp) },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
-                        )
-                        Button(
-                            onClick = {
-                                val url = manualRelayUrl.trim()
-                                if (url.startsWith("wss://") || url.startsWith("ws://")) {
-                                    val newRelay = Nip65Relay(url, true, true)
-                                    val newList = (listOf(newRelay) + currentRelays.filter { it.url != url }).take(10)
-                                    currentRelays = newList
-                                    prefs.nip65Relays = newList
-                                    manualRelayUrl = ""
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
-                            shape = RoundedCornerShape(12.dp)
-                        ) { Text("追加", fontSize = 12.sp) }
-                    }
-
-                    // 自分のリレーリストを読み込む
-                    Button(
-                        onClick = {
-                            loadingNip65 = true
-                            coroutineScope.launch {
-                                val pubkey = prefs.publicKeyHex
-                                if (pubkey != null) {
-                                    val relays = try { repository.fetchNip65WriteRelays(pubkey) } catch (_: Exception) { emptyList() }
-                                    if (relays.isNotEmpty()) {
-                                        val newList = relays.take(10).map { Nip65Relay(it, true, true) }
-                                        currentRelays = newList
-                                        prefs.nip65Relays = newList
-                                        Toast.makeText(context, "${newList.size}件のリレーを読み込みました", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "リレーリストが見つかりませんでした", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                                loadingNip65 = false
-                            }
-                        },
-                        enabled = !loadingNip65,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = nuruColors.bgTertiary),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        if (loadingNip65) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = nuruColors.textSecondary)
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        Text("自分のリレーリストを読み込む", fontSize = 12.sp, color = nuruColors.textSecondary)
-                    }
-
                     // 保存済みリレー一覧
                     if (currentRelays.isNotEmpty()) {
                         HorizontalDivider(color = nuruColors.border, modifier = Modifier.padding(vertical = 8.dp))
@@ -1212,15 +1252,39 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                                    modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        relay.url.replace("wss://", ""),
-                                        fontSize = 12.sp,
-                                        color = nuruColors.textPrimary,
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            relay.url.replace("wss://", ""),
+                                            fontSize = 12.sp,
+                                            color = nuruColors.textPrimary
+                                        )
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        ) {
+                                            if (relay.read) {
+                                                Surface(
+                                                    color = LineGreen.copy(alpha = 0.15f),
+                                                    shape = RoundedCornerShape(4.dp)
+                                                ) {
+                                                    Text("read", fontSize = 10.sp, color = LineGreen,
+                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp))
+                                                }
+                                            }
+                                            if (relay.write) {
+                                                Surface(
+                                                    color = Color(0xFF9C27B0).copy(alpha = 0.15f),
+                                                    shape = RoundedCornerShape(4.dp)
+                                                ) {
+                                                    Text("write", fontSize = 10.sp, color = Color(0xFF9C27B0),
+                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp))
+                                                }
+                                            }
+                                        }
+                                    }
                                     IconButton(
                                         onClick = {
                                             val newList = currentRelays.filter { it.url != relay.url }
@@ -1234,9 +1298,7 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                                 }
                             }
                         }
-                    }
 
-                    if (currentRelays.isNotEmpty()) {
                         Button(
                             onClick = {
                                 publishingNip65 = true
@@ -1260,6 +1322,220 @@ private fun RelaySettingsViewContent(prefs: AppPreferences, repository: NostrRep
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
                             } else {
                                 Text("リレーリストを発行", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    // ── 高度な設定（折りたたみ）────────────────────────────────
+                    HorizontalDivider(color = nuruColors.border, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { advancedExpanded = !advancedExpanded }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "高度な設定",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = nuruColors.textSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            if (advancedExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                            contentDescription = null,
+                            tint = nuruColors.textTertiary
+                        )
+                    }
+
+                    AnimatedVisibility(visible = advancedExpanded) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            // NIP-65 説明
+                            Surface(
+                                color = nuruColors.bgTertiary,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        "アウトボックスモデル (NIP-65)",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = nuruColors.textPrimary
+                                    )
+                                    Text(
+                                        "read: 受信用リレー。他のユーザーがあなた宛のメンションをここに送信します。\n" +
+                                        "write: 送信用リレー。あなたの投稿がここに発行されます。",
+                                        fontSize = 11.sp,
+                                        color = nuruColors.textSecondary,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                            }
+
+                            // 自分のリレーリストを読み込む
+                            Button(
+                                onClick = {
+                                    loadingNip65 = true
+                                    coroutineScope.launch {
+                                        val pubkey = prefs.publicKeyHex
+                                        if (pubkey != null) {
+                                            val relays = try { repository.fetchNip65WriteRelays(pubkey) } catch (_: Exception) { emptyList() }
+                                            if (relays.isNotEmpty()) {
+                                                val newList = relays.take(10).map { Nip65Relay(it, true, true) }
+                                                currentRelays = newList
+                                                prefs.nip65Relays = newList
+                                                Toast.makeText(context, "${newList.size}件のリレーを読み込みました", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "リレーリストが見つかりませんでした", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                        loadingNip65 = false
+                                    }
+                                },
+                                enabled = !loadingNip65,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = nuruColors.bgTertiary),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                if (loadingNip65) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = nuruColors.textSecondary)
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                Text("自分のリレーリストを読み込む", fontSize = 12.sp, color = nuruColors.textSecondary)
+                            }
+
+                            // リレーごとの read/write 詳細設定
+                            if (currentRelays.isNotEmpty()) {
+                                Text(
+                                    "リレー詳細設定",
+                                    fontSize = 10.sp,
+                                    color = nuruColors.textTertiary
+                                )
+                                currentRelays.forEachIndexed { index, relay ->
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        color = nuruColors.bgTertiary,
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                            Text(
+                                                relay.url.replace("wss://", ""),
+                                                fontSize = 12.sp,
+                                                color = nuruColors.textPrimary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            ) {
+                                                Switch(
+                                                    checked = relay.read,
+                                                    onCheckedChange = { checked ->
+                                                        val updated = currentRelays.toMutableList()
+                                                        updated[index] = relay.copy(read = checked)
+                                                        currentRelays = updated
+                                                        prefs.nip65Relays = updated
+                                                    }
+                                                )
+                                                Text(
+                                                    "read",
+                                                    fontSize = 12.sp,
+                                                    color = if (relay.read) nuruColors.textPrimary else nuruColors.textTertiary,
+                                                    modifier = Modifier.padding(start = 6.dp)
+                                                )
+                                                Spacer(Modifier.width(20.dp))
+                                                Switch(
+                                                    checked = relay.write,
+                                                    onCheckedChange = { checked ->
+                                                        val updated = currentRelays.toMutableList()
+                                                        updated[index] = relay.copy(write = checked)
+                                                        currentRelays = updated
+                                                        prefs.nip65Relays = updated
+                                                    }
+                                                )
+                                                Text(
+                                                    "write",
+                                                    fontSize = 12.sp,
+                                                    color = if (relay.write) nuruColors.textPrimary else nuruColors.textTertiary,
+                                                    modifier = Modifier.padding(start = 6.dp).weight(1f)
+                                                )
+                                                IconButton(
+                                                    onClick = {
+                                                        val newList = currentRelays.filter { it.url != relay.url }
+                                                        currentRelays = newList
+                                                        prefs.nip65Relays = newList
+                                                    },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Delete, null,
+                                                        tint = nuruColors.textTertiary,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // リレーを追加（read/write 指定付き）
+                            Text(
+                                "リレーを追加",
+                                fontSize = 10.sp,
+                                color = nuruColors.textTertiary,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                            OutlinedTextField(
+                                value = manualRelayUrl,
+                                onValueChange = { manualRelayUrl = it },
+                                placeholder = { Text("wss://relay.example.com", fontSize = 12.sp) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Switch(
+                                    checked = newRelayRead,
+                                    onCheckedChange = { newRelayRead = it }
+                                )
+                                Text("read", fontSize = 12.sp, color = nuruColors.textSecondary)
+                                Spacer(Modifier.width(12.dp))
+                                Switch(
+                                    checked = newRelayWrite,
+                                    onCheckedChange = { newRelayWrite = it }
+                                )
+                                Text(
+                                    "write",
+                                    fontSize = 12.sp,
+                                    color = nuruColors.textSecondary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Button(
+                                    onClick = {
+                                        val url = manualRelayUrl.trim()
+                                        if ((url.startsWith("wss://") || url.startsWith("ws://"))
+                                            && (newRelayRead || newRelayWrite)) {
+                                            val newRelay = Nip65Relay(url, newRelayRead, newRelayWrite)
+                                            val newList = (listOf(newRelay) + currentRelays.filter { it.url != url }).take(10)
+                                            currentRelays = newList
+                                            prefs.nip65Relays = newList
+                                            manualRelayUrl = ""
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = LineGreen),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) { Text("追加", fontSize = 12.sp) }
                             }
                         }
                     }

@@ -62,7 +62,8 @@ data class ScoredPost(
     val repostTime: Long? = null,
     // Event IDs of my own reaction/repost, used for toggle (unlike/unrepost via Kind 5)
     val myLikeEventId: String? = null,
-    val myRepostEventId: String? = null
+    val myRepostEventId: String? = null,
+    val isBookmarked: Boolean = false
 )
 
 /** NIP-17 DM conversation — legacy, kept for read-only display during migration. */

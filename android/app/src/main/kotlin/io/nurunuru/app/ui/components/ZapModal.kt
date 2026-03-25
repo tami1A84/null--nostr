@@ -116,7 +116,7 @@ fun ZapModal(
                     // Amount
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "金額 (sats)",
+                            text = "金額 (₿)",
                             style = MaterialTheme.typography.labelMedium,
                             color = nuruColors.textSecondary
                         )
@@ -231,7 +231,7 @@ fun ZapModal(
                         if (isZapping) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
                         } else {
-                            Text("⚡ ${amount.ifBlank { "0" }} sats のインボイスを作成", fontWeight = FontWeight.Bold)
+                            Text("⚡ ₿${amount.ifBlank { "0" }} のインボイスを作成", fontWeight = FontWeight.Bold)
                         }
                     }
                 }

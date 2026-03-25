@@ -204,7 +204,7 @@ fun NostrRepository.openRelayLiveStream(relayUrl: String): Flow<NostrEvent> = ca
 
     val wsClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
-        .pingInterval(30, TimeUnit.SECONDS)
+        .pingInterval(20, TimeUnit.SECONDS)  // 30秒サーバータイムアウトより前に ping を送る
         .build()
     val request = Request.Builder().url(relayUrl).build()
 

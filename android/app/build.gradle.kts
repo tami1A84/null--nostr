@@ -33,8 +33,8 @@ android {
         applicationId = "io.nurunuru.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "1.4.1"
+        versionCode = 15
+        versionName = "1.4.2"
     }
 
     buildTypes {
@@ -101,6 +101,9 @@ dependencies {
     // Media playback (Kind 34236)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
+
+    // ZXing (QR code generation)
+    implementation("com.google.zxing:core:3.5.3")
 
     // ProofMode: Play Integrity (verified_mobile device attestation)
     implementation(libs.play.integrity)

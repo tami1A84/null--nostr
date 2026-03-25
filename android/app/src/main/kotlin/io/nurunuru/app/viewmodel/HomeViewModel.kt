@@ -24,14 +24,16 @@ data class HomeUiState(
     val viewingPubkey: String? = null, // null = own profile
     val activeTab: Int = 0, // 0: Posts, 1: Likes
     val isNip05Verified: Boolean = false,
-    val badges: List<NostrEvent> = emptyList(),
+    val badges: List<String> = emptyList(), // badge image URLs
     val isFollowing: Boolean = false,
     val followList: List<String> = emptyList(),
     val followProfiles: Map<String, UserProfile> = emptyMap(),
     val uploadServer: String = "nostr.build",
     val searchQuery: String = "",
     val searchResults: List<ScoredPost> = emptyList(),
-    val isSearching: Boolean = false
+    val isSearching: Boolean = false,
+    val bookmarkedPosts: List<ScoredPost> = emptyList(),
+    val isBookmarksLoading: Boolean = false
 ) {
     val isOwnProfile: Boolean
         get() = viewingPubkey == null
@@ -69,6 +71,8 @@ class HomeViewModel(
             val cachedFollowList = repository.getCachedFollowList(pubkeyHex)
             val cachedPosts = repository.getCachedUserNotesPosts(pubkeyHex).filterDeleted()
             val cachedLikes = repository.getCachedUserLikesPosts(pubkeyHex).filterDeleted()
+            val cachedBadgeUrls = repository.getCachedProfileBadges(pubkeyHex)
+                .map { it.image }.filter { it.isNotEmpty() }
             if (cachedProfile != null || cachedPosts.isNotEmpty()) {
                 _uiState.update {
                     it.copy(
@@ -77,6 +81,7 @@ class HomeViewModel(
                         followCount = cachedFollowList?.size ?: it.followCount,
                         posts = if (cachedPosts.isNotEmpty()) cachedPosts else it.posts,
                         likedPosts = if (cachedLikes.isNotEmpty()) cachedLikes else it.likedPosts,
+                        badges = if (cachedBadgeUrls.isNotEmpty()) cachedBadgeUrls else it.badges,
                         isLoading = false
                     )
                 }
@@ -100,7 +105,7 @@ class HomeViewModel(
         val posts: List<ScoredPost>,
         val likedPosts: List<ScoredPost>,
         val followList: List<String>,
-        val badges: List<NostrEvent>
+        val badgeUrls: List<String>
     )
 
     /**
@@ -110,23 +115,25 @@ class HomeViewModel(
      */
     private suspend fun fetchAndApply(pubkeyHex: String, isRefresh: Boolean) {
         try {
-            val (profile, posts, likedPosts, followList, badges) = coroutineScope {
+            val (profile, posts, likedPosts, followList, badgeUrls) = coroutineScope {
                 val profileJob = async { repository.fetchProfile(pubkeyHex) }
                 val postsJob   = async { repository.fetchUserNotes(pubkeyHex, 50) }
                 val likesJob   = async { repository.fetchUserLikes(pubkeyHex, 50) }
                 val followJob  = async { repository.fetchFollowList(pubkeyHex) }
-                val badgesJob  = async { repository.fetchBadges(pubkeyHex) }
+                val badgesJob  = async {
+                    repository.fetchProfileBadgesInfo(pubkeyHex)
+                        .map { it.image }.filter { it.isNotEmpty() }
+                }
                 awaitAll(profileJob, postsJob, likesJob, followJob, badgesJob)
                 FetchResult(
                     profile    = profileJob.await(),
                     posts      = postsJob.await(),
                     likedPosts = likesJob.await(),
                     followList = followJob.await(),
-                    badges     = badgesJob.await()
+                    badgeUrls  = badgesJob.await()
                 )
             }
 
-            val badgeUrls = badges.mapNotNull { it.getTagValue("thumb") ?: it.getTagValue("image") }
             val enrichedPosts = posts.filterDeleted()
                 .map { if (it.event.pubkey == pubkeyHex) it.copy(badges = badgeUrls) else it }
             val enrichedLikes = likedPosts.filterDeleted()
@@ -143,7 +150,7 @@ class HomeViewModel(
                     likedPosts = enrichedLikes,
                     followCount = followList.size,
                     followList = followList,
-                    badges = badges,
+                    badges = badgeUrls,
                     isFollowing = isFollowing,
                     isLoading = false,
                     isRefreshing = false
@@ -332,9 +339,13 @@ class HomeViewModel(
         }
     }
 
-    fun loadFollowProfiles() {
+    fun loadFollowProfiles(pubkeyHex: String? = null) {
         viewModelScope.launch {
-            val pubkeys = _uiState.value.followList
+            val pubkeys = if (pubkeyHex != null) {
+                try { repository.fetchFollowList(pubkeyHex) } catch (e: Exception) { emptyList() }
+            } else {
+                _uiState.value.followList
+            }
             if (pubkeys.isEmpty()) return@launch
             try {
                 val profiles = repository.fetchProfiles(pubkeys)
@@ -409,6 +420,40 @@ class HomeViewModel(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    fun loadBookmarks() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBookmarksLoading = true) }
+            try {
+                val posts = repository.fetchBookmarkedPosts(myPubkeyHex)
+                _uiState.update { it.copy(bookmarkedPosts = posts, isBookmarksLoading = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isBookmarksLoading = false) }
+            }
+        }
+    }
+
+    fun addBookmark(eventId: String) {
+        viewModelScope.launch {
+            try {
+                repository.addBookmark(myPubkeyHex, eventId)
+                val updated = _uiState.value.posts.find { it.event.id == eventId }
+                    ?: _uiState.value.likedPosts.find { it.event.id == eventId }
+                if (updated != null) {
+                    _uiState.update { it.copy(bookmarkedPosts = it.bookmarkedPosts + updated.copy(isBookmarked = true)) }
+                }
+            } catch (e: Exception) { }
+        }
+    }
+
+    fun removeBookmark(eventId: String) {
+        viewModelScope.launch {
+            try {
+                repository.removeBookmark(myPubkeyHex, eventId)
+                _uiState.update { it.copy(bookmarkedPosts = it.bookmarkedPosts.filter { p -> p.event.id != eventId }) }
+            } catch (e: Exception) { }
+        }
     }
 
     fun searchPosts(query: String) {

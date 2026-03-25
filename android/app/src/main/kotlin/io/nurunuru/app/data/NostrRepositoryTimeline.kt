@@ -2,6 +2,7 @@ package io.nurunuru.app.data
 
 import io.nurunuru.app.data.models.*
 import kotlinx.coroutines.*
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 // ─── Timeline ─────────────────────────────────────────────────────────────────
@@ -138,7 +139,8 @@ private suspend fun NostrRepository.fetchGlobalTimelineLegacy(limit: Int): List<
         } else emptyList()
 
         Triple(
-            (viral + recent + secondDegreePosts).distinctBy { it.id },
+            (viral + recent + secondDegreePosts).distinctBy { it.id }
+                .filter { it.getTagValues("e").isEmpty() }, // リプライ除外
             follows.toSet(),
             secondDegree
         )
@@ -226,6 +228,7 @@ suspend fun NostrRepository.fetchFollowTimeline(pubkeyHex: String, limit: Int = 
                         null
                     }
                 }.distinctBy { it.id }
+                    .filter { it.getTagValues("e").isEmpty() } // リプライ除外
                 enrichPosts(events)
             } catch (e: Exception) {
                 android.util.Log.e("NostrRepository", "Rust fetchFollowTimeline failed, falling back", e)
@@ -247,6 +250,7 @@ private suspend fun NostrRepository.fetchFollowTimelineLegacy(pubkeyHex: String,
         since = getOneHourAgo()
     )
     val events = client.fetchEvents(filter, timeoutMs = 6_000).distinctBy { it.id }
+        .filter { it.getTagValues("e").isEmpty() } // リプライ除外
     return enrichPosts(events)
 }
 
@@ -326,4 +330,36 @@ suspend fun NostrRepository.advancedSearch(
     }
     android.util.Log.d("SearchQuery", "raw=${rawEvents.size} filtered=${filtered.size}")
     return enrichPosts(filtered)
+}
+
+/**
+ * バッチでフォロー中ユーザーの NIP-65 リレーリスト (kind 10002) を取得し、キャッシュに保存する。
+ * 起動時にバックグラウンドで実行。TalkViewModel の DM 送信でキャッシュを参照。
+ */
+suspend fun NostrRepository.prefetchFollowRelayLists() = withContext(Dispatchers.IO) {
+    val follows = followingSet.toList().take(200).ifEmpty { return@withContext }
+    // Already cached? Skip those
+    val uncached = follows.filter { cache.getCachedRelayList(it) == null }.take(100)
+    if (uncached.isEmpty()) return@withContext
+
+    android.util.Log.d("NostrRepository", "prefetchFollowRelayLists: fetching ${uncached.size} relay lists")
+    val filter = NostrClient.Filter(
+        kinds = listOf(NostrKind.RELAY_LIST),
+        authors = uncached,
+        limit = uncached.size
+    )
+    val events = client.fetchEvents(filter, timeoutMs = 10_000)
+    // Store latest relay list per pubkey
+    val latestPerPubkey = events.groupBy { it.pubkey }.mapValues { it.value.maxByOrNull { e -> e.createdAt }!! }
+    for ((pubkey, event) in latestPerPubkey) {
+        try {
+            val relayList = event.tags.filter { it.firstOrNull() == "r" }.map { tag ->
+                val url = tag.getOrElse(1) { "" }
+                val marker = tag.getOrNull(2)
+                Nip65Relay(url = url, read = marker == null || marker == "read", write = marker == null || marker == "write")
+            }
+            cache.setCachedRelayList(pubkey, Json.encodeToString(relayList))
+        } catch (_: Exception) {}
+    }
+    android.util.Log.d("NostrRepository", "prefetchFollowRelayLists: cached ${latestPerPubkey.size} relay lists")
 }

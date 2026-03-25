@@ -25,6 +25,9 @@ import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.data.*
 import io.nurunuru.app.ui.icons.NuruIcons
 import io.nurunuru.app.ui.theme.LocalNuruColors
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 data class CustomEmoji(
@@ -88,26 +91,29 @@ internal suspend fun fetchAndCacheEmojis(
                     setPointers.add(tag[1])
             }
         }
-        val loadedSets = mutableListOf<EmojiSet>()
-        setPointers.forEach { pointer ->
-            val parts = pointer.split(":")
-            if (parts.size >= 3) {
-                val setFilter = NostrClient.Filter(
-                    kinds = listOf(30030),
-                    authors = listOf(parts[1]),
-                    tags = mapOf("d" to listOf(parts.drop(2).joinToString(":"))),
-                    limit = 1
-                )
-                val setEvents = repository.fetchEvents(setFilter)
-                if (setEvents.isNotEmpty()) {
-                    val setEvent = setEvents.first()
-                    val setName = setEvent.getTagValue("title") ?: setEvent.getTagValue("d") ?: "Emoji Set"
-                    val setEmojis = setEvent.tags
-                        .filter { it.getOrNull(0) == "emoji" && it.size >= 3 }
-                        .map { CustomEmoji(it[1], it[2], setName) }
-                    if (setEmojis.isNotEmpty()) loadedSets.add(EmojiSet(setName, setEmojis, pointer))
+        val loadedSets = coroutineScope {
+            setPointers.map { pointer ->
+                async {
+                    val parts = pointer.split(":")
+                    if (parts.size >= 3) {
+                        val setFilter = NostrClient.Filter(
+                            kinds = listOf(30030),
+                            authors = listOf(parts[1]),
+                            tags = mapOf("d" to listOf(parts.drop(2).joinToString(":"))),
+                            limit = 1
+                        )
+                        val setEvents = repository.fetchEvents(setFilter)
+                        if (setEvents.isNotEmpty()) {
+                            val setEvent = setEvents.first()
+                            val setName = setEvent.getTagValue("title") ?: setEvent.getTagValue("d") ?: "Emoji Set"
+                            val setEmojis = setEvent.tags
+                                .filter { it.getOrNull(0) == "emoji" && it.size >= 3 }
+                                .map { CustomEmoji(it[1], it[2], setName) }
+                            if (setEmojis.isNotEmpty()) EmojiSet(setName, setEmojis, pointer) else null
+                        } else null
+                    } else null
                 }
-            }
+            }.awaitAll().filterNotNull()
         }
         EmojiPickerCache.put(pubkey, individualEmojis, loadedSets)
         EmojiPickerCache.get(pubkey)

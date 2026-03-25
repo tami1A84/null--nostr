@@ -192,13 +192,49 @@ suspend fun NostrRepository.fetchMuteList(pubkeyHex: String): MuteListData {
     val event = events.maxByOrNull { it.createdAt }
 
     if (event != null) {
+        // NIP-44 private mute list: content is encrypted, tags may be empty
+        val signer = client.getSigner()
+        val muteData = if (event.content.isNotBlank() && signer != null) {
+            try {
+                val decrypted = signer.nip44Decrypt(pubkeyHex, event.content)
+                if (decrypted != null) {
+                    // Decrypted content is a JSON array of tags: [["p","..."],["e","..."],...]
+                    val decryptedTags = try {
+                        kotlinx.serialization.json.Json.decodeFromString<List<List<String>>>(decrypted)
+                    } catch (_: Exception) { emptyList() }
+                    val allTags = event.tags + decryptedTags
+                    MuteListData(
+                        pubkeys = allTags.filter { it.firstOrNull() == "p" }.mapNotNull { it.getOrNull(1) },
+                        eventIds = allTags.filter { it.firstOrNull() == "e" }.mapNotNull { it.getOrNull(1) },
+                        hashtags = allTags.filter { it.firstOrNull() == "t" }.mapNotNull { it.getOrNull(1) },
+                        words = allTags.filter { it.firstOrNull() == "word" }.mapNotNull { it.getOrNull(1) }
+                    )
+                } else {
+                    MuteListData(
+                        pubkeys = event.getTagValues("p"),
+                        eventIds = event.getTagValues("e"),
+                        hashtags = event.getTagValues("t"),
+                        words = event.getTagValues("word")
+                    )
+                }
+            } catch (_: Exception) {
+                MuteListData(
+                    pubkeys = event.getTagValues("p"),
+                    eventIds = event.getTagValues("e"),
+                    hashtags = event.getTagValues("t"),
+                    words = event.getTagValues("word")
+                )
+            }
+        } else {
+            MuteListData(
+                pubkeys = event.getTagValues("p"),
+                eventIds = event.getTagValues("e"),
+                hashtags = event.getTagValues("t"),
+                words = event.getTagValues("word")
+            )
+        }
         cache.setCachedMuteList(pubkeyHex, json.encodeToString(NostrEvent.serializer(), event))
-        return MuteListData(
-            pubkeys = event.getTagValues("p"),
-            eventIds = event.getTagValues("e"),
-            hashtags = event.getTagValues("t"),
-            words = event.getTagValues("word")
-        )
+        return muteData
     }
 
     return getCachedMuteList(pubkeyHex) ?: MuteListData()
@@ -223,6 +259,7 @@ suspend fun NostrRepository.syncNip65Relays(pubkeyHex: String) {
 }
 
 suspend fun NostrRepository.removeFromMuteList(pubkeyHex: String, type: String, value: String): Boolean {
+    val signer = client.getSigner()
     val filter = NostrClient.Filter(kinds = listOf(NostrKind.MUTE_LIST), authors = listOf(pubkeyHex), limit = 1)
     val latest = client.fetchEvents(filter, timeoutMs = 4_000).maxByOrNull { it.createdAt } ?: return true
 
@@ -230,23 +267,53 @@ suspend fun NostrRepository.removeFromMuteList(pubkeyHex: String, type: String, 
         "pubkey" -> "p"; "event" -> "e"; "hashtag" -> "t"; "word" -> "word"
         else -> return false
     }
-    val newTags = latest.tags.filter { !(it.firstOrNull() == tagType && it.getOrNull(1) == value) }
-    if (newTags.size == latest.tags.size) return true
 
-    return publishNewEvent(NostrKind.MUTE_LIST, latest.content, newTags) != null
+    if (signer != null && latest.content.isNotBlank()) {
+        val existingTags = try {
+            val decrypted = signer.nip44Decrypt(pubkeyHex, latest.content)
+            if (decrypted != null) kotlinx.serialization.json.Json.decodeFromString<List<List<String>>>(decrypted) else latest.tags
+        } catch (_: Exception) { latest.tags }
+        val newTags = existingTags.filter { !(it.firstOrNull() == tagType && it.getOrNull(1) == value) }
+        if (newTags.size == existingTags.size) return true
+        val encryptedContent = try { signer.nip44Encrypt(pubkeyHex, kotlinx.serialization.json.Json.encodeToString(newTags)) ?: "" } catch (_: Exception) { "" }
+        return publishNewEvent(NostrKind.MUTE_LIST, encryptedContent, emptyList()) != null
+    } else {
+        val newTags = latest.tags.filter { !(it.firstOrNull() == tagType && it.getOrNull(1) == value) }
+        if (newTags.size == latest.tags.size) return true
+        return publishNewEvent(NostrKind.MUTE_LIST, latest.content, newTags) != null
+    }
 }
 
 suspend fun NostrRepository.muteUser(pubkeyHex: String): Boolean {
-    val filter = NostrClient.Filter(
-        kinds = listOf(NostrKind.MUTE_LIST),
-        authors = listOf(prefs.publicKeyHex ?: return false),
-        limit = 1
-    )
+    val myPubkey = prefs.publicKeyHex ?: return false
+    val signer = client.getSigner()
+    val filter = NostrClient.Filter(kinds = listOf(NostrKind.MUTE_LIST), authors = listOf(myPubkey), limit = 1)
     val latest = client.fetchEvents(filter, timeoutMs = 4_000).maxByOrNull { it.createdAt }
-    val tags = latest?.tags?.toMutableList() ?: mutableListOf()
-    if (tags.any { it.firstOrNull() == "p" && it.getOrNull(1) == pubkeyHex }) return true
-    tags.add(listOf("p", pubkeyHex))
-    return publishNewEvent(NostrKind.MUTE_LIST, latest?.content ?: "", tags) != null
+
+    if (signer != null) {
+        // NIP-44 private mute list
+        val existingPrivateTags = if (latest != null && latest.content.isNotBlank()) {
+            try {
+                val decrypted = signer.nip44Decrypt(myPubkey, latest.content)
+                if (decrypted != null) kotlinx.serialization.json.Json.decodeFromString<List<List<String>>>(decrypted) else emptyList()
+            } catch (_: Exception) { emptyList() }
+        } else {
+            latest?.tags ?: emptyList()  // Migrate from public tags
+        }
+        val allTags = existingPrivateTags.toMutableList()
+        if (allTags.any { it.firstOrNull() == "p" && it.getOrNull(1) == pubkeyHex }) return true
+        allTags.add(listOf("p", pubkeyHex))
+        val encryptedContent = try {
+            signer.nip44Encrypt(myPubkey, kotlinx.serialization.json.Json.encodeToString(allTags)) ?: ""
+        } catch (_: Exception) { "" }
+        return publishNewEvent(NostrKind.MUTE_LIST, encryptedContent, emptyList()) != null
+    } else {
+        // Fallback: public tags
+        val tags = latest?.tags?.toMutableList() ?: mutableListOf()
+        if (tags.any { it.firstOrNull() == "p" && it.getOrNull(1) == pubkeyHex }) return true
+        tags.add(listOf("p", pubkeyHex))
+        return publishNewEvent(NostrKind.MUTE_LIST, latest?.content ?: "", tags) != null
+    }
 }
 
 suspend fun NostrRepository.followUser(myPubkeyHex: String, targetPubkeyHex: String): Boolean {

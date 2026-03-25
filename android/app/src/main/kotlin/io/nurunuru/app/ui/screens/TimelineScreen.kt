@@ -46,7 +46,8 @@ fun TimelineScreen(
     myPubkey: String,
     myPictureUrl: String?,
     myDisplayName: String,
-    onStartDM: (String) -> Unit = {}
+    onStartDM: (String) -> Unit = {},
+    onNoteClick: ((String) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
@@ -119,7 +120,8 @@ fun TimelineScreen(
                         showSearchModal = true
                         viewModel.search(tag)
                     },
-                    myPubkey = myPubkey
+                    myPubkey = myPubkey,
+                    onNoteClick = onNoteClick
                 )
             }
         }
@@ -182,7 +184,8 @@ private fun TimelineContent(
     feedType: FeedType,
     onProfileClick: (String) -> Unit,
     onHashtagClick: (String) -> Unit,
-    myPubkey: String
+    myPubkey: String,
+    onNoteClick: ((String) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val nuruColors = LocalNuruColors.current
@@ -295,9 +298,11 @@ private fun TimelineContent(
                                 onReport = { type, content -> viewModel.reportEvent(post.event.id, post.event.pubkey, type, content) },
                                 onBirdwatch = { type, content, url -> viewModel.submitBirdwatch(post.event.id, post.event.pubkey, type, content, url) },
                                 onNotInterested = notInterestedCallback,
+                                onBookmark = { viewModel.toggleBookmark(post.event.id, post.isBookmarked) },
                                 birdwatchNotes = uiState.birdwatchNotes[post.event.id] ?: emptyList(),
                                 isOwnPost = post.event.pubkey == myPubkey,
                                 onHashtagClick = onHashtagClick,
+                                onNoteClick = onNoteClick,
                                 myPubkey = myPubkey
                             )
                         }

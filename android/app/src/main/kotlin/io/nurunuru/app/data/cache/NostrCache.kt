@@ -143,9 +143,13 @@ class NostrCache(context: Context) {
         } catch (_: Exception) { null }
     }
 
-    fun setCachedProfile(pubkey: String, profile: UserProfile) {
+    /**
+     * @param persist true → LRU + SharedPrefs（フォロー中ユーザー・自分のみ）
+     *                false → LRUのみ（フォロー外の一時プロフィール）
+     */
+    fun setCachedProfile(pubkey: String, profile: UserProfile, persist: Boolean = true) {
         profileCache.set(pubkey, profile)
-        if (!profileEnabled) return
+        if (!persist || !profileEnabled) return
         try {
             setRaw("profile_$pubkey", json.encodeToString(profile), profileTtl)
         } catch (_: Exception) { }

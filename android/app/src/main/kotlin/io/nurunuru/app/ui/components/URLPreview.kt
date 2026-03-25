@@ -134,6 +134,7 @@ private fun URLPreviewCard(data: PreviewData, compact: Boolean) {
                     context.startActivity(intent)
                 } catch (e: Exception) { }
             },
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {

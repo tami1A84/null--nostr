@@ -31,10 +31,12 @@ fun PostItem(
     onReport: ((String, String) -> Unit)? = null, // type, content
     onBirdwatch: ((String, String, String) -> Unit)? = null, // type, content, url
     onNotInterested: (() -> Unit)? = null,
+    onBookmark: (() -> Unit)? = null,
     isOwnPost: Boolean = false,
     isVerified: Boolean = false,
     birdwatchNotes: List<io.nurunuru.app.data.models.NostrEvent> = emptyList(),
     onHashtagClick: ((String) -> Unit)? = null,
+    onNoteClick: ((String) -> Unit)? = null,
     myPubkey: String = ""
 ) {
     val nuruColors = LocalNuruColors.current
@@ -60,6 +62,7 @@ fun PostItem(
     var showZapModal by remember { mutableStateOf(false) }
     var showZapCustomModal by remember { mutableStateOf(false) }
     var showReactionPicker by remember { mutableStateOf(false) }
+    var showQuoteRepost by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -112,7 +115,8 @@ fun PostItem(
                             repository = repository,
                             onProfileClick = onProfileClick,
                             overrideContent = post.event.content.take(140) + "...",
-                            onHashtagClick = onHashtagClick
+                            onHashtagClick = onHashtagClick,
+                            onNoteClick = onNoteClick
                         )
                         PostMedia(post = post, overrideContent = post.event.content.take(140))
                         Text(
@@ -125,7 +129,7 @@ fun PostItem(
                                 .padding(vertical = 4.dp)
                         )
                     } else {
-                        PostContent(post = post, repository = repository, onProfileClick = onProfileClick, onHashtagClick = onHashtagClick)
+                        PostContent(post = post, repository = repository, onProfileClick = onProfileClick, onHashtagClick = onHashtagClick, onNoteClick = onNoteClick)
                         PostMedia(post = post)
                         if (shouldCollapse && isExpanded) {
                             Text(
@@ -157,6 +161,8 @@ fun PostItem(
                     onLike = { onLike("+", emptyList()) },
                     onLikeLongPress = { showReactionPicker = true },
                     onRepost = onRepost,
+                    onQuoteRepost = { showQuoteRepost = true },
+                    onBookmark = onBookmark,
                     onZap = {
                         val lud16 = profile?.lud16
                         if (lud16 != null) {
@@ -166,7 +172,7 @@ fun PostItem(
                                     val invoice = repository.fetchLightningInvoice(lud16, amount)
                                     if (invoice != null) {
                                         clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(invoice))
-                                        toastState.show("⚡ ${amount} sats のインボイスをコピーしました", ToastType.SUCCESS)
+                                        toastState.show("⚡ ₿${amount} のインボイスをコピーしました", ToastType.SUCCESS)
                                     } else {
                                         toastState.show("インボイスの作成に失敗しました", ToastType.ERROR)
                                     }
@@ -239,6 +245,15 @@ fun PostItem(
                 onBirdwatch?.invoke(type, content, url)
             },
             existingNotes = birdwatchNotes
+        )
+    }
+
+    if (showQuoteRepost) {
+        QuoteRepostModal(
+            post = post,
+            repository = repository,
+            onDismiss = { showQuoteRepost = false },
+            onProfileClick = onProfileClick
         )
     }
 }

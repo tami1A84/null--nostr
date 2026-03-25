@@ -114,6 +114,6 @@ fun ZapSettings(prefs: AppPreferences) {
                 }
             }
         }
-        Text("現在の設定: $defaultZap sats", fontSize = 12.sp, color = nuruColors.textTertiary, modifier = Modifier.padding(horizontal = 8.dp))
+        Text("現在の設定: ₿$defaultZap", fontSize = 12.sp, color = nuruColors.textTertiary, modifier = Modifier.padding(horizontal = 8.dp))
     }
 }

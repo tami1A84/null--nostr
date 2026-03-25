@@ -38,7 +38,7 @@ fun TimelineTabButton(
             shape = RoundedCornerShape(16.dp),
             elevation = null
         ) {
-            Text(text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(text, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
 
         if (showDot) {

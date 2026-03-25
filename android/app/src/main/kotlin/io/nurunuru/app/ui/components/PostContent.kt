@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.ui.platform.LocalClipboardManager
 import io.nurunuru.app.data.*
 import io.nurunuru.app.data.models.NostrKind
 import io.nurunuru.app.data.models.ScoredPost
@@ -44,7 +45,11 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
-fun PostIndicators(post: ScoredPost, onProfileClick: (String) -> Unit) {
+fun PostIndicators(
+    post: ScoredPost,
+    onProfileClick: (String) -> Unit,
+    repository: io.nurunuru.app.data.NostrRepository? = null
+) {
     val nuruColors = LocalNuruColors.current
     if (post.repostedBy != null) {
         Row(
@@ -67,8 +72,16 @@ fun PostIndicators(post: ScoredPost, onProfileClick: (String) -> Unit) {
                 color = nuruColors.textTertiary
             )
         }
-    } else if (post.event.getTagValue("e") != null) {
+    } else if (post.event.getTagValue("e") != null && post.event.getTagValues("q").isEmpty()) {
+        // 返信表示（引用リツイートは除外）
         val replyPubkey = post.event.getTagValue("p")
+        val replyName = if (replyPubkey != null && repository != null) {
+            repository.getCachedProfile(replyPubkey)?.displayedName
+                ?: "@${NostrKeyUtils.shortenPubkey(replyPubkey)}"
+        } else if (replyPubkey != null) {
+            "@${NostrKeyUtils.shortenPubkey(replyPubkey)}"
+        } else null
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -83,11 +96,11 @@ fun PostIndicators(post: ScoredPost, onProfileClick: (String) -> Unit) {
                 modifier = Modifier.size(14.dp)
             )
             Spacer(Modifier.width(4.dp))
-            if (replyPubkey != null) {
+            if (replyName != null) {
                 Text(
                     text = buildAnnotatedString {
                         withStyle(SpanStyle(color = nuruColors.lineGreen)) {
-                            append("@${NostrKeyUtils.shortenPubkey(replyPubkey)}")
+                            append(replyName)
                         }
                         append(" への返信")
                     },
@@ -141,24 +154,12 @@ fun PostHeader(
             )
 
             if (internalVerified && profile?.nip05 != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Icon(
-                        imageVector = NuruIcons.Check,
-                        contentDescription = null,
-                        tint = nuruColors.lineGreen,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = formatNip05(profile.nip05),
-                        fontSize = 11.sp,
-                        color = nuruColors.lineGreen,
-                        maxLines = 1,
-                        modifier = Modifier.widthIn(max = 100.dp)
-                    )
-                }
+                Icon(
+                    imageVector = NuruIcons.Verified,
+                    contentDescription = "認証済み",
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(14.dp)
+                )
             }
 
             BadgeDisplay(
@@ -192,6 +193,15 @@ fun PostHeader(
                     onDismissRequest = { showMenu = false },
                     modifier = Modifier.background(nuruColors.bgSecondary)
                 ) {
+                    val clipboardManager = LocalClipboardManager.current
+                    DropdownMenuItem(
+                        text = { Text("テキストをコピー", color = nuruColors.textPrimary) },
+                        onClick = {
+                            showMenu = false
+                            clipboardManager.setText(AnnotatedString(post.event.content))
+                        },
+                        leadingIcon = { Icon(Icons.Default.ContentCopy, null, tint = nuruColors.textSecondary, modifier = Modifier.size(18.dp)) }
+                    )
                     if (onNotInterested != null && !isOwnPost) {
                         DropdownMenuItem(
                             text = { Text("この投稿に興味がない", color = nuruColors.textPrimary) },
@@ -239,7 +249,8 @@ fun PostContent(
     repository: io.nurunuru.app.data.NostrRepository,
     onProfileClick: (String) -> Unit,
     overrideContent: String? = null,
-    onHashtagClick: ((String) -> Unit)? = null
+    onHashtagClick: ((String) -> Unit)? = null,
+    onNoteClick: ((String) -> Unit)? = null
 ) {
     val nuruColors = LocalNuruColors.current
     val content = overrideContent ?: post.event.content
@@ -384,7 +395,8 @@ fun PostContent(
                 is ContentPart.Nostr -> EmbeddedNostrContent(
                     link = part.link,
                     repository = repository,
-                    onProfileClick = onProfileClick
+                    onProfileClick = onProfileClick,
+                    onNoteClick = onNoteClick
                 )
                 else -> {}
             }
@@ -406,7 +418,8 @@ sealed class ContentPart {
 fun EmbeddedNostrContent(
     link: String,
     repository: io.nurunuru.app.data.NostrRepository,
-    onProfileClick: (String) -> Unit
+    onProfileClick: (String) -> Unit,
+    onNoteClick: ((String) -> Unit)? = null
 ) {
     val bech32 = link.removePrefix("nostr:")
     var note by remember { mutableStateOf<ScoredPost?>(null) }
@@ -435,7 +448,8 @@ fun EmbeddedNostrContent(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 6.dp),
+                .padding(vertical = 6.dp)
+                .then(if (onNoteClick != null) Modifier.clickable { onNoteClick(note!!.event.id) } else Modifier),
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
             border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)

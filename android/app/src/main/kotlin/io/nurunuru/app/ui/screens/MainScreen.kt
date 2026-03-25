@@ -56,6 +56,7 @@ fun MainScreen(
     val nuruColors = LocalNuruColors.current
     var activeTab by remember { mutableStateOf(BottomTab.TIMELINE) }
     var isExternalAppOpen by remember { mutableStateOf(false) }
+    var selectedNoteEventId by remember { mutableStateOf<String?>(null) }
 
     // Create shared NostrClient and Repository
     // NostrCache と RecommendationEngine は NuruNuruApp.onCreate() で事前生成済み。
@@ -211,7 +212,8 @@ fun MainScreen(
                     onStartDM = { partnerPubkey ->
                         talkVM.createDmConversation(partnerPubkey)
                         activeTab = BottomTab.TALK
-                    }
+                    },
+                    onNoteClick = { eventId -> selectedNoteEventId = eventId }
                 )
             }
 
@@ -228,7 +230,8 @@ fun MainScreen(
                     onStartDM = { partnerPubkey ->
                         talkVM.createDmConversation(partnerPubkey)
                         activeTab = BottomTab.TALK
-                    }
+                    },
+                    onNoteClick = { eventId -> selectedNoteEventId = eventId }
                 )
             }
 
@@ -252,6 +255,21 @@ fun MainScreen(
                     pictureUrl = myProfile?.picture,
                     onExternalAppOpenChanged = { isExternalAppOpen = it },
                     onMlsCacheCleared = { talkVM.clearStateAfterCacheClear() }
+                )
+            }
+
+            // ── POST DETAIL ────────────────────────────────────────────────
+            if (selectedNoteEventId != null) {
+                PostDetailScreen(
+                    eventId = selectedNoteEventId!!,
+                    repository = repository,
+                    myPubkey = pubkeyHex,
+                    onBack = { selectedNoteEventId = null },
+                    onProfileClick = { pubkey ->
+                        selectedNoteEventId = null
+                        homeVM.loadProfile(pubkey)
+                        activeTab = BottomTab.HOME
+                    }
                 )
             }
         }

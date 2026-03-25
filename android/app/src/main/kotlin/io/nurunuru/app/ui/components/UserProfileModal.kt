@@ -200,7 +200,7 @@ fun UserProfileModal(
                             },
                             onMessageClick = if (!uiState.isOwnProfile) ({ onStartDM(pubkey) }) else null,
                             onFollowListClick = {
-                                viewModel.loadFollowProfiles()
+                                viewModel.loadFollowProfiles(pubkey)
                             },
                             clipboardManager = clipboardManager
                         )

@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-03-25
+
+### Added (Android)
+- ホームタブのプロフィールヘッダーが投稿スクロールに追従して隠れるコラプシングヘッダーを実装
+- ミニアプリタブの見出しも同様にコラプシングヘッダーに対応
+- プロフィール画面のバッジを独立した行に移動し、Lightning アドレスの上に配置
+
+### Changed (Android)
+- Zap 金額の表記を BIP-177 に準拠した ₿ 記法に統一（ZapModal・通知・トースト・Zap設定すべて）
+- プロフィール表示名を 22sp・NIP-05 を 16sp に調整、バッジアイコンを 20dp に拡大
+
+### Changed (docs)
+- README にスクリーンショット 4 枚を横並びで追加
+- README のログイン説明からパスキー（web版のみ）の記述を削除
+
 ## [1.4.1] - 2026-03-22
 
 ### Fixed (Android)
