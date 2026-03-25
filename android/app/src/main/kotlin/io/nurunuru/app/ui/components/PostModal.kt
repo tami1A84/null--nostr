@@ -289,10 +289,16 @@ fun PostModal(
                             value = text,
                             onValueChange = {
                                 if (it.text.length <= MAX_NOTE_LENGTH) {
-                                    text = TextFieldValue(
-                                        annotatedString = buildHighlightedText(it.text),
-                                        selection = it.selection
-                                    )
+                                    // IME変換中（composition != null）はAnnotatedStringを再構築しない。
+                                    // 再構築するとcomposition情報が失われ、変換が強制確定される。
+                                    text = if (it.composition != null) {
+                                        it
+                                    } else {
+                                        TextFieldValue(
+                                            annotatedString = buildHighlightedText(it.text),
+                                            selection = it.selection
+                                        )
+                                    }
                                 }
                             },
                             textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
@@ -485,7 +491,7 @@ private fun PostHeader(
 }
 
 @Composable
-private fun PostToolbar(
+internal fun PostToolbar(
     selectedImages: List<android.net.Uri>,
     showCWInput: Boolean,
     isSTTActive: Boolean,
@@ -544,7 +550,7 @@ private fun PostToolbar(
 }
 
 @Composable
-private fun RelaySelectPanel(
+internal fun RelaySelectPanel(
     relays: List<String>,
     selectedRelays: Set<String>,
     nip70Protected: Boolean,
@@ -617,7 +623,7 @@ private fun RelaySelectPanel(
 }
 
 @Composable
-private fun CWInput(
+internal fun CWInput(
     contentWarning: String,
     onValueChange: (String) -> Unit
 ) {

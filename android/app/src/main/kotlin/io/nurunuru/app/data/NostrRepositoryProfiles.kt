@@ -51,11 +51,14 @@ fun NostrRepository.getCachedUserLikesPosts(pubkeyHex: String): List<ScoredPost>
  */
 suspend fun NostrRepository.fetchUserNotes(pubkeyHex: String, limit: Int = 30): List<ScoredPost> {
     // nostrdb のローカルキャッシュから即時表示用データを取得（kind-1のみ）
+    // queryLocal() は Rust block_on() を呼ぶためIOスレッドで実行する
     val rustClient = client.getRustClient()
     val nostrdbPosts = if (rustClient != null) {
         try {
-            val eventsJson = rustClient.queryLocal(listOf(pubkeyHex), limit.toUInt())
-            eventsJson.mapNotNull { j -> try { Json.decodeFromString<NostrEvent>(j) } catch (_: Exception) { null } }
+            withContext(Dispatchers.IO) {
+                val eventsJson = rustClient.queryLocal(listOf(pubkeyHex), limit.toUInt())
+                eventsJson.mapNotNull { j -> try { Json.decodeFromString<NostrEvent>(j) } catch (_: Exception) { null } }
+            }
         } catch (_: Exception) { emptyList() }
     } else emptyList()
 

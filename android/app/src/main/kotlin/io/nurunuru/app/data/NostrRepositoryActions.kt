@@ -21,7 +21,9 @@ suspend fun NostrRepository.likePost(
             val unsigned = rustClient.createUnsignedReaction(eventId, authorPubkey, emoji, myPubkeyHex)
             signAndPublishGetId(unsigned).also { if (it != null) android.util.Log.d("NostrRepository", "Ext react OK: $eventId id=$it") }
         } else {
-            val reactionId = rustClient.react(eventId, authorPubkey, emoji)
+            val reactionId = withContext(Dispatchers.IO) {
+                rustClient.react(eventId, authorPubkey, emoji)
+            }
             android.util.Log.d("NostrRepository", "Rust react OK: $eventId emoji=$emoji id=$reactionId")
             reactionId.ifEmpty { null }
         }
@@ -47,7 +49,7 @@ suspend fun NostrRepository.repostPost(eventId: String, eventJson: String? = nul
             val unsigned = rustClient.createUnsignedRepost(eventJson, myPubkeyHex)
             signAndPublishGetId(unsigned).also { if (it != null) android.util.Log.d("NostrRepository", "Ext repost OK: $eventId id=$it") }
         } else {
-            val repostId = rustClient.repost(eventJson)
+            val repostId = withContext(Dispatchers.IO) { rustClient.repost(eventJson) }
             android.util.Log.d("NostrRepository", "Rust repost OK: $eventId id=$repostId")
             repostId.ifEmpty { null }
         }

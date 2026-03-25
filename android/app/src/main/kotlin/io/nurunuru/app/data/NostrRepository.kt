@@ -142,10 +142,14 @@ class NostrRepository(
         val rustClient = client.getRustClient() ?: return null
         return try {
             if (isExternalSigner()) {
-                val unsigned = rustClient.createUnsignedEvent(kind.toUInt(), content, tags, myPubkeyHex)
+                val unsigned = withContext(Dispatchers.IO) {
+                    rustClient.createUnsignedEvent(kind.toUInt(), content, tags, myPubkeyHex)
+                }
                 signAndPublishGetId(unsigned)
             } else {
-                rustClient.publishEvent(kind.toUInt(), content, tags).takeIf { it.isNotEmpty() }
+                withContext(Dispatchers.IO) {
+                    rustClient.publishEvent(kind.toUInt(), content, tags).takeIf { it.isNotEmpty() }
+                }
             }
         } catch (e: Exception) {
             android.util.Log.e("NostrRepository", "publishNewEvent(kind=$kind) failed: ${e.message}")
@@ -186,6 +190,8 @@ class NostrRepository(
                     "NostrRepository",
                     "fetchProfiles via Rust: ${ffiProfiles.size}/${missing.size} resolved"
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.w("NostrRepository", "Rust fetchProfiles failed, falling back: ${e.message}")
                 fetchProfilesLegacy(missing, results)

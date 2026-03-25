@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] - 2026-03-26
+
+### Fixed (Android)
+- PullToRefreshインジケーター（黒丸）がアイドル時に常時表示される問題を修正（HomeScreen・TimelineScreen・UserProfileModal・NotificationModal の4箇所）
+- 引用投稿モーダルのツールバーが仮想キーボードに隠れる問題を修正（`decorFitsSystemWindows = false`）
+- 秘密鍵ログイン時にいいね・リポスト操作でクラッシュする問題を修正（Rust FFI 呼び出しを IO スレッドに移動）
+- 日本語入力中に変換が強制確定される IME バグを修正（composition 中は AnnotatedString 再構築をスキップ）
+- スクロール時に `fetchProfiles` が `CancellationException` を飲み込んでフォールバックログを出力し続ける問題を修正
+- タイムラインのリレー選択ピルがドロップダウン矢印（▼）しか反応しない問題を修正（ピル全体タップ対応）
+- プロフィールページの投稿一覧にブックマークボタンが表示されない問題を修正
+- `queryLocal`・`publishEvent` でメインスレッドブロック（ANR）が発生する問題を修正
+
+### Added (Android)
+- 引用投稿モーダルをPost投稿モーダルと統一（マイク音声入力・Content Warning ボタンを追加）
+- ミニアプリタブにプライバシーポリシーへのリンクを追加
+
+### Added (Web)
+- GitHub Pages サイトを `docs/` に追加（アイコン + プライバシーポリシーリンク）
+- プライバシーポリシーページ（`docs/privacy.html`）を追加
+
+### Changed
+- zapstore.yaml の Zap 説明文を実際の動作（クリップボードコピー）に修正
+
 ## [1.4.2] - 2026-03-25
 
 ### Added (Android)

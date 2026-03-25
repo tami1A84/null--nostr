@@ -434,6 +434,27 @@ class HomeViewModel(
         }
     }
 
+    fun toggleBookmark(eventId: String, isCurrentlyBookmarked: Boolean) {
+        viewModelScope.launch {
+            try {
+                if (isCurrentlyBookmarked) {
+                    repository.removeBookmark(myPubkeyHex, eventId)
+                    _uiState.update { state ->
+                        val update = { p: ScoredPost -> if (p.event.id == eventId) p.copy(isBookmarked = false) else p }
+                        state.copy(posts = state.posts.map(update), likedPosts = state.likedPosts.map(update),
+                            bookmarkedPosts = state.bookmarkedPosts.filter { it.event.id != eventId })
+                    }
+                } else {
+                    repository.addBookmark(myPubkeyHex, eventId)
+                    _uiState.update { state ->
+                        val update = { p: ScoredPost -> if (p.event.id == eventId) p.copy(isBookmarked = true) else p }
+                        state.copy(posts = state.posts.map(update), likedPosts = state.likedPosts.map(update))
+                    }
+                }
+            } catch (e: Exception) { }
+        }
+    }
+
     fun addBookmark(eventId: String) {
         viewModelScope.launch {
             try {

@@ -251,6 +251,7 @@ fun PostItem(
     if (showQuoteRepost) {
         QuoteRepostModal(
             post = post,
+            myPubkey = myPubkey,
             repository = repository,
             onDismiss = { showQuoteRepost = false },
             onProfileClick = onProfileClick

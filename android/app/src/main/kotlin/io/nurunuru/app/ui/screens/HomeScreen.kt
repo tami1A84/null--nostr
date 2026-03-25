@@ -296,7 +296,7 @@ fun HomeScreen(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .offset { IntOffset(0, (profileHeightPx.floatValue + tabsHeightPx.floatValue + profileOffsetPx.floatValue).roundToInt()) },
-                    containerColor = bgPrimary,
+                    containerColor = if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0f) bgPrimary else Color.Transparent,
                     contentColor = LineGreen
                 )
             }
