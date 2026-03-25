@@ -316,7 +316,7 @@ fun NotificationModal(
                     PullToRefreshContainer(
                         state = pullRefreshState,
                         modifier = Modifier.align(Alignment.TopCenter),
-                        containerColor = nuruColors.bgSecondary,
+                        containerColor = if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0f) nuruColors.bgSecondary else Color.Transparent,
                         contentColor = LineGreen
                     )
 

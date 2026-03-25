@@ -358,6 +358,24 @@ fun SettingsScreen(
                             }
                         }
                     }
+
+                    item {
+                        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { uriHandler.openUri("https://tami1A84.github.io/null--nostr/privacy.html") }
+                                .padding(vertical = 14.dp, horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "プライバシーポリシー",
+                                fontSize = 13.sp,
+                                color = nuruColors.textTertiary,
+                                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                            )
+                        }
+                    }
                 }
             }
 

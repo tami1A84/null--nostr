@@ -25,7 +25,7 @@ description: |
   E2E暗号化のDMとグループチャット（NIP-EE / MLS）。旧来のDMの読み取りにも対応。
 
   ⚡ Zap
-  LightningインボイスをアプリからそのままZap送信。
+  相手のLightningアドレスからインボイスを取得してクリップボードにコピー。外部ウォレットで送金できます。
 
   🔍 検索
   全文検索で #タグ、from:npub、filter:image などのコマンドに対応。

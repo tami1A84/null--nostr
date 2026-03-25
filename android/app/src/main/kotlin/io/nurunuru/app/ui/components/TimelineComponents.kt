@@ -8,8 +8,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -79,7 +77,10 @@ fun TimelineHeader(
                 val isGlobal = feedType == FeedType.GLOBAL
                 Box(contentAlignment = Alignment.TopEnd) {
                     Button(
-                        onClick = { onFeedTypeChange(FeedType.GLOBAL) },
+                        onClick = {
+                            onFeedTypeChange(FeedType.GLOBAL)
+                            if (savedRelayUrls.isNotEmpty()) showRelayDropdown = !showRelayDropdown
+                        },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isGlobal) LineGreen else Color.Transparent,
                             contentColor = if (isGlobal) Color.White else nuruColors.textTertiary
@@ -96,19 +97,12 @@ fun TimelineHeader(
                         Text(relayLabel, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         if (savedRelayUrls.isNotEmpty()) {
                             Spacer(Modifier.width(2.dp))
-                            Box(
-                                modifier = Modifier.clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) { showRelayDropdown = !showRelayDropdown }
-                            ) {
-                                Icon(
-                                    Icons.Default.ArrowDropDown,
-                                    contentDescription = "リレーを選択",
-                                    modifier = Modifier.size(16.dp),
-                                    tint = if (isGlobal) Color.White else nuruColors.textTertiary
-                                )
-                            }
+                            Icon(
+                                Icons.Default.ArrowDropDown,
+                                contentDescription = "リレーを選択",
+                                modifier = Modifier.size(16.dp),
+                                tint = if (isGlobal) Color.White else nuruColors.textTertiary
+                            )
                         }
                     }
                     if (showRecommendedDot) {

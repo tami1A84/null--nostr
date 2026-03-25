@@ -268,6 +268,7 @@ fun UserProfileModal(
                                     repository = repository,
                                     onDelete = { /* N/A */ },
                                     onMute = { viewModel.muteUser(post.event.pubkey) },
+                                    onBookmark = { viewModel.toggleBookmark(post.event.id, post.isBookmarked) },
                                     isOwnPost = post.event.pubkey == viewModel.myPubkeyHex,
                                     myPubkey = viewModel.myPubkeyHex
                                 )
@@ -279,7 +280,7 @@ fun UserProfileModal(
                 PullToRefreshContainer(
                     state = pullRefreshState,
                     modifier = Modifier.align(Alignment.TopCenter),
-                    containerColor = Color.Black,
+                    containerColor = if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0f) Color.Black else Color.Transparent,
                     contentColor = io.nurunuru.app.ui.theme.LineGreen
                 )
 

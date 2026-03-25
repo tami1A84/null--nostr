@@ -314,7 +314,7 @@ private fun TimelineContent(
         PullToRefreshContainer(
             state = pullRefreshState,
             modifier = Modifier.align(Alignment.TopCenter),
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0f) MaterialTheme.colorScheme.surface else Color.Transparent,
             contentColor = LineGreen
         )
 

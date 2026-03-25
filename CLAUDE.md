@@ -135,6 +135,42 @@ Implemented in Rust at `nurunuru-core/src/recommendation.rs` (`rank_feed()`) and
 - `nostrdb` stored at `context.filesDir/nostrdb_ndb`
 - NIP-55 (Amber) external signer via `ExternalSigner.kt`
 
+## Planned: NIP-A5 Scrolls（来週実装予定）
+
+### 概要
+Kind 1227イベントとして公開されたWASMバイナリを「スクロール」としてミニアプリ内で実行する機能。
+
+### 設計方針（確定済み）
+- **WASMランタイム**: WebView方式。WASM→JS→Kotlin JavaScriptインターフェース経由でNostrとやり取り
+- **ホストAPI初期実装範囲**: `nostr.display`（イベント表示）、`nostr.log`（デバッグ）のみ。`nostr.subscribe`は後続フェーズ
+- **スクロール探索**: リレーからkind 1227を検索して一覧表示（SettingsScreen の「その他」カテゴリ）
+- **お気に入り**: NIP-51 kind 10027で発行・読み込み
+- **パラメータUI**: 保留（下記説明参照）
+
+### パラメータUIについて（⑤の回答）
+スクロールは`["param", "<name>", "<description>", "<type>", "<required>"]`タグで入力パラメータを宣言できる。
+例えば `type=public_key` で「誰のプロフィールを見るか」、`type=event` で「どのイベントに対して実行するか」などを起動時に指定できる。
+特殊な`"me"`パラメータは自動的にログイン中ユーザーのpubkeyで補完される。
+UIとしてはスクロール起動時にボトムシートでパラメータ入力フォームを表示する想定（初回実装では`"me"`のみ自動補完し、他パラメータは後続対応）。
+
+### 実装ファイル（予定）
+```
+android/app/src/main/kotlin/io/nurunuru/app/
+  ui/miniapps/ScrollsApp.kt          # スクロール一覧・実行画面
+  ui/miniapps/ScrollHostWebView.kt   # WASMホスト（WebView + JSInterface）
+  data/NostrRepositoryScrolls.kt     # kind 1227 fetch, kind 10027 favorites
+  data/models/ScrollEvent.kt         # kind 1227 モデル
+```
+
+### WebView方式のアーキテクチャ
+```
+WASM binary (base64) → WebView内JS実行
+    ↓ nostr.display(event_handle)
+    ↑ JSInterface経由でKotlin側のNostrRepository呼び出し
+    ↓ 結果をJS/WASMのメモリに書き戻す
+Compose UIでイベントをネイティブ描画（PostItem再利用）
+```
+
 ### iOS
 - Post length: strictly enforced 140-char limit in `PostSheet.swift`
 - Font: LINE Seed JP only (bundled .ttf). Never fall back to system font for body text
