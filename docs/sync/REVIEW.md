@@ -85,3 +85,32 @@ Acceptance Criteriaはあるが、テストファイル名・fixture・モック
 ## 結論
 
 現時点の成果物は、設計・計画・セッションプロンプトとして十分に実用可能。実装フェーズへ進む前に、Session 2で対象範囲を固定し、STT/実機検証/同一ファイル競合の扱いをPLANへ追記すると、より安全に進められる。
+
+
+---
+
+## 対応状況 (Agent 3 最終化, 2026-05-16)
+
+レビュー指摘 6 点をすべて成果物へ反映済み。
+
+| # | 指摘 | 反映先 |
+|---|---|---|
+| 1 | 同期対象スコープを Session 2 終了時に固定する | `docs/sync/research/INDEX.md` (新規, sign-off 欄付き) + `DESIGN.md §5.4` (凍結プロセス) + `STATUS.md §0` (凍結チェックポイント) |
+| 2 | STT セッションを分割 (3h は過小評価) | `session-10.md` を index 化 + `session-10a.md` (設計) / `session-10b.md` (Android) / `session-10c.md` (iOS) / `session-10d.md` (UX) を新規作成。`PLAN.md §1` の見積を 22.5h に更新 |
+| 3 | Session 8 完了条件を「Rust 変更不要/必要/一部必要」の判定に限定 | `prompts/session-08.md` 既存タスク内に「結論を 3 択で記載」と明記済み。`PLAN.md §1` で「調査のみ」と明記 |
+| 4 | 実機検証必須項目を明示 | `docs/sync/CHECKLIST.md §1` (新規) + `PLAN.md §6` + `STATUS.md §2` (実機検証進捗テーブル) |
+| 5 | PR 粒度・マージ順 + 同一ファイル直列化 | `docs/sync/CHECKLIST.md §2` (Android/iOS/Rust 競合マトリクス + マージ順) + `PLAN.md §2.1` (競合回避節) |
+| 6 | テスト設計の具体化 (fixture / golden) | `docs/sync/TESTING.md` (新規) + `docs/sync/fixtures/` 配下に置く構成を文書化。Recommendation / Birthday / Geohash / MiniApps / STT のテスト計画を fixture 込みで提示 |
+
+## 追加成果物
+
+- `docs/sync/CHECKLIST.md` — 実機 / 競合 / DoD の統合チェックリスト
+- `docs/sync/TESTING.md` — テスト設計 (fixture 構成, golden test, セッション別テスト計画)
+- `docs/sync/PR_TEMPLATE.md` — セッション PR description テンプレ
+- `docs/sync/research/INDEX.md` — スコープ凍結インデックス (sign-off 欄付き)
+- `docs/sync/prompts/session-10a.md` 〜 `session-10d.md` — STT サブセッション 4 件
+
+## 残課題 (本同期作業のスコープ外)
+
+- CI セットアップ (GitHub Actions): v1.5.1 以降で別 PR を予定 — TESTING.md §3 を参照
+- `docs/sync/screenshots/` ディレクトリは UI 変更セッション完了時に作成 (空ディレクトリは git に乗らないため事前生成不要)

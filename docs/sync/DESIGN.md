@@ -165,6 +165,20 @@ null--nostr は Web (Next.js PWA) / Android (Kotlin + Rust FFI) / iOS (Swift + U
 
 ---
 
+
+### 5.4 スコープ凍結プロセス (Session 2 → Session 3 以降の橋渡し)
+
+実装セッション (S3〜S10) で「結局 Web の何をどこまで持ってくるのか」が曖昧にならないよう、
+**Session 2 終了時点で対象/対象外を確定** させる。手順:
+
+1. Session 2 担当が `docs/sync/research/r03-*.md` 〜 `r10-*.md` を全件記入
+2. 各レポート末尾の「結論 (移植する / 部分移植 / 移植不要)」を `docs/sync/research/INDEX.md` の対応行に転記
+3. 不明確な項目は **Session 2 完了前に解消** する (Web 側を読み直す or 関係者に質問)
+4. 全行が確定したら INDEX.md の sign-off 欄に Session 2 担当 + Android lead + iOS lead がチェック
+5. **凍結後**: 追加・除外は別 PR で INDEX.md を更新する形のみ許可
+
+> Session 3〜10 の担当者は、自分のセッションを始める前に必ず INDEX.md の該当行を確認すること。
+
 ## 6. ファイル対応マッピング
 
 | Web | Android | iOS |
