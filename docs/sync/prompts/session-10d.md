@@ -1,26 +1,30 @@
 # Session 10D: ElevenLabs STT — UX / 権限 / エラー処理統合 (両 OS)
 
-> このプロンプトは null--nostr の **Web → Native 同期** ワークフローの一部です。
-> 親ブランチ: `sync/web-to-native-20260516`
+> このプロンプトは null--nostr の **Native → Web 同期** ワークフローの一部です (S10 系のみ **方向反転: Web → Native**)。
+> 親ブランチ: `sync/native-to-web-20260516`
 > 設計書: `docs/sync/DESIGN.md` / プラン: `docs/sync/PLAN.md` / 進捗: `docs/sync/STATUS.md`
+> 統合チェック: `docs/sync/CHECKLIST.md` / テスト: `docs/sync/TESTING.md`
 > 前提セッション: **S10B + S10C 完了後**
 
 ## 前提 (必読)
 
-- S10A の error spec (`docs/sync/research/r10-stt-error-spec.md`)
-- 両 OS の実装ブランチがマージ済み (または rebase 済み)
+- S10A の成果物 (`docs/sync/research/r10-*.md`, `docs/sync/fixtures/stt/*.json`) を熟読
+- AGENTS.md の制約を厳守 (Keychain / EncryptedSharedPreferences / actor / 140 char / LineSeedJP)
+- iOS は NIP-46 のみ (Amber 不可)
+- **方向**: Web (`hooks/useSTT.js`) が source of truth、Native (Android/iOS) を追従させる
 
 ## 作業ブランチを切る
 
 ```bash
-git checkout sync/web-to-native-20260516
+git checkout sync/native-to-web-20260516
 git pull --ff-only
-git checkout -b sync/web-to-native-20260516/s10d-stt-ux
+git checkout -b sync/native-to-web-20260516/s10d-stt-ux
 ```
+
 
 ## 目的
 
-S10B / S10C で「動く状態」になった STT に、ユーザー向けの **エラー処理 / 権限フロー / API キー誘導** を統一仕様で実装する。
+S10B / S10C で「動く状態」になった STT に、ユーザー向けの **エラー処理 / 権限フロー / API キー誘導** を統一仕様で実装する (Web の振る舞いを参考に)。
 
 ## タスク
 

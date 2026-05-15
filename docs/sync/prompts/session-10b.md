@@ -1,27 +1,30 @@
 # Session 10B: ElevenLabs STT — Android 実装
 
-> このプロンプトは null--nostr の **Web → Native 同期** ワークフローの一部です。
-> 親ブランチ: `sync/web-to-native-20260516`
+> このプロンプトは null--nostr の **Native → Web 同期** ワークフローの一部です (S10 系のみ **方向反転: Web → Native**)。
+> 親ブランチ: `sync/native-to-web-20260516`
 > 設計書: `docs/sync/DESIGN.md` / プラン: `docs/sync/PLAN.md` / 進捗: `docs/sync/STATUS.md`
+> 統合チェック: `docs/sync/CHECKLIST.md` / テスト: `docs/sync/TESTING.md`
 > 前提セッション: **S10A 完了後**
 
 ## 前提 (必読)
 
 - S10A の成果物 (`docs/sync/research/r10-*.md`, `docs/sync/fixtures/stt/*.json`) を熟読
-- AGENTS.md: `Dispatchers.IO` / EncryptedSharedPreferences / 録音権限の動的リクエスト
-- AGENTS.md「BasicTextField + weight(1f)」で crash しないこと
+- AGENTS.md の制約を厳守 (Keychain / EncryptedSharedPreferences / actor / 140 char / LineSeedJP)
+- iOS は NIP-46 のみ (Amber 不可)
+- **方向**: Web (`hooks/useSTT.js`) が source of truth、Native (Android/iOS) を追従させる
 
 ## 作業ブランチを切る
 
 ```bash
-git checkout sync/web-to-native-20260516
+git checkout sync/native-to-web-20260516
 git pull --ff-only
-git checkout -b sync/web-to-native-20260516/s10b-stt-android
+git checkout -b sync/native-to-web-20260516/s10b-stt-android
 ```
+
 
 ## 目的
 
-Android で ElevenLabs Scribe streaming STT を統合し、PostModal と TalkScreen の入力欄からマイクボタンで音声入力できるようにする。
+Android で ElevenLabs Scribe streaming STT を統合し、PostModal と TalkScreen の入力欄からマイクボタンで音声入力できるようにする (Web の `hooks/useSTT.js` と同じ振る舞い)。
 
 ## タスク
 
@@ -55,6 +58,7 @@ Android で ElevenLabs Scribe streaming STT を統合し、PostModal と TalkScr
 - [ ] `./gradlew test` グリーン (新規テスト含む)
 - [ ] 既存 `ElevenLabsSettings` の TTS 設定を破壊していない
 - [ ] API キーが logcat / SharedPreferences (平文) に出ていない (`adb logcat | grep -i "elevenlabs"` で確認)
+- [ ] Web 版 (`hooks/useSTT.js`) と同じ閾値・WS フレーム解釈になっている
 
 ## 完了処理
 

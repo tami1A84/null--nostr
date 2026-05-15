@@ -1,10 +1,13 @@
-# R10: elevenlabs-stt Web 仕様レポート (TODO)
+# R10: elevenlabs-stt Native 仕様レポート (TODO)
 
 > Session 2 で記入してください。
+> 同期方向: **方向反転 (Web → Native)**
 
 ## 1. ファイル
-- 主要ファイル: hooks/useSTT.js, components/PostModal.js, components/TalkTab.js
-- 関連 commit: (`git log --oneline -- hooks/useSTT.js` で抽出)
+- Native (Android): (Android 未統合 / iOS は TTS のみ — STT は Web 先行)
+- Native (iOS): (該当ファイルを記入)
+- Web 現状: (該当ファイルを記入)
+- 関連 commit/version: Android v1.4.X / iOS 1.0.4 / Web v1.0.0
 
 ## 2. 振る舞いまとめ (3-5 行)
 
@@ -18,14 +21,14 @@ TODO
 
 TODO (該当する場合)
 
-## 5. 既知の制約・エッジケース
+## 5. Web 現状とのギャップ
 
-TODO
+TODO (本機能は Web 先行のため、逆: Native 側のギャップを記述)
 
-## 6. Native 移植時の論点
+## 6. 移植時の論点
 
-- Android: TODO
-- iOS: TODO
+- データ層: TODO
+- UI 層: TODO
 
 ## 7. テストすべき観点
 
@@ -35,6 +38,7 @@ TODO
 
 ## 結論
 
-- [ ] 移植する
+- [ ] 移植する (Web → Native)
 - [ ] 部分移植 (どこ: ...)
 - [ ] 移植不要 (理由: ...)
+- [ ] 方向反転 (本来の方向と異なる)

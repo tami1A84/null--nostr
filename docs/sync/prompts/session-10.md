@@ -1,16 +1,26 @@
-# Session 10: ElevenLabs STT (音声入力) — 4 サブセッションに分割
+# Session 10: ElevenLabs STT (音声入力) — 4 サブセッションに分割 / **方向反転**
 
 > このプロンプトは **インデックス** です。実作業は 10A → 10B/10C → 10D の順に行ってください。
+>
+> ⚠️ **方向反転**: 親プラン全体は Native → Web ですが、ElevenLabs STT は **Web 先行** (Web の `hooks/useSTT.js` で実装済み、Native は未統合) のため、本セッションのみ **Web → Native** の方向で扱います。
 
 ## 背景
 
 旧プラン (1 セッション 3h で Android + iOS 同時実装) は REVIEW.md §2 で「リスクが高い」と指摘されたため、4 サブセッションに分割しました。
 
+調査の結果:
+
+- **Web**: `hooks/useSTT.js` + `PostModal` / `TalkTab` で STT 統合済み (実装フル)
+- **Android**: `ElevenLabsSettings.kt` あり (TTS 設定のみ?)、STT 未統合
+- **iOS**: `ElevenLabsTTSService` あり (TTS のみ)、STT 未統合
+
+→ 方向は **Web → Android/iOS** に反転。
+
 ## サブセッション
 
 | # | プロンプト | 内容 | 推定 |
 |---|---|---|---|
-| 10A | [session-10a.md](./session-10a.md) | API 仕様調査・WS フォーマット設計・キー保管設計 | 1h |
+| 10A | [session-10a.md](./session-10a.md) | API 仕様調査 (Web の useSTT を仕様書化) ・WS フォーマット設計・キー保管設計 | 1h |
 | 10B | [session-10b.md](./session-10b.md) | Android 実装 (`ElevenLabsSttService.kt` + PostModal/TalkScreen 配線) | 2.5h |
 | 10C | [session-10c.md](./session-10c.md) | iOS 実装 (`ElevenLabsSttService.swift` + PostSheet/TalkView 配線) | 2.5h |
 | 10D | [session-10d.md](./session-10d.md) | UX / 権限 / エラー処理統合 (両 OS) | 1.5h |

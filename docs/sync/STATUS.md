@@ -1,6 +1,6 @@
-# Web → Native 同期 進捗
+# Native → Web 同期 進捗
 
-> Branch: `sync/web-to-native-20260516`
+> Branch: `sync/native-to-web-20260516`
 > 各セッション完了時に該当行を更新してください。
 
 ## 0. スコープ凍結 (Session 2 完了時点)
@@ -12,40 +12,41 @@
 
 ## 1. セッション進捗
 
-| # | セッション | Android | iOS | 担当 | 完了日 | メモ |
-|---|---|---|---|---|---|---|
-| 1 | キックオフ | -- | -- | | | |
-| 2 | Web 差分調査 + INDEX 凍結 | -- | -- | | | レポートは `docs/sync/research/` |
-| 3 | Reaction picker | ⬜ | ⬜ | | | |
-| 4 | Recommendation 改善 | ⬜ | ⬜ | | | |
-| 5 | Birthday 通知 | ⬜ | ⬜ | | | |
-| 6 | MiniApp タブ整理 | ⬜ | ⬜ | | | |
-| 7 | SignUp UX | ⬜ | ⬜ | | | iOS は新規 SignUpView 検討 |
-| 8 | connection-manager 修正調査 | ⬜ | ⬜ | | | Rust core への反映可否を判定 |
-| 9 | ProofMode / Divine | ⬜ | N/A | | | iOS は App Store 審査の都合で対象外 |
-| 10A | STT 調査・設計 | -- | -- | | | API 仕様 / キー保管 / WS フォーマット |
-| 10B | STT Android 実装 | ⬜ | -- | | | `ElevenLabsSttService.kt` + UI |
-| 10C | STT iOS 実装 | -- | ⬜ | | | `ElevenLabsSttService.swift` + UI |
-| 10D | STT UX / 権限 / エラー統合 | ⬜ | ⬜ | | | 権限拒否 / API キー未設定モーダル |
-| 11 | FFI 再ビルド + token sync | ⬜ | ⬜ | | | スモーク 6 機能 |
-| 12 | CHANGELOG / リリース | -- | -- | | | v1.5.0 |
+> 列の意味: **Web** = Web 側の修正 / **Native** = Native 側の追加実装 (S10 のみ Web→Native の方向)
 
-凡例: ⬜ 未着手 / 🟦 進行中 / ✅ 完了 / ❌ ブロック / N/A 対象外
+| # | セッション | Web | Native (And) | Native (iOS) | 担当 | 完了日 | メモ |
+|---|---|---|---|---|---|---|---|
+| 1 | キックオフ | -- | -- | -- | | | |
+| 2 | Native 差分調査 + INDEX 凍結 | -- | -- | -- | | | レポートは `docs/sync/research/` |
+| 3 | Reaction picker | ⬜ | -- | -- | | | Native → Web |
+| 4 | Recommendation 改善 | ⬜ | -- | -- | | | Native → Web |
+| 5 | Birthday 通知 | ⬜ | -- | (補完?) | | | Native → Web (iOS 側も補完が必要なら) |
+| 6 | MiniApp タブ整理 | ⬜ | -- | -- | | | Native → Web |
+| 7 | SignUp UX | ⬜ | -- | (SignUpView?) | | | Native → Web (iOS は SignUpView 新設の可能性) |
+| 8 | connection-manager 修正調査 | -- | -- | -- | | | Rust core への反映可否を判定 |
+| 9 | ProofMode / Divine | ⬜ | -- | N/A | | | Android → Web (iOS は対象外) |
+| 10A | STT 調査・設計 | -- | -- | -- | | | **方向反転**: Web → Native |
+| 10B | STT Android 実装 | -- | ⬜ | -- | | | `ElevenLabsSttService.kt` + UI |
+| 10C | STT iOS 実装 | -- | -- | ⬜ | | | `ElevenLabsSttService.swift` + UI |
+| 10D | STT UX / 権限 / エラー統合 | -- | ⬜ | ⬜ | | | 権限拒否 / API キー未設定モーダル |
+| 11 | FFI 再ビルド + token sync | ⬜ | ⬜ | ⬜ | | | スモーク 6 機能 |
+| 12 | CHANGELOG / リリース | -- | -- | -- | | | v1.5.0 |
+
+凡例: ⬜ 未着手 / 🟦 進行中 / ✅ 完了 / ❌ ブロック / N/A 対象外 / -- 該当なし
 
 ## 2. 実機検証進捗
 
 [CHECKLIST.md §1](./CHECKLIST.md) の実機必須項目:
 
-| 項目 | Android 実機 | iOS 実機 | 検証日 | 担当 |
-|---|---|---|---|---|
-| S5 通知 (Birthday/Zap) | ⬜ | ⬜ | | |
-| S5 Zap 受信 (Lightning) | ⬜ | ⬜ | | |
-| S7 Amber (NIP-55) サインアップ | ⬜ | N/A | | |
-| S7 NIP-46 (Nostr Connect) | N/A | ⬜ | | |
-| S9 カメラ + ProofMode | ⬜ | N/A | | |
-| S10D STT (マイク) | ⬜ | ⬜ | | |
-| S11 NIP-EE (MLS) Talk | ⬜ | ⬜ | | |
-| S12 TestFlight / Play Internal | ⬜ | ⬜ | | |
+| 項目 | Web ブラウザ | Android 実機 | iOS 実機 | 検証日 | 担当 |
+|---|---|---|---|---|---|
+| S5 通知 (Birthday/Zap) | ⬜ | (既) | (既) | | |
+| S5 Zap 受信 (Lightning) | ⬜ | (既) | (既) | | |
+| S7 リージョン → geohash 自動セット | ⬜ | (既) | ⬜ (要 SignUpView) | | |
+| S9 ProofMode 録画 (Web 追加) | ⬜ | (既) | N/A | | |
+| S10D STT (マイク) | (既) | ⬜ | ⬜ | | |
+| S11 NIP-EE (MLS) Talk | -- (要調査) | ⬜ | ⬜ | | |
+| S12 配布 | ⬜ | ⬜ | ⬜ | | |
 
 ## 3. ブロッカー
 

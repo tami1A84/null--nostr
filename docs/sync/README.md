@@ -1,6 +1,8 @@
-# Web → Native 同期ドキュメント
+# Native → Web 同期ドキュメント
 
-`sync/web-to-native-20260516` ブランチで進める Web → Android/iOS 同期作業の全資料。
+`sync/native-to-web-20260516` ブランチで進める **Native (Android/iOS) → Web 同期作業** の全資料。
+
+> **方向**: ネイティブアプリが先行 (Android v1.4.9 / iOS 1.0.4 build 5)、Web (v1.0.0) を追従させる。
 
 ## 構成
 
@@ -20,7 +22,7 @@
   - 通常 12 セッション + STT 4 サブセッション (10A/B/C/D)
 
 ### スコープ管理
-- [research/](./research/) — Web 仕様レポート (8 件)
+- [research/](./research/) — Native 仕様レポート (8 件)
 - [research/INDEX.md](./research/INDEX.md) — **同期対象/対象外スコープ凍結** (Session 2 で sign-off)
 
 ### Fixture (テスト共通入出力)

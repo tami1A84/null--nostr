@@ -1,55 +1,58 @@
 # Session 12: CHANGELOG 統合 + リリース準備
 
-> このプロンプトは null--nostr の **Web → Native 同期** ワークフローの一部です。
-> 親ブランチ: `sync/web-to-native-20260516`
+> このプロンプトは null--nostr の **Native → Web 同期** ワークフローの一部です。
+> 親ブランチ: `sync/native-to-web-20260516`
 > 設計書: `docs/sync/DESIGN.md` / プラン: `docs/sync/PLAN.md` / 進捗: `docs/sync/STATUS.md`
 
 ## 前提 (必読)
 
 - リポジトリルート: `/Users/miharashouhei/null--nostr`
-- 親ブランチ `sync/web-to-native-20260516` がチェックアウトされていること
+- 親ブランチ `sync/native-to-web-20260516` がチェックアウトされていること
 - AGENTS.md の制約を厳守: 投稿140文字 / Keychain / actor / LineSeedJP / Compose の crash パターン
-- 同期は **逐語コピーではない** ─ 各プラットフォームのイディオムで再現する
+- 同期は **逐語コピーではない** ─ Web のイディオム (React + Tailwind + nostr-tools) で再現する
 - iOS は NIP-46 のみ (Amber 不可) / iOS は Rokunana を App Store 審査で除外中 (Session 9 注意)
+- **方向**: Native (Android/iOS) が source of truth、Web を追従させる (S10 系のみ Web → Native)
 
 ## 作業ブランチを切る
 
 ```bash
-git checkout sync/web-to-native-20260516
+git checkout sync/native-to-web-20260516
 git pull --ff-only
-git checkout -b sync/web-to-native-20260516/s12-<topic>
+git checkout -b sync/native-to-web-20260516/s12-<topic>
 ```
+
 
 ## 目的
 
-`sync/web-to-native-20260516` ブランチを `main` へ向けてマージ可能な状態に整える。CHANGELOG / バージョン番号 / マトリクス / リリースアーティファクトの最終化を行う。
+`sync/native-to-web-20260516` ブランチを `main` へ向けてマージ可能な状態に整える。CHANGELOG / バージョン番号 / マトリクス / リリースアーティファクトの最終化を行う。
 
 ## タスク
 
 ### 1. CHANGELOG.md
 
 - 新セクション `## [1.5.0] - 2026-MM-DD` を追加
-- Session 3〜10 で記録された個別エントリを Android / iOS 別に整理
+- Session 3〜10 で記録された個別エントリを Web / Android / iOS 別に整理
 - 例:
 
 ```md
 ## [1.5.0] - 2026-MM-DD
 
-### Added (Android)
-- ElevenLabs STT による投稿・トーク音声入力 (Web v2.x 同期)
-- 誕生日通知・相互フォロー Zap 通知 (Web v2.x 同期)
-
-### Added (iOS)
-- 同上
-
-### Changed (Android)
-- リアクションピッカーから Unicode 既定リアクションを削除 (カスタム絵文字のみ)
-- Recommended フィードでアイコン無しユーザを除外 (品質向上)
+### Added (Web)
+- Recommended フィードでアイコン無しユーザを除外 (Native 仕様と一致)
 - ホーム起動時に Following を優先表示し Recommended を後追いロード
-- ミニアプリタブのカテゴリ・順序を Web と統一
+- 誕生日通知・相互フォロー Zap 通知 (Native v1.4.x 同期)
+- ミニアプリタブのカテゴリ・順序を Native と統一
+- SignUp に手動リージョン選択 + 推奨リレー自動セット
+- ProofMode + 6.3s ループ動画 (Web 新規実装、Android v1.4.x 同期)
 
-### Changed (iOS)
-- 同上
+### Added (Android) / (iOS)
+- ElevenLabs STT (音声入力) を投稿/トーク入力欄に追加 (Web 同期)
+
+### Changed (Web)
+- リアクションピッカーから Unicode 既定リアクションを削除 (Native と一致)
+
+### Changed (Android) / (iOS)
+- STT のエラー/権限 UX を統一
 
 ### Fixed
 - (Session 8 の判定結果に応じて記載)
@@ -57,37 +60,44 @@ git checkout -b sync/web-to-native-20260516/s12-<topic>
 
 ### 2. バージョン番号
 
-- Android: `android/app/build.gradle.kts` の `versionCode` / `versionName`
+- Web: `package.json` の `version` を v1.5.0 に上げる
+- Android: `android/app/build.gradle.kts` の `versionCode` / `versionName` (v1.5.0 = Native 主導の同期版)
 - iOS: `ios/project.yml` (CFBundleShortVersionString / CFBundleVersion)
-- Web: `package.json` の `version`
 
 ### 3. リリースアーティファクト (任意 / 必要時のみ)
 
-- `cd android && ./gradlew assembleRelease`
+- Web: Vercel deploy または `npm run build` 成果物
+- `cd android && ./gradlew assembleRelease` (Android STT 入った時のみ)
 - 成果物 `nurunuru-1.5.0-arm64-v8a.apk` を repo ルート + `release-artifacts/` に配置
 - iOS は TestFlight 経由 (`xcodebuild archive` → App Store Connect)
 - zapstore: `~/go/bin/zsp publish` (TTY 必須)
 
 ### 4. PR 作成
 
-- `sync/web-to-native-20260516` を `main` へ向けて PR
+- `sync/native-to-web-20260516` を `main` へ向けて PR
 - description テンプレ:
 
 ```md
-# Web → Native 同期 v1.5.0
+# Native → Web 同期 v1.5.0
 
-このブランチは Web v1.4.x で先行実装された機能を Android / iOS にバックポートします。
+このブランチは Native (Android v1.4.9 / iOS 1.0.4) の先行実装を Web に同期します。
+例外として ElevenLabs STT のみ Web → Native の方向で Native 側に追加実装しました。
 
 ## 内容
-- Session 3: Reaction picker (Unicode 削除)
-- Session 4: Recommendation 改善
-- ...
+- Session 3: Reaction picker (Native と仕様一致, Web 修正)
+- Session 4: Recommendation 改善 (Web 修正)
+- Session 5: Birthday/Mutual Zap 通知 (Web 修正 + iOS 補完)
+- Session 6: MiniApp タブ統一 (Web 修正)
+- Session 7: SignUp UX (Web + iOS 新設)
+- Session 8: connection-manager 調査結論
+- Session 9: ProofMode (Web 新規, Android 同期)
+- Session 10A-D: ElevenLabs STT (Native 新規, Web 同期)
 
 ## DoD
 - [x] design-tokens sync
+- [x] vitest + npm run build
 - [x] Android assembleDebug
 - [x] iOS xcodebuild
-- [x] vitest
 
 ## 同期マトリクス
 docs/sync/STATUS.md 参照
@@ -113,16 +123,11 @@ docs/sync/STATUS.md 参照
 
 ## 完了処理
 
-1. `docs/sync/STATUS.md` の該当行をチェック (Android / iOS それぞれ)
-2. `CHANGELOG.md` に **(Android)** / **(iOS)** タグ付きで 1 行追加
+1. `docs/sync/STATUS.md` の該当行をチェック (Web / Android / iOS それぞれ)
+2. `CHANGELOG.md` に **(Web)** / **(Android)** / **(iOS)** タグ付きで 1 行追加
 3. ビルド確認:
+   - Web: `npm run test && npm run build`
    - Android: `cd android && ./gradlew assembleDebug`
    - iOS: `cd ios && xcodebuild -scheme NuruNuru -destination 'platform=iOS Simulator,name=iPhone 17' -skipPackagePluginValidation build`
-4. `git commit -m "sync(s<NN>): <topic> — Web→Native"`
+4. `git commit -m "sync(s12): CHANGELOG + release prep — Native→Web"`
 5. サブブランチを親へ PR
-
-## 質問テンプレ (実装中に詰まったら)
-
-- 「Web の `<file>:<line>` の挙動が分からない」→ `git log -p` で当該変更の commit を読む
-- 「Compose で `AnimatedVisibility` を使うと crash する」→ AGENTS.md の "AnimatedVisibility inside Box inside Column" 節
-- 「iOS で `@StateObject` を使ってよいか」→ NG。iOS 17 `@Observable` を使う
