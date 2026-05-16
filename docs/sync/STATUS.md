@@ -45,7 +45,7 @@
 | S9 ProofMode 録画 (Web 追加) | ⬜ | (既) | N/A | | | ブラウザ MediaRecorder 実機確認は carryover |
 | S10D STT (マイク) | (既) | ⬜ | ⬜ | | | Native は OS 標準 STT 部分同期。ElevenLabs streaming は v1.6 |
 | S11 NIP-EE (MLS) Talk | -- | ⬜ | ⬜ | | | Web NIP-EE は v1.6+ 検討 |
-| S12 配布 | ⬜ | ⬜ | ⬜ | | | PR/TestFlight/zapstore/GitHub Release は認証/TTY が必要 |
+| S12 配布 | 🟨 | ⬜ | ⬜ | goose | 2026-05-17 | PR #176 (parent→main) 作成済み。TestFlight/zapstore/GitHub Release は TTY 必要のため手動 |
 
 ## 3. Build / test 状態
 
@@ -53,7 +53,7 @@
 - [x] Web: npm run build — PASS; log: /tmp/null-nostr-s12-logs/npm_build.log
 - [x] Android: cd android && ./gradlew assembleDebug — PASS; log: /tmp/null-nostr-s12-logs/android_assembleDebug.log
 - [x] iOS: cd ios && xcodebuild -scheme NuruNuru -destination 'platform=iOS Simulator,name=iPhone 17' -skipPackagePluginValidation build — PASS; log: /tmp/null-nostr-s12-logs/ios_build.log
-- [ ] PR 作成: gh 認証とリモート権限がある環境で実施
+- [x] PR 作成 — PR #174 (S11 → parent) merged, PR #175 (S12 → parent) merged, **PR #176 (parent → main) OPEN**: https://github.com/tami1A84/null--nostr/pull/176
 ## 4. ブロッカー
 
 - 解決済み: S11 検出の @noble/hashes v2.0.1 subpath import 失敗は S12 で @noble/hashes/utils.js import へ更新して解消。
