@@ -14,7 +14,7 @@ import {
 } from '@/src/adapters/signing/MemorySigner'
 import { SigningError } from '@/src/adapters/signing/SigningAdapter'
 import { verifyEvent, getPublicKey, generateSecretKey, nip19 } from 'nostr-tools'
-import { bytesToHex } from '@noble/hashes/utils'
+import { bytesToHex } from '@noble/hashes/utils.js'
 
 describe('MemorySigner', () => {
   let signer: MemorySigner

@@ -20,7 +20,7 @@ import {
   nip04,
   nip44
 } from 'nostr-tools'
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils'
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js'
 import type { Event } from 'nostr-tools'
 import type {
   SigningAdapter,

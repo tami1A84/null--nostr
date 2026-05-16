@@ -1,9 +1,13 @@
 /** @type {import('next').NextConfig} */
+const path = require('path')
 const isCapacitorBuild = process.env.CAPACITOR_BUILD === 'true'
 const isProd = process.env.NODE_ENV === 'production'
 
 const nextConfig = {
   reactStrictMode: true,
+  // Pin Next.js workspace root to this project so a stray lockfile in $HOME
+  // doesn't cause "inferred workspace root may not be correct" warnings.
+  outputFileTracingRoot: path.join(__dirname),
   // Strip console.log/warn/debug from production builds (keep console.error for diagnostics)
   compiler: isProd ? {
     removeConsole: {
