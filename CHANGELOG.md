@@ -7,11 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed (Android) / (Web)
-- `design-tokens/constants.json` に `CACHE_CONFIG.durations.notification` (86_400_000ms / 1 day) を追加し、Android `Constants.CacheDuration.NOTIFICATION` を source-of-truth から自動生成するように整合。`NostrCache.kt` の 7 箇所が参照する定数を npm run tokens 実行時に維持できるようになった (動作変更なし)。Session 11 / commit 981416b
+## [1.5.0] - 2026-05-17
 
-### Known issues (Web)
-- `@noble/hashes` v2.0.1 で `./utils` subpath が exports から削除され、`src/adapters/signing/MemorySigner.ts` と `src/__tests__/adapters/signing.test.ts` の `from '@noble/hashes/utils'` が解決できず `npm run test`/`npm run build` が失敗。親ブランチ既存問題のため Session 12 で `'@noble/hashes/utils.js'` への変更または依存 pin で対処予定 (Native ビルドには影響なし)。
+### Added (Web)
+- Reaction picker をカスタム絵文字中心の Native 仕様へ寄せ、Unicode 既定リアクションの quick row を削除。
+- Recommended フィードでアイコン/表示名なしユーザーを除外し、ホーム起動時は Following を優先表示して Recommended を後追いロードする挙動に同期。
+- 誕生日通知、相互フォロー Zap 通知、カスタム絵文字リアクション通知を Native v1.4.x 仕様に合わせて追加。
+- ミニアプリタブのカテゴリ/順序を Native と統一し、エンタメ/ツール構成と音声入力設定導線を整理。
+- SignUp に手動リージョン選択、推奨リレー自動セット、geohash/NIP-65 リレーリスト公開を追加。
+- ProofMode タグ生成と 6.3 秒ループ動画レコーダーを Web に追加し、Android の diVine/ProofMode 仕様へ同期。
+
+### Added (Android) / (iOS)
+- 投稿/引用投稿入力欄に OS 標準 Speech-to-Text のマイク入力を追加し、Web 先行の音声入力 UX へ部分同期。
+
+### Changed (Web)
+- connection-manager v1.4.8 系の接続管理は Web 固有の修正として整理し、Rust core/Native への追加反映は不要と判定。
+- design-tokens/constants.json に CACHE_CONFIG.durations.notification (86_400_000ms / 1 day) を追加し、Android Constants.CacheDuration.NOTIFICATION を source-of-truth から自動生成するよう整合。
+
+### Changed (Android) / (iOS)
+- 音声入力の権限拒否/利用不可時の日本語エラーメッセージと停止処理を投稿/引用投稿シートで統一。
+
+### Fixed (Web)
+- @noble/hashes v2.0.1 の exports 変更に合わせ、@noble/hashes/utils.js import へ更新して npm run test / npm run build の解決失敗を修正。
+- next.config.js の outputFileTracingRoot を明示し、ホームディレクトリ側 lockfile を workspace root と誤推定する Next.js 警告を抑制。
+
+### Known issues / Carryover
+- Native の ElevenLabs Scribe streaming STT サービス化、Talk 入力欄統合、401/429/timeout の詳細 UX は v1.6 へ持ち越し。現状 v1.5.0 では OS 標準 Speech-to-Text による部分同期。
+- Web 版 NIP-EE (MLS) Talk 移植、TestFlight/zapstore/GitHub Release の配布作業、実機での通知/STT/ProofMode スモークは別途リリース作業で実施。
 
 ## [1.4.9] - 2026-05-15
 

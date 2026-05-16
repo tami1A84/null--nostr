@@ -39,8 +39,8 @@ targets:
         UIAppFonts:
           - LineSeedJP-Rg.ttf
           - LineSeedJP-Bd.ttf
-        CFBundleShortVersionString: "1.0.4"
-        CFBundleVersion: "5"
+        CFBundleShortVersionString: "1.5.0"
+        CFBundleVersion: "6"
         CFBundleDisplayName: ぬるぬる
         CFBundleURLTypes:
           - CFBundleURLName: io.nurunuru.app
@@ -70,8 +70,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.nurunuru.app
         SWIFT_VERSION: "5.9"
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"
-        MARKETING_VERSION: "1.0.4"
-        CURRENT_PROJECT_VERSION: "5"
+        MARKETING_VERSION: "1.5.0"
+        CURRENT_PROJECT_VERSION: "6"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: "66G7S3P755"
         # iPhone only. iPadOS support is intentionally disabled for Review.
