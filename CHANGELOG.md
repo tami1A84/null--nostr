@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed (Android) / (Web)
+- `design-tokens/constants.json` に `CACHE_CONFIG.durations.notification` (86_400_000ms / 1 day) を追加し、Android `Constants.CacheDuration.NOTIFICATION` を source-of-truth から自動生成するように整合。`NostrCache.kt` の 7 箇所が参照する定数を npm run tokens 実行時に維持できるようになった (動作変更なし)。Session 11 / commit 981416b
+
+### Known issues (Web)
+- `@noble/hashes` v2.0.1 で `./utils` subpath が exports から削除され、`src/adapters/signing/MemorySigner.ts` と `src/__tests__/adapters/signing.test.ts` の `from '@noble/hashes/utils'` が解決できず `npm run test`/`npm run build` が失敗。親ブランチ既存問題のため Session 12 で `'@noble/hashes/utils.js'` への変更または依存 pin で対処予定 (Native ビルドには影響なし)。
+
 ## [1.4.9] - 2026-05-15
 
 ### Changed
