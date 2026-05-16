@@ -29,7 +29,7 @@
 | 10B | STT Android 実装 | -- | ⬜ | -- | | | `ElevenLabsSttService.kt` + UI |
 | 10C | STT iOS 実装 | -- | -- | ⬜ | | | `ElevenLabsSttService.swift` + UI |
 | 10D | STT UX / 権限 / エラー統合 | -- | ⬜ | ⬜ | | | 権限拒否 / API キー未設定モーダル |
-| 11 | FFI 再ビルド + token sync | ⬜ | ⬜ | ⬜ | | | スモーク 6 機能 |
+| 11 | FFI 再ビルド + token sync | ✅ | ✅ | ✅ | goose (s11-finalize) | 2026-05-17 | Rust FFI 変更ゼロにつき再ビルド不要。`design-tokens/constants.json` に `CACHE_CONFIG.durations.notification` (86_400_000ms / 1day) を追加し source-of-truth と Android `Constants.CacheDuration.NOTIFICATION` 参照 (NostrCache.kt 7 箇所) を整合 → `npm run tokens:check` PASS。Android `assembleDebug` PASS (APK 58.4MB / commit 981416b)。iOS `xcodebuild build`+`test` PASS (14 tests)。Web `tokens:check` PASS / `npm run test`/`build` FAIL は親ブランチ既存の `@noble/hashes` v2.0.1 subpath 問題 (S11 範囲外、ブロッカー §3 参照)。スモーク 7 機能は各サブブランチ未マージなので grep で実装存在を確認 (PR マージ後に Session 12 で再検証要) |
 | 12 | CHANGELOG / リリース | -- | -- | -- | | | v1.5.0 |
 
 凡例: ⬜ 未着手 / 🟦 進行中 / ✅ 完了 / ❌ ブロック / N/A 対象外 / -- 該当なし
@@ -45,12 +45,12 @@
 | S7 リージョン → geohash 自動セット | ⬜ | (既) | ⬜ (要 SignUpView) | | |
 | S9 ProofMode 録画 (Web 追加) | ⬜ | (既) | N/A | | |
 | S10D STT (マイク) | (既) | ⬜ | ⬜ | | |
-| S11 NIP-EE (MLS) Talk | -- (要調査) | ⬜ | ⬜ | | |
+| S11 NIP-EE (MLS) Talk | -- (要調査) | ⬜ | ⬜ | | | 親ブランチ単体ビルドの実機検証は Session 12 (PR マージ後) に集約 |
 | S12 配布 | ⬜ | ⬜ | ⬜ | | |
 
 ## 3. ブロッカー
 
-- (なし — 発生時に追記)
+- **[S11 検出 / 2026-05-17] Web `@noble/hashes` v2.0.1 subpath import 失敗** — `@noble/hashes` 2.0.1 で `./utils` の exports エントリが削除され `./utils.js` のみが残ったため、`src/adapters/signing/MemorySigner.ts` の `import { bytesToHex, hexToBytes } from '@noble/hashes/utils'` および `src/__tests__/adapters/signing.test.ts` の同 import が解決できず、`npm run test` (2 suites fail / 148 tests pass) と `npm run build` (Next.js 型エラー) が失敗する。親ブランチ既存の問題で S3-S11 のいずれのセッションも `package.json` を変更していない。Session 12 で `import ... from '@noble/hashes/utils.js'` への変更 or `@noble/hashes` の pin 戻し で対処予定。
 
 ## 4. 参照
 

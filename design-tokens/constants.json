@@ -36,7 +36,8 @@
       "timeline": { "value": 600000, "type": "long", "kotlinPath": "CacheDuration.TIMELINE" },
       "short": { "value": 60000, "type": "long", "kotlinPath": "CacheDuration.SHORT" },
       "nip05": { "value": 300000, "type": "long", "kotlinPath": "CacheDuration.NIP05" },
-      "relayInfo": { "value": 3600000, "type": "long", "kotlinPath": "CacheDuration.RELAY_INFO" }
+      "relayInfo": { "value": 3600000, "type": "long", "kotlinPath": "CacheDuration.RELAY_INFO" },
+      "notification": { "value": 86400000, "type": "long", "kotlinPath": "CacheDuration.NOTIFICATION" }
     },
     "maxEntries": {
       "profiles": { "value": 500, "type": "int", "kotlinPath": "CacheMaxEntries.PROFILES" },
