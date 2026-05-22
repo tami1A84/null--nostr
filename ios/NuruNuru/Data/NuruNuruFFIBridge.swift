@@ -178,6 +178,12 @@ protocol MlsFFIBridge: AnyObject, Sendable {
     func connect()
     func disconnect() throws
 
+    // ── Issue #181: encrypted-DB guard ──
+    /// Returns `true` when the MLS SQLite DB is encrypted (SQLCipher),
+    /// `false` when plaintext, `nil` when no MLS manager is bound yet.
+    /// The live client refuses to construct unless this returns `true`.
+    func mlsIsEncrypted() -> Bool?
+
     // ── KeyPackage (Kind 30443, MIP-00) ──
     func mlsCreateKeyPackage() throws -> FfiKeyPackageEventData
     func mlsValidateKeyPackageEvent(eventJSON: String) throws
@@ -238,6 +244,7 @@ protocol MlsFFIBridge: AnyObject, Sendable {
 final class MlsFFIStub: MlsFFIBridge, @unchecked Sendable {
     func connect() {}
     func disconnect() throws {}
+    func mlsIsEncrypted() -> Bool? { nil }
 
     func mlsCreateKeyPackage() throws -> FfiKeyPackageEventData {
         FfiKeyPackageEventData(kind: 30443, content: "", tags: [], legacyTags: [], dTag: "")

@@ -22,6 +22,7 @@
 		24E28146BB864DDAB57E5313 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE91ED6BEC7257E7906E98C4 /* HomeViewModel.swift */; };
 		252988B7DCC45C416290A742 /* NuruSpacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39AEA78F1EE738C0E144D2C5 /* NuruSpacing.swift */; };
 		277AAA098498FB80AF3F8F31 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04E3A499F94B9F995BE3D683 /* AuthViewModel.swift */; };
+		296B2D395FCDF78E7F892828 /* MlsDbKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02BE8FBEAA418FDEB2309983 /* MlsDbKeyStore.swift */; };
 		2AC6193D4324CB71EF96D1A0 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48FCC7ADD449DFEC1E6A7E45 /* AppLogger.swift */; };
 		37A33C4BCDADC57D7617C366 /* NostrKeyUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B6B700C2026B5983717773 /* NostrKeyUtils.swift */; };
 		3AA6D06F3BA0E7FB95B39455 /* RelaySelectPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00A34DBB9264E552D862E689 /* RelaySelectPanel.swift */; };
@@ -115,6 +116,7 @@
 		F6D6AF224258DE55B797CA50 /* PostRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD004F1EF8563E8A7676C4F0 /* PostRow.swift */; };
 		F8512BAA6E64C5D05B071814 /* EmojiPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF54414D84AD0B1640FB30F5 /* EmojiPickerSheet.swift */; };
 		FA32BBAB51F72FBB7E9DBC9A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4EEA5443A4028A0C3E90ADE1 /* Assets.xcassets */; };
+		FBC25AF61667A19A76FBD432 /* MlsLegacyMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3070CE0B42175C3F35BDD57F /* MlsLegacyMigration.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -130,6 +132,7 @@
 /* Begin PBXFileReference section */
 		00A1662B48F53A7A6B33DA48 /* BadgeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgeSettingsView.swift; sourceTree = "<group>"; };
 		00A34DBB9264E552D862E689 /* RelaySelectPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelaySelectPanel.swift; sourceTree = "<group>"; };
+		02BE8FBEAA418FDEB2309983 /* MlsDbKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MlsDbKeyStore.swift; sourceTree = "<group>"; };
 		04E3A499F94B9F995BE3D683 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
 		059BB80343ED1ECBB3B7BED1 /* ElevenLabsTTSService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsTTSService.swift; sourceTree = "<group>"; };
 		06B76EF989F33C0F84071C9A /* BadgeDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgeDisplay.swift; sourceTree = "<group>"; };
@@ -150,11 +153,12 @@
 		210FABCD51D6764B06FE9600 /* ElevenLabsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsSettingsView.swift; sourceTree = "<group>"; };
 		22C81898CCAB5026394F6CCE /* EmojiSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiSettingsView.swift; sourceTree = "<group>"; };
 		258F294215084C36B837E1BC /* NuruTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NuruTheme.swift; sourceTree = "<group>"; };
-		27EF9AB133C5BFB1E50D443C /* NuruNuru.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NuruNuru.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		27EF9AB133C5BFB1E50D443C /* NuruNuru.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = NuruNuru.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2B58808CC989E2639C2EC065 /* CreateGroupSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateGroupSheet.swift; sourceTree = "<group>"; };
 		2E21638AD92895A91FE23DCA /* NuruNuruTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = NuruNuruTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2FD0E63F60538AB4F99A8263 /* ReactionEmojiPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReactionEmojiPicker.swift; sourceTree = "<group>"; };
 		3010FF61D09A1B750CFEFD42 /* SearchSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchSheet.swift; sourceTree = "<group>"; };
+		3070CE0B42175C3F35BDD57F /* MlsLegacyMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MlsLegacyMigration.swift; sourceTree = "<group>"; };
 		335294A58A8D17F139D62149 /* ZapSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZapSheet.swift; sourceTree = "<group>"; };
 		347F461AAF6346EF86999590 /* NuruColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NuruColors.swift; sourceTree = "<group>"; };
 		3606DF078E71DC476B53189D /* NostrRepository+Backup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NostrRepository+Backup.swift"; sourceTree = "<group>"; };
@@ -304,6 +308,8 @@
 				06D59C7E1EDD4F2E9C77C2B4 /* ImageOptimizer.swift */,
 				2014B13EE5209550A26FF270 /* ImageUploadService.swift */,
 				11080352E6A44F2EA4B7C165 /* InternalSigner.swift */,
+				02BE8FBEAA418FDEB2309983 /* MlsDbKeyStore.swift */,
+				3070CE0B42175C3F35BDD57F /* MlsLegacyMigration.swift */,
 				936006252A321F8B76D86AE8 /* NostrCache.swift */,
 				8DC550261D89B6805D6F6159 /* NostrClient.swift */,
 				19B6B700C2026B5983717773 /* NostrKeyUtils.swift */,
@@ -637,6 +643,8 @@
 				674B37E79E1955ACD21E19EF /* LongFormPostItem.swift in Sources */,
 				440C2E36769D7D81A5487C5D /* MainTabView.swift in Sources */,
 				09D1F9BF3C4F2D15C81F6DE6 /* MarkdownContent.swift in Sources */,
+				296B2D395FCDF78E7F892828 /* MlsDbKeyStore.swift in Sources */,
+				FBC25AF61667A19A76FBD432 /* MlsLegacyMigration.swift in Sources */,
 				587C7A9F8C8C0159CD442674 /* MuteListView.swift in Sources */,
 				77C4C9A8813DE422A6135965 /* Nostr+Formatting.swift in Sources */,
 				70C11C209448AF8C6F30014A /* NostrBrowserView.swift in Sources */,
@@ -737,8 +745,6 @@
 				DEVELOPMENT_TEAM = 66G7S3P755;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = NuruNuru/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "ぬるぬる";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -883,8 +889,6 @@
 				DEVELOPMENT_TEAM = 66G7S3P755;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = NuruNuru/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "ぬるぬる";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.social-networking";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

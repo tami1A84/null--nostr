@@ -13,7 +13,8 @@
     "build:rust": "cd rust-engine/nurunuru-napi && node ../../node_modules/.bin/napi build --release",
     "tokens": "node design-tokens/generate.mjs",
     "tokens:check": "node design-tokens/generate.mjs --check",
-    "wiki:lint": "node scripts/wiki-lint.mjs"
+    "wiki:lint": "node scripts/wiki-lint.mjs",
+    "lint:issue-181": "node scripts/issue-181-guard.mjs"
   },
   "dependencies": {
     "22": "^0.0.0",

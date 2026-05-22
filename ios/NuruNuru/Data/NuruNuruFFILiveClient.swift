@@ -9,18 +9,60 @@ import NuruNuruFFILib
 final class MlsFFILiveClient: MlsFFIBridge, @unchecked Sendable {
     private let client: NuruNuruClient
 
-    init(secretKeyHex: String, dbPath: String) throws {
+    /// Internal-signer (full-access) init. Issue #181: callers MUST supply
+    /// the 32-byte SQLCipher key derived from the user's nsec via
+    /// `MlsDbKeyStore.deriveInternalKey(secretKeyHex:)`. The legacy unkeyed
+    /// constructors `NuruNuruClient(secretKeyHex:)` / `newReadOnly(pubkeyHex:)`
+    /// MUST NOT be called from app code — they produce plaintext MLS DBs.
+    ///
+    /// **Zeroization (B3)**: takes `mlsDbKey` as `inout Data` and wipes it
+    /// after the FFI hand-off. `Data` is a value type, but `resetBytes(in:)`
+    /// mutates the underlying storage in place via the COW machinery — the
+    /// caller's binding becomes 32 zero bytes (verified). The previous
+    /// `var z = dbKey` pattern was a no-op copy.
+    init(secretKeyHex: String, dbPath: String, mlsDbKey: inout Data) throws {
         try initEngine(dbPath: dbPath)
-        self.client = try NuruNuruClient(secretKeyHex: secretKeyHex)
+        defer { mlsDbKey.resetBytes(in: 0..<mlsDbKey.count) }
+        self.client = try NuruNuruClient.newWithMlsDbKey(
+            secretKeyHex: secretKeyHex,
+            mlsDbKey: mlsDbKey
+        )
+        try Self.assertEncrypted(client: client)
     }
 
-    init(pubkeyHex: String, dbPath: String) throws {
+    /// External-signer (read-only) init. Same contract as the full init.
+    init(pubkeyHex: String, dbPath: String, mlsDbKey: inout Data) throws {
         try initEngine(dbPath: dbPath)
-        self.client = try NuruNuruClient.newReadOnly(pubkeyHex: pubkeyHex)
+        defer { mlsDbKey.resetBytes(in: 0..<mlsDbKey.count) }
+        self.client = try NuruNuruClient.newReadOnlyWithMlsDbKey(
+            pubkeyHex: pubkeyHex,
+            mlsDbKey: mlsDbKey
+        )
+        try Self.assertEncrypted(client: client)
+    }
+
+    /// Issue #181 B5+B7: hard-fail when the MLS DB ended up unencrypted (e.g.
+    /// a regression in the engine, a missed migration, or a stale plaintext
+    /// file that slipped past the purge). We refuse to expose an `MlsFFIBridge`
+    /// that's writing keys to a plaintext SQLite — surface as a thrown error
+    /// so the caller can show actionable UI instead of "Talk is empty".
+    private static func assertEncrypted(client: NuruNuruClient) throws {
+        let state = client.mlsIsEncrypted()
+        guard state == true else {
+            AppLogger.log("FFI", "MLS DB encryption assertion FAILED (state=\(String(describing: state))) — refusing to proceed (issue #181)")
+            try? client.disconnect()
+            throw MlsFFILiveClientError.encryptionRequired
+        }
+        AppLogger.log("FFI", "MLS DB encrypted (SQLCipher) — issue #181 guard OK")
     }
 
     func connect() { client.connect() }
     func disconnect() throws { try client.disconnect() }
+
+    /// Issue #181 B7: expose the engine's encryption state for diagnostics
+    /// / Settings UI ("MLS DB: encrypted"). Returns `nil` when there is no
+    /// MLS manager bound yet.
+    func mlsIsEncrypted() -> Bool? { client.mlsIsEncrypted() }
 
     func mlsCreateKeyPackage() throws -> FfiKeyPackageEventData {
         bridgeKeyPackage(try client.mlsCreateKeyPackage())
@@ -228,6 +270,20 @@ final class MlsFFILiveClient: MlsFFIBridge, @unchecked Sendable {
             memberCount: p.memberCount,
             isDm: p.isDm
         )
+    }
+}
+
+/// Issue #181: errors thrown by the live (encrypted) MLS bridge ctor.
+enum MlsFFILiveClientError: Error, LocalizedError {
+    /// `mlsIsEncrypted()` returned `false` or `nil` after init — refuse to
+    /// proceed because the DB would write key material in cleartext.
+    case encryptionRequired
+
+    var errorDescription: String? {
+        switch self {
+        case .encryptionRequired:
+            return "MLS DB must be encrypted (SQLCipher) — refusing to start in plaintext mode (issue #181)"
+        }
     }
 }
 #endif
