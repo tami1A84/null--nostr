@@ -726,6 +726,22 @@ public protocol NuruNuruClientProtocol: AnyObject, Sendable {
     func mlsAddMember(groupIdHex: String, keyPackageEventJson: String) throws  -> FfiAddMemberResult
     
     /**
+     * Issue #183: replay every available Kind-445 wrapper for a group
+     * (caller-supplied candidates + locally cached) to catch up the local
+     * MDK epoch to the peer's epoch.
+     *
+     * `candidate_events_json` — raw JSON of Kind-445 events the caller just
+     * fetched from relays. May overlap with the cache; deduped by event id.
+     *
+     * Returns a structured report so the app can decide whether to prompt
+     * the user to recreate the conversation when recovery is not possible
+     * (issue #183 AC2). Never calls clear_pending_commit /
+     * merge_pending_commit, preserving PR #180 receive-path semantics
+     * (AC3).
+     */
+    func mlsCatchUpToPeer(groupIdHex: String, candidateEventsJson: [String]) throws  -> FfiMlsCatchUpReport
+    
+    /**
      * Clear (rollback) pending MLS commit for recovery from stuck state.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
@@ -864,11 +880,23 @@ public protocol NuruNuruClientProtocol: AnyObject, Sendable {
     func mlsProcessWelcome(welcomeEventJson: String) throws  -> FfiMlsGroupInfo
     
     /**
+     * Issue #183: prune Kind-445 wrappers older than the 30-day TTL.
+     * Returns the number of rows removed. Best-effort: safe to call on any
+     * cadence (no-op when the cache file does not exist).
+     */
+    func mlsPruneReplayCache() throws  -> UInt64
+    
+    /**
      * Remove a member from a group. Returns the Kind-445 commit event data.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
      */
     func mlsRemoveMember(groupIdHex: String, memberPubkey: String) throws  -> FfiEncryptedMessageData
+    
+    /**
+     * Issue #183 diagnostic: number of cached Kind-445 wrappers for a group.
+     */
+    func mlsReplayCacheSize(groupIdHex: String) throws  -> UInt64
     
     /**
      * Issue #178 #11: wipe + reopen the MLS DB for a new identity.
@@ -1554,6 +1582,29 @@ open func mlsAddMember(groupIdHex: String, keyPackageEventJson: String)throws  -
 }
     
     /**
+     * Issue #183: replay every available Kind-445 wrapper for a group
+     * (caller-supplied candidates + locally cached) to catch up the local
+     * MDK epoch to the peer's epoch.
+     *
+     * `candidate_events_json` — raw JSON of Kind-445 events the caller just
+     * fetched from relays. May overlap with the cache; deduped by event id.
+     *
+     * Returns a structured report so the app can decide whether to prompt
+     * the user to recreate the conversation when recovery is not possible
+     * (issue #183 AC2). Never calls clear_pending_commit /
+     * merge_pending_commit, preserving PR #180 receive-path semantics
+     * (AC3).
+     */
+open func mlsCatchUpToPeer(groupIdHex: String, candidateEventsJson: [String])throws  -> FfiMlsCatchUpReport  {
+    return try  FfiConverterTypeFfiMlsCatchUpReport_lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_catch_up_to_peer(self.uniffiClonePointer(),
+        FfiConverterString.lower(groupIdHex),
+        FfiConverterSequenceString.lower(candidateEventsJson),$0
+    )
+})
+}
+    
+    /**
      * Clear (rollback) pending MLS commit for recovery from stuck state.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
@@ -1809,6 +1860,18 @@ open func mlsProcessWelcome(welcomeEventJson: String)throws  -> FfiMlsGroupInfo 
 }
     
     /**
+     * Issue #183: prune Kind-445 wrappers older than the 30-day TTL.
+     * Returns the number of rows removed. Best-effort: safe to call on any
+     * cadence (no-op when the cache file does not exist).
+     */
+open func mlsPruneReplayCache()throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_prune_replay_cache(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
      * Remove a member from a group. Returns the Kind-445 commit event data.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
@@ -1818,6 +1881,17 @@ open func mlsRemoveMember(groupIdHex: String, memberPubkey: String)throws  -> Ff
     uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_remove_member(self.uniffiClonePointer(),
         FfiConverterString.lower(groupIdHex),
         FfiConverterString.lower(memberPubkey),$0
+    )
+})
+}
+    
+    /**
+     * Issue #183 diagnostic: number of cached Kind-445 wrappers for a group.
+     */
+open func mlsReplayCacheSize(groupIdHex: String)throws  -> UInt64  {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_replay_cache_size(self.uniffiClonePointer(),
+        FfiConverterString.lower(groupIdHex),$0
     )
 })
 }
@@ -2677,6 +2751,135 @@ public func FfiConverterTypeFfiKeyPackageEventData_lower(_ value: FfiKeyPackageE
 }
 
 
+/**
+ * Issue #183: structured report returned by `mls_catch_up_to_peer`.
+ */
+public struct FfiMlsCatchUpReport {
+    public var groupIdHex: String
+    public var epochBefore: UInt64
+    public var epochAfter: UInt64
+    public var candidatesConsidered: UInt32
+    public var applicationMessagesApplied: UInt32
+    public var commitsApplied: UInt32
+    public var stillUnprocessable: UInt32
+    public var cacheHits: UInt32
+    public var status: FfiMlsCatchUpStatus
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(groupIdHex: String, epochBefore: UInt64, epochAfter: UInt64, candidatesConsidered: UInt32, applicationMessagesApplied: UInt32, commitsApplied: UInt32, stillUnprocessable: UInt32, cacheHits: UInt32, status: FfiMlsCatchUpStatus) {
+        self.groupIdHex = groupIdHex
+        self.epochBefore = epochBefore
+        self.epochAfter = epochAfter
+        self.candidatesConsidered = candidatesConsidered
+        self.applicationMessagesApplied = applicationMessagesApplied
+        self.commitsApplied = commitsApplied
+        self.stillUnprocessable = stillUnprocessable
+        self.cacheHits = cacheHits
+        self.status = status
+    }
+}
+
+#if compiler(>=6)
+extension FfiMlsCatchUpReport: Sendable {}
+#endif
+
+
+extension FfiMlsCatchUpReport: Equatable, Hashable {
+    public static func ==(lhs: FfiMlsCatchUpReport, rhs: FfiMlsCatchUpReport) -> Bool {
+        if lhs.groupIdHex != rhs.groupIdHex {
+            return false
+        }
+        if lhs.epochBefore != rhs.epochBefore {
+            return false
+        }
+        if lhs.epochAfter != rhs.epochAfter {
+            return false
+        }
+        if lhs.candidatesConsidered != rhs.candidatesConsidered {
+            return false
+        }
+        if lhs.applicationMessagesApplied != rhs.applicationMessagesApplied {
+            return false
+        }
+        if lhs.commitsApplied != rhs.commitsApplied {
+            return false
+        }
+        if lhs.stillUnprocessable != rhs.stillUnprocessable {
+            return false
+        }
+        if lhs.cacheHits != rhs.cacheHits {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(groupIdHex)
+        hasher.combine(epochBefore)
+        hasher.combine(epochAfter)
+        hasher.combine(candidatesConsidered)
+        hasher.combine(applicationMessagesApplied)
+        hasher.combine(commitsApplied)
+        hasher.combine(stillUnprocessable)
+        hasher.combine(cacheHits)
+        hasher.combine(status)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiMlsCatchUpReport: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiMlsCatchUpReport {
+        return
+            try FfiMlsCatchUpReport(
+                groupIdHex: FfiConverterString.read(from: &buf), 
+                epochBefore: FfiConverterUInt64.read(from: &buf), 
+                epochAfter: FfiConverterUInt64.read(from: &buf), 
+                candidatesConsidered: FfiConverterUInt32.read(from: &buf), 
+                applicationMessagesApplied: FfiConverterUInt32.read(from: &buf), 
+                commitsApplied: FfiConverterUInt32.read(from: &buf), 
+                stillUnprocessable: FfiConverterUInt32.read(from: &buf), 
+                cacheHits: FfiConverterUInt32.read(from: &buf), 
+                status: FfiConverterTypeFfiMlsCatchUpStatus.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FfiMlsCatchUpReport, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.groupIdHex, into: &buf)
+        FfiConverterUInt64.write(value.epochBefore, into: &buf)
+        FfiConverterUInt64.write(value.epochAfter, into: &buf)
+        FfiConverterUInt32.write(value.candidatesConsidered, into: &buf)
+        FfiConverterUInt32.write(value.applicationMessagesApplied, into: &buf)
+        FfiConverterUInt32.write(value.commitsApplied, into: &buf)
+        FfiConverterUInt32.write(value.stillUnprocessable, into: &buf)
+        FfiConverterUInt32.write(value.cacheHits, into: &buf)
+        FfiConverterTypeFfiMlsCatchUpStatus.write(value.status, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiMlsCatchUpReport_lift(_ buf: RustBuffer) throws -> FfiMlsCatchUpReport {
+    return try FfiConverterTypeFfiMlsCatchUpReport.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiMlsCatchUpReport_lower(_ value: FfiMlsCatchUpReport) -> RustBuffer {
+    return FfiConverterTypeFfiMlsCatchUpReport.lower(value)
+}
+
+
 public struct FfiMlsGroupInfo {
     /**
      * Nostr group id hex / Kind 445 h tag value.
@@ -3273,6 +3476,107 @@ public func FfiConverterTypeFfiWelcomeEventData_lift(_ buf: RustBuffer) throws -
 public func FfiConverterTypeFfiWelcomeEventData_lower(_ value: FfiWelcomeEventData) -> RustBuffer {
     return FfiConverterTypeFfiWelcomeEventData.lower(value)
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Issue #183: status of `mls_catch_up_to_peer`.
+ */
+
+public enum FfiMlsCatchUpStatus {
+    
+    /**
+     * Local epoch advanced and no retryable events remain — aligned with peer.
+     */
+    case recovered
+    /**
+     * At least one event was applied but some retryables remain.
+     * Caller should poll relays again before escalating.
+     */
+    case partiallyRecovered
+    /**
+     * No progress made; the missing Commit is no longer retrievable.
+     * UI should prompt the user to recreate the conversation.
+     */
+    case notRecoverable
+    /**
+     * The group is not present in the local MLS store.
+     */
+    case noSuchGroup
+}
+
+
+#if compiler(>=6)
+extension FfiMlsCatchUpStatus: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiMlsCatchUpStatus: FfiConverterRustBuffer {
+    typealias SwiftType = FfiMlsCatchUpStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiMlsCatchUpStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .recovered
+        
+        case 2: return .partiallyRecovered
+        
+        case 3: return .notRecoverable
+        
+        case 4: return .noSuchGroup
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FfiMlsCatchUpStatus, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .recovered:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .partiallyRecovered:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .notRecoverable:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .noSuchGroup:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiMlsCatchUpStatus_lift(_ buf: RustBuffer) throws -> FfiMlsCatchUpStatus {
+    return try FfiConverterTypeFfiMlsCatchUpStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiMlsCatchUpStatus_lower(_ value: FfiMlsCatchUpStatus) -> RustBuffer {
+    return FfiConverterTypeFfiMlsCatchUpStatus.lower(value)
+}
+
+
+extension FfiMlsCatchUpStatus: Equatable, Hashable {}
+
+
+
+
+
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -3912,6 +4216,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_add_member() != 24579) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_catch_up_to_peer() != 53723) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_clear_pending_commit() != 40727) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3972,7 +4279,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_welcome() != 55489) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_prune_replay_cache() != 8411) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_remove_member() != 42604) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_replay_cache_size() != 26318) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_reset() != 24506) {

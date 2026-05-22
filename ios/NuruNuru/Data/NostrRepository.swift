@@ -92,6 +92,13 @@ actor NostrRepository {
     var mlsSelfUpdatePublishedThisSession: Set<String> = []
     /// Groups that repeatedly failed MLS receive repair and should no longer accept sends.
     var mlsBrokenGroupIds: Set<String> = []
+    /// Issue #183: most recent peer-epoch catch-up classification per group.
+    /// Lives in memory only (mirrors Android). Cleared when the user
+    /// recreates the conversation or on identity reset.
+    var mlsRecoveryStatuses: [String: MlsRecoveryStatus] = [:]
+    /// Issue #183: gate so the Kind-445 replay-cache prune runs at most
+    /// once per Talk-open in this process.
+    var mlsReplayCachePrunedThisSession: Bool = false
     /// Per-group failed repair count used to transition to broken/read-only state.
     var mlsRepairFailureCount: [String: Int] = [:]
     /// True if the user's MLS KeyPackage (Kind 30443) has been published this session.

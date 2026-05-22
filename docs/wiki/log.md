@@ -2,6 +2,35 @@
 
 LLM Wiki の時系列ログです。追記専用として扱います。
 
+## [2026-05-23] feat | iOS MLS peer-epoch catch-up parity (issue #190)
+
+- Wired the Issue #183 Rust FFI (`mls_catch_up_to_peer`,
+  `mls_prune_replay_cache`, `mls_replay_cache_size`) through
+  `NuruNuruFFIBridge` + `MlsFFIStub` + `NuruNuruFFILiveClient`. Added
+  Swift mirrors `FfiMlsCatchUpStatus` and `FfiMlsCatchUpReport`.
+- Added `NostrRepository.deepCatchUpMlsGroup`,
+  `pruneMlsReplayCache`, `mlsRecoveryStatusFor`,
+  `clearMlsRecoveryStatus`, and `recreateDmConversation` plus the
+  `MlsRecoveryStatus` / `MlsDeepCatchUpResult` Swift types — names and
+  semantics mirror Android one-to-one. The replay-cache prune now
+  piggy-backs on the first `fetchMlsGroups` call per session via a
+  `mlsReplayCachePrunedThisSession` gate.
+- Added `TalkViewModel.recoveryStatus`, `recreatingConversation`,
+  `recreateActiveDmConversation`, and `dismissRecoveryBanner`. Deep
+  catch-up is escalated after the standard preflight in `sendMessage`
+  and after `repairCurrentGroup` leaves a DM gap; the cached banner
+  state is restored on `openGroup` and cleared on `closeGroup`.
+- Added the SwiftUI `MlsRecoveryBanner` to `TalkView.swift` with copy
+  matching Android exactly (「メッセージを完全に復元できません」 +
+  「作り直す」 / 「後で」). Native SwiftUI per `ios/GUARDRAILS.md`.
+- Rebuilt the `NuruNuruFFI.xcframework` (device + sim slices) so the
+  new UniFFI symbols are linkable; verified
+  `_uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_catch_up_to_peer`
+  / `mls_prune_replay_cache` / `mls_replay_cache_size` are exported
+  from both slices. iOS Simulator (iPhone 17) Debug build succeeded
+  with no new errors.
+- Closes the AC4 requirement from issue #183.
+
 ## [2026-05-23] fix | Android MLS peer-epoch catch-up (issue #183)
 
 - Added a sidecar SQLite replay cache (`{mls_db_path}.replay.sqlite3`, 30-day

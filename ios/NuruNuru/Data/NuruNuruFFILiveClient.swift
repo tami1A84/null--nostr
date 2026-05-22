@@ -186,6 +186,39 @@ final class MlsFFILiveClient: MlsFFIBridge, @unchecked Sendable {
         try client.mlsClearPendingCommit(groupIdHex: groupIdHex)
     }
 
+    // Issue #183 — peer-epoch deep catch-up.
+    func mlsCatchUpToPeer(groupIdHex: String, candidateEventsJson: [String]) throws -> FfiMlsCatchUpReport {
+        let r = try client.mlsCatchUpToPeer(groupIdHex: groupIdHex, candidateEventsJson: candidateEventsJson)
+        return FfiMlsCatchUpReport(
+            groupIdHex: r.groupIdHex,
+            epochBefore: r.epochBefore,
+            epochAfter: r.epochAfter,
+            candidatesConsidered: r.candidatesConsidered,
+            applicationMessagesApplied: r.applicationMessagesApplied,
+            commitsApplied: r.commitsApplied,
+            stillUnprocessable: r.stillUnprocessable,
+            cacheHits: r.cacheHits,
+            status: bridgeCatchUpStatus(r.status)
+        )
+    }
+
+    func mlsPruneReplayCache() throws -> UInt64 {
+        try client.mlsPruneReplayCache()
+    }
+
+    func mlsReplayCacheSize(groupIdHex: String) throws -> UInt64 {
+        try client.mlsReplayCacheSize(groupIdHex: groupIdHex)
+    }
+
+    private func bridgeCatchUpStatus(_ s: NuruNuruFFILib.FfiMlsCatchUpStatus) -> FfiMlsCatchUpStatus {
+        switch s {
+        case .recovered:          return .recovered
+        case .partiallyRecovered: return .partiallyRecovered
+        case .notRecoverable:     return .notRecoverable
+        case .noSuchGroup:        return .noSuchGroup
+        }
+    }
+
     // MARK: - Helpers
 
     private func bridgeGroupInfo(_ g: NuruNuruFFILib.FfiMlsGroupInfo) -> FfiMlsGroupInfo {

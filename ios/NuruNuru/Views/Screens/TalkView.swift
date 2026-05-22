@@ -295,6 +295,18 @@ private struct GroupChatView: View {
                 .background(Color.red.opacity(0.85))
             }
 
+            // Issue #183: when the Rust catch-up reports the missing Commit
+            // is no longer retrievable from any configured relay AND is not
+            // in the local replay cache, surface an actionable prompt so the
+            // user is not stuck silently in a state_not_ready loop (AC2).
+            if viewModel.recoveryStatus == .notRecoverable {
+                MlsRecoveryBanner(
+                    isWorking: viewModel.recreatingConversation,
+                    onRecreate: { Task { await viewModel.recreateActiveDmConversation() } },
+                    onDismiss: { viewModel.dismissRecoveryBanner() }
+                )
+            }
+
             // Messages
             if viewModel.messagesLoading && viewModel.messages.isEmpty {
                 VStack(spacing: 12) {
@@ -826,6 +838,62 @@ private struct MessageBubbleSkeleton: View {
         }
         .padding(.horizontal, NuruSpacing.space4)
         .redacted(reason: .placeholder)
+    }
+}
+
+// MARK: - MLS Recovery Banner (Issue #183)
+
+/// SwiftUI mirror of Android's `MlsRecoveryBanner` (TalkScreen.kt).
+/// Surfaces when the Rust deep catch-up reports `notRecoverable`: the
+/// missing Commit is no longer retrievable from any configured relay AND
+/// is not in the local replay cache. Copy text must match Android
+/// pixel-for-pixel per docs/wiki/ui/android-ios-sync.md.
+private struct MlsRecoveryBanner: View {
+    let isWorking: Bool
+    let onRecreate: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("メッセージを完全に復元できません")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Color(red: 0x6B/255, green: 0x55/255, blue: 0x00/255))
+            Text(
+                "相手の最新メッセージを取り戻すために必要なデータがリレーから取得できません。" +
+                "会話を作り直すと、相手と再び新しいメッセージをやり取りできます。"
+            )
+            .font(.system(size: 12))
+            .lineSpacing(2)
+            .foregroundStyle(Color(red: 0x6B/255, green: 0x55/255, blue: 0x00/255))
+            HStack(spacing: 8) {
+                Spacer()
+                Button(action: onDismiss) {
+                    Text("後で")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color(red: 0x6B/255, green: 0x55/255, blue: 0x00/255))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                }
+                .disabled(isWorking)
+                Button(action: onRecreate) {
+                    Text(isWorking ? "作り直し中…" : "作り直す")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(red: 0x6B/255, green: 0x55/255, blue: 0x00/255))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color(red: 0xFF/255, green: 0xE6/255, blue: 0x9C/255))
+                        )
+                }
+                .disabled(isWorking)
+            }
+            .padding(.top, 4)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(red: 0xFF/255, green: 0xF7/255, blue: 0xE0/255))
     }
 }
 

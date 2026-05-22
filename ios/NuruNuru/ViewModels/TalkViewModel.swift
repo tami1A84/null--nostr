@@ -20,6 +20,13 @@ import Foundation
     var followingProfiles: [UserProfile] = []
     var followingLoading: Bool          = false
     var stuckGroupIds: Set<String>      = []
+    /// Issue #183: recovery state of the currently-open DM. When set to
+    /// `.notRecoverable` the UI renders a banner offering "会話を作り直す"
+    /// (AC2). `nil` = no banner.
+    var recoveryStatus:        MlsRecoveryStatus? = nil
+    /// Issue #183: true while `recreateActiveDmConversation` is in flight
+    /// so the banner can disable its buttons.
+    var recreatingConversation: Bool             = false
     // Raw MLS groups from Rust/relays. The visible list is collapsed by participant
     // public keys, but open/send still scans sibling group ids for interop recovery.
     private var allMlsGroups: [MlsGroup] = []
@@ -361,6 +368,13 @@ import Foundation
             // still a valid opened chat; polling will update when MLS catches up.
             error = nil
             AppLogger.log("MLS", "TalkVM.openGroup local-ready: messages=\(msgs.count) active=\(finalGroup.groupIdHex)")
+            // Issue #183: surface any cached recovery classification for this
+            // group so a previously-detected NotRecoverable banner re-appears
+            // when the user re-enters the same DM. The banner is cleared by
+            // recreateActiveDmConversation() on success.
+            let cachedRecovery = await repository.mlsRecoveryStatusFor(groupIdHex: finalGroup.groupIdHex)
+            recoveryStatus = (cachedRecovery == .notRecoverable) ? .notRecoverable : nil
+            recreatingConversation = false
             messagesLoading = false
             startPolling(groupIdHex: pollingGroupId)
         } catch {
@@ -390,7 +404,64 @@ import Foundation
         pollingTask  = nil
         activeGroup  = nil
         messages     = []
+        // Issue #183: drop the per-group recovery banner state on close.
+        recoveryStatus = nil
+        recreatingConversation = false
         // NOTE: keep error banner until user explicitly closes it.
+    }
+
+    /// Issue #183: user accepted "作り直す" on the recovery banner.
+    /// Leaves the unrecoverable DM and opens a fresh one with the same peer.
+    /// No-op when the active group is not a DM or has no recoverable partner pubkey.
+    func recreateActiveDmConversation() async {
+        guard let current = activeGroup, current.isDm else { return }
+        guard let partner = current.memberPubkeys.first(where: { $0 != myPubkeyHex }) else {
+            self.error = "相手の公開鍵が解決できません"
+            return
+        }
+        if recreatingConversation { return }
+        recreatingConversation = true
+        defer { recreatingConversation = false }
+
+        do {
+            let fresh = try await withTimeout(seconds: 60.0) {
+                await self.repository.recreateDmConversation(
+                    oldGroupIdHex: current.groupIdHex,
+                    partnerPubkey: partner,
+                    myPubkeyHex: self.myPubkeyHex
+                )
+            }
+            guard let fresh = fresh else {
+                self.error = "会話を作り直せませんでした。相手の鍵情報を取得できない可能性があります。"
+                return
+            }
+
+            // Refresh the group list so the new DM shows in the list, then jump into it.
+            let groups = (try? await repository.fetchMlsGroups(myPubkeyHex: myPubkeyHex)) ?? []
+            self.allMlsGroups = groups
+            self.groups = self.collapseDuplicateConversationGroups(groups)
+
+            pollingTask?.cancel()
+            pollingTask = nil
+            self.activeGroup     = fresh
+            self.messages        = []
+            self.messagesLoading = true
+            self.recoveryStatus  = nil
+            self.error           = nil
+
+            let initial = (try? await repository.fetchMlsMessages(groupIdHex: fresh.groupIdHex, repairFull: false)) ?? []
+            self.messages        = self.dedupeMessages(initial)
+            self.messagesLoading = false
+            startPolling(groupIdHex: fresh.groupIdHex)
+        } catch {
+            setNormalizedError(error, fallback: "会話を作り直せませんでした", context: "recreateDm")
+        }
+    }
+
+    /// Issue #183: user dismissed the banner without recreating.
+    /// Hides the banner; the next failed catch-up re-surfaces it.
+    func dismissRecoveryBanner() {
+        recoveryStatus = nil
     }
 
     // MARK: - Timeout Helper
@@ -496,6 +567,37 @@ import Foundation
         } else {
             stuckGroupIds.remove(group.groupIdHex)
             error = nil
+        }
+
+        // Issue #183: if a DM still has an MLS state gap after standard repair,
+        // escalate to deep peer-epoch catch-up. Rust replays cached + freshly
+        // fetched Kind-445 wrappers; on NotRecoverable we surface the banner
+        // (AC1/AC2). Mirrors Android `repair source=…` escalation path.
+        if group.isDm,
+           activeGroup?.groupIdHex == group.groupIdHex,
+           await repository.hasMlsStateGaps(groupIdHex: group.groupIdHex) {
+            let deep = await repository.deepCatchUpMlsGroup(groupIdHex: group.groupIdHex)
+            AppLogger.log(
+                "MLS",
+                "TalkVM.repair group=\(group.groupIdHex) escalated to deep catch-up " +
+                "status=\(String(describing: deep?.status)) unresolved=\(String(describing: deep?.stillUnprocessable))"
+            )
+            if activeGroup?.groupIdHex == group.groupIdHex {
+                switch deep?.status {
+                case .notRecoverable:
+                    recoveryStatus = .notRecoverable
+                case .healthy, .recovering:
+                    if recoveryStatus == .notRecoverable { recoveryStatus = nil }
+                default:
+                    break
+                }
+            }
+        } else if group.isDm,
+                  activeGroup?.groupIdHex == group.groupIdHex,
+                  recoveryStatus == .notRecoverable,
+                  !(await repository.hasMlsStateGaps(groupIdHex: group.groupIdHex)) {
+            // Repair closed the gap on its own — drop the stale banner.
+            recoveryStatus = nil
         }
     }
 
@@ -643,9 +745,32 @@ import Foundation
             } else if messages.count > 0 {
                 AppLogger.log("MLS", "TalkVM.sendMessage ignoring residual MLS gap on established DM group=\(group.groupIdHex) fallback=\(fallback.groupIdHex) fallbackHasGap=\(fallbackHasGap) messages=\(messages.count)")
             } else {
-                self.error = "同期中です。相手に表示される状態を確認中です。少し待って再送してください"
-                AppLogger.log("MLS", "TalkVM.sendMessage abort unresolved MLS gap group=\(group.groupIdHex) fallback=\(fallback.groupIdHex) fallbackHasGap=\(fallbackHasGap)")
-                return
+                // Issue #183: standard repair/fallback could not close the gap. Escalate
+                // to deep peer-epoch catch-up (Rust replays cached + freshly fetched
+                // Kind-445 wrappers, AC1). If even that cannot recover the missing
+                // Commit, surface the recovery banner (AC2) and abort the send.
+                let deep = try? await withTimeout(seconds: 35.0) {
+                    await self.repository.deepCatchUpMlsGroup(groupIdHex: group.groupIdHex)
+                }
+                if let deep = deep {
+                    AppLogger.log(
+                        "MLS",
+                        "TalkVM.sendMessage deepCatchUp group=\(group.groupIdHex) status=\(deep.status) " +
+                        "epoch=\(deep.epochBefore)->\(deep.epochAfter) " +
+                        "commits=\(deep.commitsApplied) apps=\(deep.applicationMessagesApplied) " +
+                        "unresolved=\(deep.stillUnprocessable)"
+                    )
+                    if deep.status == .notRecoverable {
+                        recoveryStatus = .notRecoverable
+                    } else if recoveryStatus == .notRecoverable {
+                        recoveryStatus = nil
+                    }
+                }
+                if await repository.hasMlsStateGaps(groupIdHex: group.groupIdHex) {
+                    self.error = "同期中です。相手に表示される状態を確認中です。少し待って再送してください"
+                    AppLogger.log("MLS", "TalkVM.sendMessage abort unresolved MLS gap group=\(group.groupIdHex) fallback=\(fallback.groupIdHex) fallbackHasGap=\(fallbackHasGap)")
+                    return
+                }
             }
         }
 

@@ -95,8 +95,40 @@ The fix has three cooperating layers:
 
 ### iOS
 
-- iOS parity is tracked as a sibling issue. The same `catch_up_to_peer` FFI
-  is wired through `NuruNuruFFIBridge` once iOS chooses its recreate UX.
+- Full parity with Android since issue #190 (PR landing alongside this page).
+- The recovery types `MlsRecoveryStatus { healthy, recovering, notRecoverable, unknown }`
+  and `MlsDeepCatchUpResult` live in `ios/NuruNuru/Data/NostrRepository+Talk.swift`
+  and mirror the Android `enum class MlsRecoveryStatus` / `data class MlsDeepCatchUpResult`
+  one-to-one (`Healthy ↔ healthy`, `Recovering ↔ recovering`,
+  `NotRecoverable ↔ notRecoverable`, `Unknown ↔ unknown`).
+- `MlsFFIBridge` exposes `mlsCatchUpToPeer`, `mlsPruneReplayCache`,
+  `mlsReplayCacheSize`. `MlsFFIStub` returns no-op results so the SwiftUI
+  preview path keeps working without the XCFramework. The live
+  implementation in `NuruNuruFFILiveClient` calls through to the
+  UniFFI-generated `NuruNuruClient` and maps `NuruNuruFFILib.FfiMlsCatchUpStatus`
+  to the app-side `FfiMlsCatchUpStatus`.
+- `NostrRepository` runs catch-up on the actor (no detached `Task` holds
+  the actor pointer). The cached `MlsRecoveryStatus` per group lives in an
+  actor-isolated `mlsRecoveryStatuses` dictionary and is wiped on identity
+  reset (mlsReset replay-cache sidecar already wipes the underlying file).
+- `TalkViewModel` escalates to `deepCatchUpMlsGroup` after the standard
+  preflight catch-up in `sendMessage` and after `repairMlsGroupHistory`
+  fails to close a DM gap. It restores the cached `recoveryStatus` on
+  `openGroup` and clears it on `closeGroup`.
+- The SwiftUI banner is `private struct MlsRecoveryBanner` in
+  `TalkView.swift`; copy text matches Android exactly per
+  `docs/wiki/ui/android-ios-sync.md`:
+  - Title: 「メッセージを完全に復元できません」
+  - Body: 「相手の最新メッセージを取り戻すために必要なデータがリレーから取得できません。会話を作り直すと、相手と再び新しいメッセージをやり取りできます。」
+  - Primary: 「作り直す」 (calls `recreateActiveDmConversation`)
+  - Secondary: 「後で」 (calls `dismissRecoveryBanner`)
+- The replay-cache prune piggy-backs on the first Talk-open per app
+  session (`mlsReplayCachePrunedThisSession` gate) — mirrors Android's
+  `ensureKeyPackagePublished` companion call.
+- iOS recreate path uses `createMlsDmConversation` (not Android's
+  `createDmGroup`) because the iOS repository API is the SwiftUI-friendly
+  variant; both ultimately call the same `mls_create_group` +
+  `mls_add_member` + Welcome publish flow.
 
 ### Rust
 
@@ -116,7 +148,11 @@ The fix has three cooperating layers:
   `MlsRecoveryStatus.NotRecoverable` → `MlsRecoveryBanner`.
 - **AC3** — No regression to PR #180 receive-path semantics: catch-up never
   touches pending state; cache write is best-effort.
-- **AC4** — iOS parity tracked separately; FFI surface already shared.
+- **AC4** — iOS parity: delivered in issue #190.
+  `NuruNuruFFIBridge` exposes `mlsCatchUpToPeer` / `mlsPruneReplayCache` /
+  `mlsReplayCacheSize`; `NostrRepository.deepCatchUpMlsGroup` +
+  `recreateDmConversation`; `TalkViewModel.recreateActiveDmConversation` +
+  `dismissRecoveryBanner`; `MlsRecoveryBanner` in `TalkView.swift`.
 
 ## Source references
 
@@ -144,6 +180,26 @@ The fix has three cooperating layers:
     `dismissRecoveryBanner`
 - `android/app/src/main/kotlin/io/nurunuru/app/ui/screens/TalkScreen.kt`
   - `MlsRecoveryBanner`
+- `ios/NuruNuru/Data/NuruNuruFFIBridge.swift`
+  - `FfiMlsCatchUpStatus`, `FfiMlsCatchUpReport`, protocol additions
+    `mlsCatchUpToPeer` / `mlsPruneReplayCache` / `mlsReplayCacheSize`,
+    matching `MlsFFIStub` no-ops
+- `ios/NuruNuru/Data/NuruNuruFFILiveClient.swift`
+  - Live UniFFI bridge implementations + `bridgeCatchUpStatus` mapper
+- `ios/NuruNuru/Data/NostrRepository+Talk.swift`
+  - `MlsRecoveryStatus`, `MlsDeepCatchUpResult`,
+    `deepCatchUpMlsGroup`, `pruneMlsReplayCache`, `mlsRecoveryStatusFor`,
+    `clearMlsRecoveryStatus`, `recreateDmConversation`,
+    one-shot prune piggy-back inside `fetchMlsGroups`
+- `ios/NuruNuru/ViewModels/TalkViewModel.swift`
+  - `recoveryStatus`, `recreatingConversation`,
+    `recreateActiveDmConversation`, `dismissRecoveryBanner`,
+    deep-catch-up escalation in `sendMessage` preflight and
+    `repairCurrentGroup`, restore-on-open / clear-on-close hooks
+- `ios/NuruNuru/Views/Screens/TalkView.swift`
+  - `MlsRecoveryBanner` SwiftUI view (LINE Seed JP, native SwiftUI per
+    `ios/GUARDRAILS.md`), rendered inside `GroupChatView` when
+    `viewModel.recoveryStatus == .notRecoverable`
 
 ## Related pages
 
@@ -155,8 +211,11 @@ The fix has three cooperating layers:
 
 ## Open questions
 
-- Whether iOS should auto-trigger the recreate flow instead of showing a
-  banner (the iOS UX may diverge from Android intentionally — sibling issue
-  to be filed).
 - Whether to expose the replay-cache size in the Settings / Diagnostics
   screen so users / support can confirm prune ran.
+
+## Resolved
+
+- iOS UX: resolved in issue #190 — iOS uses the same banner-driven recreate
+  UX as Android. No automatic recreate; the user always confirms via
+  「作り直す」.

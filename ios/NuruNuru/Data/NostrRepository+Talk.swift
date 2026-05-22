@@ -156,6 +156,14 @@ extension NostrRepository {
             // restoration of already-joined conversations is not delayed.
             Task { await self.ensureKeyPackagePublished(ffi: ffi, myPubkeyHex: myPubkeyHex) }
 
+            // Issue #183: piggy-back a one-shot prune of the Rust replay-cache
+            // sidecar on the first Talk open per session. Best-effort; safe to
+            // call when the cache file does not yet exist.
+            if !mlsReplayCachePrunedThisSession {
+                mlsReplayCachePrunedThisSession = true
+                Task { await self.pruneMlsReplayCache() }
+            }
+
             // Interop bootstrap: when NuruNuru is opened only to recover existing
             // WhiteNoise/Marmot groups, users may never invoke createDm/createGroup,
             // so our MLS KeyPackage might never be published. A peer can create a
@@ -2365,6 +2373,228 @@ extension NostrRepository {
         }
         return String(format: "mls_%016llx", hash)
     }
+
+    // MARK: - Issue #183: peer-epoch deep catch-up
+
+    /// Issue #183: deep peer-epoch catch-up for a DM (or group).
+    ///
+    /// Called when standard repair (`fetchMlsMessages(repairFull: true)`)
+    /// still leaves an MLS state gap. Pulls a wider Kind-445 window
+    /// (no since/cooldown filters, higher limit, longer timeout) and hands
+    /// the raw events + every cached wrapper Rust has stored over to
+    /// `mlsCatchUpToPeer`. The Rust side replays them in `created_at`
+    /// order across up to 8 retry passes, applies any missing Commits,
+    /// and reports whether the local epoch is now usable.
+    ///
+    /// Receive-path semantics (AC3): this function never invokes
+    /// `mlsClearPendingCommit` / `mlsMergePendingCommit`. PR #180's
+    /// invariant (the receive path must not tear down our own in-flight
+    /// commits) is preserved.
+    ///
+    /// Returns nil when the FFI is unavailable or the group is unknown to
+    /// MDK; callers should treat that as `MlsRecoveryStatus.unknown` and
+    /// fall back to standard polling.
+    func deepCatchUpMlsGroup(groupIdHex: String) async -> MlsDeepCatchUpResult? {
+        guard let ffi = ensureMlsClient() else { return nil }
+
+        // Group must be visible in MDK and belong to the current account.
+        guard let groupInfo = try? ffi.mlsGetGroupInfo(groupIdHex: groupIdHex),
+              isCurrentAccountMlsGroup(groupInfo) else {
+            AppLogger.log("MLS", "deepCatchUpMlsGroup(\(groupIdHex)): unknown / cross-account group")
+            return nil
+        }
+
+        // Resolve the same relay set used by fetchMlsMessages so we hit the
+        // relays the peer publishes to. WhiteNoise interop requires the
+        // member-inbox set.
+        let groupRelays = groupInfo.relays
+        let inboxRelays = await resolveInboxRelaysForMembers(groupInfo.memberPubkeys)
+        let allRelays   = mlsRelayUrls(groupRelays + inboxRelays)
+
+        if !allRelays.isEmpty {
+            await client.connect(relayUrls: allRelays)
+        }
+
+        // Wider pull than repairFull: no since filter, larger limit, longer timeout.
+        // This is the "look harder for the missing Commit" pass.
+        let filter = NostrFilter(
+            ids: nil,
+            authors: nil,
+            kinds: [NostrKind.mlsGroupMessage],
+            since: nil,
+            until: nil,
+            limit: 2_000,
+            tags: ["#h": [groupIdHex]],
+            search: nil
+        )
+
+        let rawEvents: [NostrEvent]
+        if !allRelays.isEmpty {
+            rawEvents = await fetchFromRelays(allRelays, filters: [filter], timeoutSeconds: 25.0, limit: 2_000)
+        } else {
+            rawEvents = await fetchEvents(filters: [filter], timeoutSeconds: 20.0)
+        }
+
+        // Dedup by event id and serialize for the FFI hand-off.
+        var seen = Set<String>()
+        let unique = rawEvents.filter { seen.insert($0.id).inserted }
+        let candidatesJson = unique.compactMap { encodeEventJSON($0) }
+
+        AppLogger.log("MLS", "deepCatchUpMlsGroup(\(groupIdHex)): relays=\(allRelays.count) fetched=\(unique.count)")
+
+        let report: FfiMlsCatchUpReport
+        do {
+            report = try ffi.mlsCatchUpToPeer(groupIdHex: groupIdHex, candidateEventsJson: candidatesJson)
+        } catch {
+            AppLogger.log("MLS", "deepCatchUpMlsGroup(\(groupIdHex)) FFI failed: \(mlsRedactedError(error))")
+            return nil
+        }
+
+        let mapped: MlsRecoveryStatus
+        switch report.status {
+        case .recovered:          mapped = .healthy
+        case .partiallyRecovered: mapped = .recovering
+        case .notRecoverable:     mapped = .notRecoverable
+        case .noSuchGroup:        mapped = .unknown
+        }
+        mlsRecoveryStatuses[groupIdHex] = mapped
+
+        // If Rust advanced the local epoch, drop the session-only processed-ids
+        // cache so the next standard pull picks up newly decryptable application
+        // messages and the UI sees them on the next stream tick.
+        if report.epochAfter > report.epochBefore {
+            mlsProcessedIds.removeValue(forKey: groupIdHex)
+            mlsAppliedEventIds.removeValue(forKey: groupIdHex)
+            mlsRetryableStateCount.removeValue(forKey: groupIdHex)
+            mlsRetryableEventCooldownUntil.removeValue(forKey: groupIdHex)
+            _ = try? await fetchMlsMessages(groupIdHex: groupIdHex, repairFull: true)
+        }
+
+        AppLogger.log(
+            "MLS",
+            "deepCatchUpMlsGroup(\(groupIdHex)): status=\(report.status) " +
+            "epoch=\(report.epochBefore)->\(report.epochAfter) " +
+            "apps=\(report.applicationMessagesApplied) commits=\(report.commitsApplied) " +
+            "unresolved=\(report.stillUnprocessable) cacheHits=\(report.cacheHits)"
+        )
+
+        return MlsDeepCatchUpResult(
+            groupIdHex: groupIdHex,
+            status: mapped,
+            epochBefore: report.epochBefore,
+            epochAfter: report.epochAfter,
+            candidatesConsidered: Int(report.candidatesConsidered),
+            applicationMessagesApplied: Int(report.applicationMessagesApplied),
+            commitsApplied: Int(report.commitsApplied),
+            stillUnprocessable: Int(report.stillUnprocessable),
+            cacheHits: Int(report.cacheHits)
+        )
+    }
+
+    /// Issue #183: best-effort prune of the Rust replay-cache sidecar.
+    /// Returns the number of rows removed (0 on error / when the file
+    /// doesn't exist yet). Safe to call at most once per app session.
+    @discardableResult
+    func pruneMlsReplayCache() async -> UInt64 {
+        guard let ffi = ensureMlsClient() else { return 0 }
+        do {
+            return try ffi.mlsPruneReplayCache()
+        } catch {
+            AppLogger.log("MLS", "pruneMlsReplayCache failed: \(mlsRedactedError(error))")
+            return 0
+        }
+    }
+
+    /// Issue #183: most recent recovery classification for the group.
+    /// Defaults to `.unknown` until `deepCatchUpMlsGroup` runs at least once.
+    func mlsRecoveryStatusFor(groupIdHex: String) -> MlsRecoveryStatus {
+        mlsRecoveryStatuses[groupIdHex] ?? .unknown
+    }
+
+    /// Issue #183: clear the cached recovery status for a group (used after
+    /// the user successfully recreates the conversation).
+    func clearMlsRecoveryStatus(groupIdHex: String) {
+        mlsRecoveryStatuses.removeValue(forKey: groupIdHex)
+    }
+
+    /// Issue #183 fallback (AC2): recreate the DM with `partnerPubkey` from
+    /// scratch when `deepCatchUpMlsGroup` reports `.notRecoverable`.
+    ///
+    /// This is the user-facing equivalent of the issue report's "workaround A"
+    /// (leave the DM on both ends and recreate). We:
+    ///
+    /// 1. Leave the old group locally (best-effort publish a leave Commit so
+    ///    the peer can prune their side).
+    /// 2. Create a fresh DM group anchored at epoch 0 — both ends realign.
+    /// 3. Clear the cached recovery status for the old group so a stale
+    ///    banner does not linger in the UI.
+    ///
+    /// Returns the new `MlsGroup` on success, or nil when the partner's
+    /// KeyPackage could not be fetched (caller should surface a user-facing
+    /// "相手の鍵情報を取得できません" error).
+    func recreateDmConversation(
+        oldGroupIdHex: String,
+        partnerPubkey: String,
+        myPubkeyHex: String
+    ) async -> MlsGroup? {
+        // Best-effort leave on the old group. Do not fail the recreate if
+        // the leave commit cannot publish — the local hide is already done,
+        // and that is what the local UI cares about.
+        try? await leaveMlsGroup(groupIdHex: oldGroupIdHex)
+        clearMlsRecoveryStatus(groupIdHex: oldGroupIdHex)
+        mlsProcessedIds.removeValue(forKey: oldGroupIdHex)
+        mlsAppliedEventIds.removeValue(forKey: oldGroupIdHex)
+        mlsRetryableStateCount.removeValue(forKey: oldGroupIdHex)
+        mlsRetryableEventCooldownUntil.removeValue(forKey: oldGroupIdHex)
+
+        do {
+            let fresh = try await createMlsDmConversation(
+                partnerPubkeyHex: partnerPubkey,
+                myPubkeyHex: myPubkeyHex
+            )
+            AppLogger.log("MLS", "recreateDmConversation: old=\(oldGroupIdHex) new=\(fresh.groupIdHex)")
+            return fresh
+        } catch {
+            AppLogger.log(
+                "MLS",
+                "recreateDmConversation(\(oldGroupIdHex)) failed: \(mlsRedactedError(error))"
+            )
+            return nil
+        }
+    }
+}
+
+// MARK: - Issue #183: peer-epoch recovery types (cross-platform parity)
+
+/// Recovery classification for an MLS group, mirroring Android's
+/// `MlsRecoveryStatus` enum. UI surfaces a banner only on `.notRecoverable`.
+///
+/// - `.healthy`        last catch-up reported Recovered.
+/// - `.recovering`     last catch-up reported PartiallyRecovered — keep polling.
+/// - `.notRecoverable` the missing Commit is not retrievable from any
+///                     configured relay and is not in the local replay
+///                     cache. UI prompts the user to recreate the
+///                     conversation (AC2).
+/// - `.unknown`        never attempted catch-up for this group.
+enum MlsRecoveryStatus: Sendable, Equatable {
+    case healthy
+    case recovering
+    case notRecoverable
+    case unknown
+}
+
+/// Issue #183: deep-catch-up result mirrored to the app layer.
+/// Strictly read-only — the wrapper writes only into the in-memory status map.
+struct MlsDeepCatchUpResult: Sendable {
+    let groupIdHex: String
+    let status: MlsRecoveryStatus
+    let epochBefore: UInt64
+    let epochAfter: UInt64
+    let candidatesConsidered: Int
+    let applicationMessagesApplied: Int
+    let commitsApplied: Int
+    let stillUnprocessable: Int
+    let cacheHits: Int
 }
 
 // MARK: - MLS Errors

@@ -60,6 +60,56 @@ public enum FfiMlsProcessResult {
     case stateUpdate(String)
 }
 
+// MARK: - Issue #183: peer-epoch catch-up types
+
+/// Mirrors Rust `FfiMlsCatchUpStatus`. Status of the deep catch-up replay.
+public enum FfiMlsCatchUpStatus: Sendable {
+    /// Local epoch advanced and no retryable events remain — aligned with peer.
+    case recovered
+    /// At least one event was applied but some retryables remain.
+    case partiallyRecovered
+    /// No progress made; the missing Commit is no longer retrievable.
+    /// UI should prompt the user to recreate the conversation.
+    case notRecoverable
+    /// The group is not present in the local MLS store.
+    case noSuchGroup
+}
+
+/// Mirrors Rust `FfiMlsCatchUpReport`. Structured result of the deep replay loop.
+public struct FfiMlsCatchUpReport: Sendable {
+    public let groupIdHex:                 String
+    public let epochBefore:                UInt64
+    public let epochAfter:                 UInt64
+    public let candidatesConsidered:       UInt32
+    public let applicationMessagesApplied: UInt32
+    public let commitsApplied:             UInt32
+    public let stillUnprocessable:         UInt32
+    public let cacheHits:                  UInt32
+    public let status:                     FfiMlsCatchUpStatus
+
+    public init(
+        groupIdHex: String,
+        epochBefore: UInt64,
+        epochAfter: UInt64,
+        candidatesConsidered: UInt32,
+        applicationMessagesApplied: UInt32,
+        commitsApplied: UInt32,
+        stillUnprocessable: UInt32,
+        cacheHits: UInt32,
+        status: FfiMlsCatchUpStatus
+    ) {
+        self.groupIdHex = groupIdHex
+        self.epochBefore = epochBefore
+        self.epochAfter = epochAfter
+        self.candidatesConsidered = candidatesConsidered
+        self.applicationMessagesApplied = applicationMessagesApplied
+        self.commitsApplied = commitsApplied
+        self.stillUnprocessable = stillUnprocessable
+        self.cacheHits = cacheHits
+        self.status = status
+    }
+}
+
 /// Mirrors Rust FfiPendingWelcome (Issue #178 #4 split flow).
 public struct FfiPendingWelcome {
     public let welcomeEventIdHex:   String
@@ -226,6 +276,19 @@ protocol MlsFFIBridge: AnyObject, Sendable {
     func mlsCreateRecoveryCommit(groupIdHex: String) throws -> FfiEncryptedMessageData
     func mlsClearPendingCommit(groupIdHex: String) throws
 
+    // ── Issue #183: peer-epoch catch-up ──
+    /// Replay a wide Kind-445 window through MDK (cached + freshly fetched
+    /// wrappers) and report whether the local epoch is now aligned with the
+    /// peer. Receive-path semantics are preserved: this call never invokes
+    /// `mls_clear_pending_commit` / `mls_merge_pending_commit` (PR #180 AC3).
+    func mlsCatchUpToPeer(groupIdHex: String, candidateEventsJson: [String]) throws -> FfiMlsCatchUpReport
+    /// Prune Kind-445 wrappers older than the 30-day TTL across all groups.
+    /// Returns the number of rows removed. Best-effort: safe to call on any
+    /// cadence (no-op when the cache file does not exist).
+    func mlsPruneReplayCache() throws -> UInt64
+    /// Number of cached Kind-445 wrappers for one group (diagnostic).
+    func mlsReplayCacheSize(groupIdHex: String) throws -> UInt64
+
     // ── Subscriptions (Issue #178 #9, #10) ──
     /// Subscribe to *my* Welcomes (kind:1059 #p=self). Returns a sub_id.
     func mlsSubscribeWelcomes(sinceSecs: UInt64) throws -> String
@@ -315,6 +378,24 @@ final class MlsFFIStub: MlsFFIBridge, @unchecked Sendable {
     }
 
     func mlsClearPendingCommit(groupIdHex: String) throws {}
+
+    // Issue #183 peer-epoch catch-up stubs
+    func mlsCatchUpToPeer(groupIdHex: String, candidateEventsJson: [String]) throws -> FfiMlsCatchUpReport {
+        FfiMlsCatchUpReport(
+            groupIdHex: groupIdHex,
+            epochBefore: 0,
+            epochAfter: 0,
+            candidatesConsidered: 0,
+            applicationMessagesApplied: 0,
+            commitsApplied: 0,
+            stillUnprocessable: 0,
+            cacheHits: 0,
+            status: .noSuchGroup
+        )
+    }
+
+    func mlsPruneReplayCache() throws -> UInt64 { 0 }
+    func mlsReplayCacheSize(groupIdHex: String) throws -> UInt64 { 0 }
 
     // Issue #178 #4 split-welcome stubs
     func mlsPreviewWelcome(welcomeEventJSON: String) throws -> FfiPendingWelcome {
