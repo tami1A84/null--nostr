@@ -166,6 +166,54 @@ pub fn derive_mls_db_key(nsec_bytes: &[u8; 32], app_salt: &[u8]) -> [u8; 32] {
     out
 }
 
+/// Canonical helper: given the engine's `db_path` (e.g. `${filesDir}/nostrdb_ndb`),
+/// returns the path the engine actually opens for the MLS SQLite database.
+///
+/// This is the **single source of truth** for the MLS DB path used across
+/// Rust + Android + iOS. Migration/diagnostic code MUST go through this
+/// helper instead of duplicating the `"{}_mls.sqlite3"` format string,
+/// to avoid cross-platform path drift (issue #181).
+pub fn mls_db_path_for(db_path: &str) -> String {
+    format!("{db_path}_mls.sqlite3")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Issue #181 PR-0: tests-first. Construct an encrypted MLS DB and
+    /// assert its on-disk first 16 bytes are NOT the SQLite plaintext magic
+    /// `"SQLite format 3\0"`. SQLCipher overwrites the header with the
+    /// salt+IV. Plaintext SQLite always starts with the magic; any
+    /// non-magic prefix on a non-empty file proves SQLCipher applied keying.
+    #[test]
+    fn new_with_key_produces_sqlcipher_header() {
+        use std::io::Read;
+        let tmp = tempfile::tempdir().expect("tmpdir");
+        let db_base = tmp.path().join("nostrdb_ndb");
+        let mls_path = mls_db_path_for(db_base.to_str().unwrap());
+        let dummy_pubkey =
+            "0000000000000000000000000000000000000000000000000000000000000001";
+
+        let key = [0x42u8; 32];
+        let mgr = MlsManager::new_with_key(&mls_path, dummy_pubkey, key)
+            .expect("encrypted MLS open");
+        assert!(mgr.is_encrypted());
+        drop(mgr); // close handle so we can re-read the file bytes
+
+        let mut f = std::fs::File::open(&mls_path).expect("open mls db");
+        let mut buf = [0u8; 16];
+        let n = f.read(&mut buf).expect("read header");
+        assert_eq!(n, 16, "expected 16-byte header read");
+        const PLAINTEXT_MAGIC: &[u8; 16] = b"SQLite format 3\0";
+        assert_ne!(
+            &buf, PLAINTEXT_MAGIC,
+            "SQLCipher-keyed DB header still matches plaintext SQLite magic — \
+             encryption did NOT apply (issue #181 regression)"
+        );
+    }
+}
+
 impl MlsManager {
     /// Resolve a `nostr_group_id` hex string (32 bytes = 64 hex chars) to the
     /// internal `mdk_storage_traits::GroupId` (= `mls_group_id`) used by MDK API calls.

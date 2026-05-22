@@ -868,6 +868,14 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -886,6 +894,8 @@ internal interface IntegrityCheckingUniffiLib : Library {
     fun uniffi_uniffi_nurunuru_checksum_func_derive_mls_db_key_from_secret(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_func_init_engine(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_func_mls_db_path_for(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_add_relay(
 ): Short
@@ -965,6 +975,8 @@ fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_get_pending_welcom
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_groups_needing_self_update(
 ): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_is_encrypted(
+): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_leave_group(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_list_groups(
@@ -1037,6 +1049,10 @@ fun uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new_read_only(
 ): Short
+fun uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new_read_only_with_mls_db_key(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new_with_mls_db_key(
+): Short
 fun ffi_uniffi_nurunuru_uniffi_contract_version(
 ): Int
 
@@ -1093,6 +1109,10 @@ fun uniffi_uniffi_nurunuru_fn_free_nurunuruclient(`ptr`: Pointer,uniffi_out_err:
 fun uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new(`secretKeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
 fun uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new_read_only(`pubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Pointer
+fun uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new_read_only_with_mls_db_key(`pubkeyHex`: RustBuffer.ByValue,`mlsDbKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Pointer
+fun uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new_with_mls_db_key(`secretKeyHex`: RustBuffer.ByValue,`mlsDbKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_add_relay(`ptr`: Pointer,`url`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
@@ -1172,6 +1192,8 @@ fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_get_pending_welcomes(`pt
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_groups_needing_self_update(`ptr`: Pointer,`thresholdSecs`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_is_encrypted(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_leave_group(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_list_groups(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
@@ -1244,6 +1266,8 @@ fun uniffi_uniffi_nurunuru_fn_func_derive_mls_db_key_from_secret(`secretKeyHex`:
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_func_init_engine(`dbPath`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+fun uniffi_uniffi_nurunuru_fn_func_mls_db_path_for(`dbPath`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun ffi_uniffi_nurunuru_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun ffi_uniffi_nurunuru_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1376,6 +1400,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_uniffi_nurunuru_checksum_func_init_engine() != 52824.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_uniffi_nurunuru_checksum_func_mls_db_path_for() != 4127.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_add_relay() != 26516.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1493,6 +1520,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_groups_needing_self_update() != 10252.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_is_encrypted() != 63295.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_leave_group() != 40071.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1599,6 +1629,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new_read_only() != 26367.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new_read_only_with_mls_db_key() != 46409.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new_with_mls_db_key() != 62874.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -2282,6 +2318,16 @@ public interface NuruNuruClientInterface {
      * can be passed directly to `mls_create_recovery_commit(group_id_hex)`.
      */
     fun `mlsGroupsNeedingSelfUpdate`(`thresholdSecs`: kotlin.ULong): List<kotlin.String>
+    
+    /**
+     * Issue #181 B7: returns `Some(true)` when the MLS DB is currently
+     * open under SQLCipher, `Some(false)` for legacy unencrypted open,
+     * `None` when no MLS manager is bound (e.g. ctor without key, or
+     * bind failed). The app layer MUST assert `Some(true)` after
+     * constructing the client via `new_with_mls_db_key` and refuse to
+     * proceed otherwise.
+     */
+    fun `mlsIsEncrypted`(): kotlin.Boolean?
     
     /**
      * Leave a group. Returns the Kind-445 commit event data to publish.
@@ -3316,6 +3362,26 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
 
     
     /**
+     * Issue #181 B7: returns `Some(true)` when the MLS DB is currently
+     * open under SQLCipher, `Some(false)` for legacy unencrypted open,
+     * `None` when no MLS manager is bound (e.g. ctor without key, or
+     * bind failed). The app layer MUST assert `Some(true)` after
+     * constructing the client via `new_with_mls_db_key` and refuse to
+     * proceed otherwise.
+     */override fun `mlsIsEncrypted`(): kotlin.Boolean? {
+            return FfiConverterOptionalBoolean.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_is_encrypted(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Leave a group. Returns the Kind-445 commit event data to publish.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
@@ -3945,6 +4011,53 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new_read_only(
         FfiConverterString.lower(`pubkeyHex`),_status)
+}
+    )
+    }
+    
+
+        
+    /**
+     * Issue #181: read-only client constructor that *also* injects the
+     * SQLCipher key for the MLS DB before the engine's internal
+     * `login()` runs. Mirrors [`Self::new_with_mls_db_key`] for the
+     * external-signer (Amber / NIP-46) path.
+     *
+     * For external signers, derive `mls_db_key` from a pubkey-scoped
+     * random secret stored in the OS keystore (NOT HKDF, since there is
+     * no nsec to derive from in the Rust process).
+     *
+     * Requires `init_engine()` to have been called first.
+     */
+    @Throws(NuruNuruFfiException::class) fun `newReadOnlyWithMlsDbKey`(`pubkeyHex`: kotlin.String, `mlsDbKey`: kotlin.ByteArray): NuruNuruClient {
+            return FfiConverterTypeNuruNuruClient.lift(
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new_read_only_with_mls_db_key(
+        FfiConverterString.lower(`pubkeyHex`),FfiConverterByteArray.lower(`mlsDbKey`),_status)
+}
+    )
+    }
+    
+
+        
+    /**
+     * Issue #181: signing client constructor that *also* injects the
+     * SQLCipher key for the MLS DB before the engine's internal
+     * `login()` runs. This is the **only** way to get an encrypted MLS
+     * open on first launch — the legacy `set_mls_db_key` setter races
+     * the ctor's internal `login()` call and is effectively a no-op for
+     * the initial bind.
+     *
+     * `mls_db_key` MUST be exactly 32 bytes (derive via
+     * [`derive_mls_db_key_from_secret`] or platform keystore).
+     *
+     * Requires `init_engine()` to have been called first.
+     */
+    @Throws(NuruNuruFfiException::class) fun `newWithMlsDbKey`(`secretKeyHex`: kotlin.String, `mlsDbKey`: kotlin.ByteArray): NuruNuruClient {
+            return FfiConverterTypeNuruNuruClient.lift(
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new_with_mls_db_key(
+        FfiConverterString.lower(`secretKeyHex`),FfiConverterByteArray.lower(`mlsDbKey`),_status)
 }
     )
     }
@@ -4768,6 +4881,38 @@ public object FfiConverterOptionalULong: FfiConverterRustBuffer<kotlin.ULong?> {
 /**
  * @suppress
  */
+public object FfiConverterOptionalBoolean: FfiConverterRustBuffer<kotlin.Boolean?> {
+    override fun read(buf: ByteBuffer): kotlin.Boolean? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterBoolean.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Boolean?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterBoolean.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Boolean?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterBoolean.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
     override fun read(buf: ByteBuffer): kotlin.String? {
         if (buf.get().toInt() == 0) {
@@ -5051,6 +5196,26 @@ public object FfiConverterSequenceSequenceString: FfiConverterRustBuffer<List<Li
         FfiConverterString.lower(`dbPath`),_status)
 }
     
+    
+
+        /**
+         * Issue #181: single source of truth for the on-disk MLS SQLite path.
+         * Given the engine's `db_path` (e.g. `${filesDir}/nostrdb_ndb`), returns
+         * the path the engine will actually open
+         * (e.g. `${filesDir}/nostrdb_ndb_mls.sqlite3`).
+         *
+         * Migration / diagnostic code in Android (Kotlin) and iOS (Swift) MUST
+         * route through this FFI function rather than reproducing the
+         * `"{}_mls.sqlite3"` format locally, to prevent cross-platform path drift
+         * (issue #181 B1).
+         */ fun `mlsDbPathFor`(`dbPath`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_func_mls_db_path_for(
+        FfiConverterString.lower(`dbPath`),_status)
+}
+    )
+    }
     
 
 

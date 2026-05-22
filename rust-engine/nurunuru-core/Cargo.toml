@@ -28,3 +28,6 @@ sha2 = { workspace = true }
 # mdk-sqlite-storage enables rusqlite/bundled-sqlcipher; this direct dep unifies
 # the additional libsqlite3-sys/bundled-sqlcipher-vendored-openssl feature.
 rusqlite = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

@@ -710,6 +710,12 @@ public protocol NuruNuruClientProtocol: AnyObject, Sendable {
     func markNotInterested(eventId: String, authorPubkey: String) 
     
     /**
+     * Accept a previously previewed Welcome by its **welcome event id** (kind:444 rumor id).
+     * The id is the `welcome_event_id_hex` field returned by `mls_preview_welcome`.
+     */
+    func mlsAcceptWelcome(welcomeEventIdHex: String) throws  -> FfiPendingWelcome
+    
+    /**
      * Add a member to a group using their Kind-30443 KeyPackage event JSON.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
@@ -754,6 +760,11 @@ public protocol NuruNuruClientProtocol: AnyObject, Sendable {
     func mlsCreateRecoveryCommit(groupIdHex: String) throws  -> FfiEncryptedMessageData
     
     /**
+     * Decline a previously previewed Welcome by its **welcome event id** (kind:444 rumor id).
+     */
+    func mlsDeclineWelcome(welcomeEventIdHex: String) throws 
+    
+    /**
      * Delete consumed KeyPackage private/init-key material using the exact hash_ref returned at creation.
      */
     func mlsDeleteConsumedKeyPackageByHashRef(hashRef: Data) throws 
@@ -779,6 +790,11 @@ public protocol NuruNuruClientProtocol: AnyObject, Sendable {
     func mlsGetMessageHistory(groupIdHex: String, limit: UInt64) throws  -> [FfiDecryptedMessage]
     
     /**
+     * List Welcomes that have been previewed but not yet accepted/declined.
+     */
+    func mlsGetPendingWelcomes() throws  -> [FfiPendingWelcome]
+    
+    /**
      * Return Nostr group IDs (64-char hex Kind-445 `h` tag values) that need self-update.
      *
      * FFI/API contract: every `group_id_hex` crossing this boundary is the
@@ -786,6 +802,16 @@ public protocol NuruNuruClientProtocol: AnyObject, Sendable {
      * can be passed directly to `mls_create_recovery_commit(group_id_hex)`.
      */
     func mlsGroupsNeedingSelfUpdate(thresholdSecs: UInt64) throws  -> [String]
+    
+    /**
+     * Issue #181 B7: returns `Some(true)` when the MLS DB is currently
+     * open under SQLCipher, `Some(false)` for legacy unencrypted open,
+     * `None` when no MLS manager is bound (e.g. ctor without key, or
+     * bind failed). The app layer MUST assert `Some(true)` after
+     * constructing the client via `new_with_mls_db_key` and refuse to
+     * proceed otherwise.
+     */
+    func mlsIsEncrypted()  -> Bool?
     
     /**
      * Leave a group. Returns the Kind-445 commit event data to publish.
@@ -811,6 +837,13 @@ public protocol NuruNuruClientProtocol: AnyObject, Sendable {
     func mlsMergePendingCommit(groupIdHex: String) throws 
     
     /**
+     * Stage an incoming Welcome without joining. Returns the pending welcome
+     * so the UI can show "Bob invited you to Foo" before any cryptographic
+     * state is created. Follow with `mls_accept_welcome` or `mls_decline_welcome`.
+     */
+    func mlsPreviewWelcome(welcomeEventJson: String) throws  -> FfiPendingWelcome
+    
+    /**
      * Backward-compatible wrapper used by older clients.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
@@ -825,9 +858,8 @@ public protocol NuruNuruClientProtocol: AnyObject, Sendable {
     func mlsProcessMessageResult(groupIdHex: String, eventJson: String) throws  -> FfiMlsProcessResult
     
     /**
-     * Process an incoming Welcome event and join the group.
-     *
-     * Accepts both Kind 1059 (NIP-59 gift-wrapped, Marmot) and Kind 444 (legacy).
+     * Fused process+accept (back-compat). Issue #178 #4: prefer the split
+     * flow `mls_preview_welcome` → `mls_accept_welcome`/`mls_decline_welcome`.
      */
     func mlsProcessWelcome(welcomeEventJson: String) throws  -> FfiMlsGroupInfo
     
@@ -837,6 +869,23 @@ public protocol NuruNuruClientProtocol: AnyObject, Sendable {
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
      */
     func mlsRemoveMember(groupIdHex: String, memberPubkey: String) throws  -> FfiEncryptedMessageData
+    
+    /**
+     * Issue #178 #11: wipe + reopen the MLS DB for a new identity.
+     */
+    func mlsReset(newPubkeyHex: String) throws 
+    
+    /**
+     * Issue #178 #10: subscribe to kind:30443 rotations from the given
+     * contacts (empty list = all kind:30443).
+     */
+    func mlsSubscribeKeypackageRotations(contactPubkeys: [String]) throws  -> String
+    
+    /**
+     * Issue #178 #9: subscribe to my Welcomes (kind:1059 #p=self). Returns
+     * a sub_id for `poll_live_events`/`stop_live_subscription`. `since_secs=0` means now.
+     */
+    func mlsSubscribeWelcomes(sinceSecs: UInt64) throws  -> String
     
     /**
      * Strictly validate a KeyPackage event JSON (MIP-00).
@@ -977,6 +1026,11 @@ public protocol NuruNuruClientProtocol: AnyObject, Sendable {
     func sendDm(recipientHex: String, content: String) throws 
     
     /**
+     * Issue #178 #1: set the 32-byte SQLCipher key. Call before `login()`.
+     */
+    func setMlsDbKey(key: Data) throws 
+    
+    /**
      * Start a persistent relay subscription for live events.
      *
      * Pass an empty `authors` vec for the global feed, or a list of pubkey
@@ -1088,6 +1142,49 @@ public static func newReadOnly(pubkeyHex: String)throws  -> NuruNuruClient  {
     return try  FfiConverterTypeNuruNuruClient_lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
     uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new_read_only(
         FfiConverterString.lower(pubkeyHex),$0
+    )
+})
+}
+    
+    /**
+     * Issue #181: read-only client constructor that *also* injects the
+     * SQLCipher key for the MLS DB before the engine's internal
+     * `login()` runs. Mirrors [`Self::new_with_mls_db_key`] for the
+     * external-signer (Amber / NIP-46) path.
+     *
+     * For external signers, derive `mls_db_key` from a pubkey-scoped
+     * random secret stored in the OS keystore (NOT HKDF, since there is
+     * no nsec to derive from in the Rust process).
+     *
+     * Requires `init_engine()` to have been called first.
+     */
+public static func newReadOnlyWithMlsDbKey(pubkeyHex: String, mlsDbKey: Data)throws  -> NuruNuruClient  {
+    return try  FfiConverterTypeNuruNuruClient_lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new_read_only_with_mls_db_key(
+        FfiConverterString.lower(pubkeyHex),
+        FfiConverterData.lower(mlsDbKey),$0
+    )
+})
+}
+    
+    /**
+     * Issue #181: signing client constructor that *also* injects the
+     * SQLCipher key for the MLS DB before the engine's internal
+     * `login()` runs. This is the **only** way to get an encrypted MLS
+     * open on first launch — the legacy `set_mls_db_key` setter races
+     * the ctor's internal `login()` call and is effectively a no-op for
+     * the initial bind.
+     *
+     * `mls_db_key` MUST be exactly 32 bytes (derive via
+     * [`derive_mls_db_key_from_secret`] or platform keystore).
+     *
+     * Requires `init_engine()` to have been called first.
+     */
+public static func newWithMlsDbKey(secretKeyHex: String, mlsDbKey: Data)throws  -> NuruNuruClient  {
+    return try  FfiConverterTypeNuruNuruClient_lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_constructor_nurunuruclient_new_with_mls_db_key(
+        FfiConverterString.lower(secretKeyHex),
+        FfiConverterData.lower(mlsDbKey),$0
     )
 })
 }
@@ -1428,6 +1525,18 @@ open func markNotInterested(eventId: String, authorPubkey: String)  {try! rustCa
 }
     
     /**
+     * Accept a previously previewed Welcome by its **welcome event id** (kind:444 rumor id).
+     * The id is the `welcome_event_id_hex` field returned by `mls_preview_welcome`.
+     */
+open func mlsAcceptWelcome(welcomeEventIdHex: String)throws  -> FfiPendingWelcome  {
+    return try  FfiConverterTypeFfiPendingWelcome_lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_accept_welcome(self.uniffiClonePointer(),
+        FfiConverterString.lower(welcomeEventIdHex),$0
+    )
+})
+}
+    
+    /**
      * Add a member to a group using their Kind-30443 KeyPackage event JSON.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
@@ -1510,6 +1619,16 @@ open func mlsCreateRecoveryCommit(groupIdHex: String)throws  -> FfiEncryptedMess
 }
     
     /**
+     * Decline a previously previewed Welcome by its **welcome event id** (kind:444 rumor id).
+     */
+open func mlsDeclineWelcome(welcomeEventIdHex: String)throws   {try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_decline_welcome(self.uniffiClonePointer(),
+        FfiConverterString.lower(welcomeEventIdHex),$0
+    )
+}
+}
+    
+    /**
      * Delete consumed KeyPackage private/init-key material using the exact hash_ref returned at creation.
      */
 open func mlsDeleteConsumedKeyPackageByHashRef(hashRef: Data)throws   {try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
@@ -1558,6 +1677,16 @@ open func mlsGetMessageHistory(groupIdHex: String, limit: UInt64)throws  -> [Ffi
 }
     
     /**
+     * List Welcomes that have been previewed but not yet accepted/declined.
+     */
+open func mlsGetPendingWelcomes()throws  -> [FfiPendingWelcome]  {
+    return try  FfiConverterSequenceTypeFfiPendingWelcome.lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_get_pending_welcomes(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
      * Return Nostr group IDs (64-char hex Kind-445 `h` tag values) that need self-update.
      *
      * FFI/API contract: every `group_id_hex` crossing this boundary is the
@@ -1568,6 +1697,21 @@ open func mlsGroupsNeedingSelfUpdate(thresholdSecs: UInt64)throws  -> [String]  
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
     uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_groups_needing_self_update(self.uniffiClonePointer(),
         FfiConverterUInt64.lower(thresholdSecs),$0
+    )
+})
+}
+    
+    /**
+     * Issue #181 B7: returns `Some(true)` when the MLS DB is currently
+     * open under SQLCipher, `Some(false)` for legacy unencrypted open,
+     * `None` when no MLS manager is bound (e.g. ctor without key, or
+     * bind failed). The app layer MUST assert `Some(true)` after
+     * constructing the client via `new_with_mls_db_key` and refuse to
+     * proceed otherwise.
+     */
+open func mlsIsEncrypted() -> Bool?  {
+    return try!  FfiConverterOptionBool.lift(try! rustCall() {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_is_encrypted(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -1612,6 +1756,19 @@ open func mlsMergePendingCommit(groupIdHex: String)throws   {try rustCallWithErr
 }
     
     /**
+     * Stage an incoming Welcome without joining. Returns the pending welcome
+     * so the UI can show "Bob invited you to Foo" before any cryptographic
+     * state is created. Follow with `mls_accept_welcome` or `mls_decline_welcome`.
+     */
+open func mlsPreviewWelcome(welcomeEventJson: String)throws  -> FfiPendingWelcome  {
+    return try  FfiConverterTypeFfiPendingWelcome_lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_preview_welcome(self.uniffiClonePointer(),
+        FfiConverterString.lower(welcomeEventJson),$0
+    )
+})
+}
+    
+    /**
      * Backward-compatible wrapper used by older clients.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
@@ -1640,9 +1797,8 @@ open func mlsProcessMessageResult(groupIdHex: String, eventJson: String)throws  
 }
     
     /**
-     * Process an incoming Welcome event and join the group.
-     *
-     * Accepts both Kind 1059 (NIP-59 gift-wrapped, Marmot) and Kind 444 (legacy).
+     * Fused process+accept (back-compat). Issue #178 #4: prefer the split
+     * flow `mls_preview_welcome` → `mls_accept_welcome`/`mls_decline_welcome`.
      */
 open func mlsProcessWelcome(welcomeEventJson: String)throws  -> FfiMlsGroupInfo  {
     return try  FfiConverterTypeFfiMlsGroupInfo_lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
@@ -1662,6 +1818,40 @@ open func mlsRemoveMember(groupIdHex: String, memberPubkey: String)throws  -> Ff
     uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_remove_member(self.uniffiClonePointer(),
         FfiConverterString.lower(groupIdHex),
         FfiConverterString.lower(memberPubkey),$0
+    )
+})
+}
+    
+    /**
+     * Issue #178 #11: wipe + reopen the MLS DB for a new identity.
+     */
+open func mlsReset(newPubkeyHex: String)throws   {try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_reset(self.uniffiClonePointer(),
+        FfiConverterString.lower(newPubkeyHex),$0
+    )
+}
+}
+    
+    /**
+     * Issue #178 #10: subscribe to kind:30443 rotations from the given
+     * contacts (empty list = all kind:30443).
+     */
+open func mlsSubscribeKeypackageRotations(contactPubkeys: [String])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_subscribe_keypackage_rotations(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(contactPubkeys),$0
+    )
+})
+}
+    
+    /**
+     * Issue #178 #9: subscribe to my Welcomes (kind:1059 #p=self). Returns
+     * a sub_id for `poll_live_events`/`stop_live_subscription`. `since_secs=0` means now.
+     */
+open func mlsSubscribeWelcomes(sinceSecs: UInt64)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_subscribe_welcomes(self.uniffiClonePointer(),
+        FfiConverterUInt64.lower(sinceSecs),$0
     )
 })
 }
@@ -1921,6 +2111,16 @@ open func sendDm(recipientHex: String, content: String)throws   {try rustCallWit
     uniffi_uniffi_nurunuru_fn_method_nurunuruclient_send_dm(self.uniffiClonePointer(),
         FfiConverterString.lower(recipientHex),
         FfiConverterString.lower(content),$0
+    )
+}
+}
+    
+    /**
+     * Issue #178 #1: set the 32-byte SQLCipher key. Call before `login()`.
+     */
+open func setMlsDbKey(key: Data)throws   {try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_method_nurunuruclient_set_mls_db_key(self.uniffiClonePointer(),
+        FfiConverterData.lower(key),$0
     )
 }
 }
@@ -2631,6 +2831,156 @@ public func FfiConverterTypeFfiMlsGroupInfo_lower(_ value: FfiMlsGroupInfo) -> R
 }
 
 
+public struct FfiPendingWelcome {
+    /**
+     * Inner Welcome rumor (kind:444) event id — the lookup key for
+     * `mls_accept_welcome` / `mls_decline_welcome`.
+     */
+    public var welcomeEventIdHex: String
+    /**
+     * Outer NIP-59 gift-wrap (kind:1059) event id — for app-side dedup
+     * against relay-level caches.
+     */
+    public var wrapperEventIdHex: String
+    public var groupIdHex: String
+    public var groupName: String
+    public var groupDescription: String
+    public var groupAdminPubkeys: [String]
+    public var groupRelays: [String]
+    public var welcomerPubkey: String
+    public var memberCount: UInt32
+    public var isDm: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Inner Welcome rumor (kind:444) event id — the lookup key for
+         * `mls_accept_welcome` / `mls_decline_welcome`.
+         */welcomeEventIdHex: String, 
+        /**
+         * Outer NIP-59 gift-wrap (kind:1059) event id — for app-side dedup
+         * against relay-level caches.
+         */wrapperEventIdHex: String, groupIdHex: String, groupName: String, groupDescription: String, groupAdminPubkeys: [String], groupRelays: [String], welcomerPubkey: String, memberCount: UInt32, isDm: Bool) {
+        self.welcomeEventIdHex = welcomeEventIdHex
+        self.wrapperEventIdHex = wrapperEventIdHex
+        self.groupIdHex = groupIdHex
+        self.groupName = groupName
+        self.groupDescription = groupDescription
+        self.groupAdminPubkeys = groupAdminPubkeys
+        self.groupRelays = groupRelays
+        self.welcomerPubkey = welcomerPubkey
+        self.memberCount = memberCount
+        self.isDm = isDm
+    }
+}
+
+#if compiler(>=6)
+extension FfiPendingWelcome: Sendable {}
+#endif
+
+
+extension FfiPendingWelcome: Equatable, Hashable {
+    public static func ==(lhs: FfiPendingWelcome, rhs: FfiPendingWelcome) -> Bool {
+        if lhs.welcomeEventIdHex != rhs.welcomeEventIdHex {
+            return false
+        }
+        if lhs.wrapperEventIdHex != rhs.wrapperEventIdHex {
+            return false
+        }
+        if lhs.groupIdHex != rhs.groupIdHex {
+            return false
+        }
+        if lhs.groupName != rhs.groupName {
+            return false
+        }
+        if lhs.groupDescription != rhs.groupDescription {
+            return false
+        }
+        if lhs.groupAdminPubkeys != rhs.groupAdminPubkeys {
+            return false
+        }
+        if lhs.groupRelays != rhs.groupRelays {
+            return false
+        }
+        if lhs.welcomerPubkey != rhs.welcomerPubkey {
+            return false
+        }
+        if lhs.memberCount != rhs.memberCount {
+            return false
+        }
+        if lhs.isDm != rhs.isDm {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(welcomeEventIdHex)
+        hasher.combine(wrapperEventIdHex)
+        hasher.combine(groupIdHex)
+        hasher.combine(groupName)
+        hasher.combine(groupDescription)
+        hasher.combine(groupAdminPubkeys)
+        hasher.combine(groupRelays)
+        hasher.combine(welcomerPubkey)
+        hasher.combine(memberCount)
+        hasher.combine(isDm)
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiPendingWelcome: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiPendingWelcome {
+        return
+            try FfiPendingWelcome(
+                welcomeEventIdHex: FfiConverterString.read(from: &buf), 
+                wrapperEventIdHex: FfiConverterString.read(from: &buf), 
+                groupIdHex: FfiConverterString.read(from: &buf), 
+                groupName: FfiConverterString.read(from: &buf), 
+                groupDescription: FfiConverterString.read(from: &buf), 
+                groupAdminPubkeys: FfiConverterSequenceString.read(from: &buf), 
+                groupRelays: FfiConverterSequenceString.read(from: &buf), 
+                welcomerPubkey: FfiConverterString.read(from: &buf), 
+                memberCount: FfiConverterUInt32.read(from: &buf), 
+                isDm: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FfiPendingWelcome, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.welcomeEventIdHex, into: &buf)
+        FfiConverterString.write(value.wrapperEventIdHex, into: &buf)
+        FfiConverterString.write(value.groupIdHex, into: &buf)
+        FfiConverterString.write(value.groupName, into: &buf)
+        FfiConverterString.write(value.groupDescription, into: &buf)
+        FfiConverterSequenceString.write(value.groupAdminPubkeys, into: &buf)
+        FfiConverterSequenceString.write(value.groupRelays, into: &buf)
+        FfiConverterString.write(value.welcomerPubkey, into: &buf)
+        FfiConverterUInt32.write(value.memberCount, into: &buf)
+        FfiConverterBool.write(value.isDm, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiPendingWelcome_lift(_ buf: RustBuffer) throws -> FfiPendingWelcome {
+    return try FfiConverterTypeFfiPendingWelcome.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiPendingWelcome_lower(_ value: FfiPendingWelcome) -> RustBuffer {
+    return FfiConverterTypeFfiPendingWelcome.lower(value)
+}
+
+
 public struct FfiScoredPost {
     public var eventId: String
     public var pubkey: String
@@ -2931,6 +3281,21 @@ public enum FfiMlsProcessResult {
     
     case application(message: FfiDecryptedMessage
     )
+    /**
+     * A Commit was applied. Carries the membership delta so the UI doesn't
+     * need to re-query group info (issue #178 #5).
+     */
+    case commit(groupIdHex: String, addedPubkeys: [String], removedPubkeys: [String], epochAfter: UInt64
+    )
+    /**
+     * A pending proposal was stored — call `mls_create_recovery_commit` to
+     * resolve it before the group stalls (issue #178 #6).
+     */
+    case needsSelfUpdate(groupIdHex: String, reason: String
+    )
+    /**
+     * Catch-all for unprocessable / unhandled results.
+     */
     case stateUpdate(kind: String
     )
 }
@@ -2953,7 +3318,13 @@ public struct FfiConverterTypeFfiMlsProcessResult: FfiConverterRustBuffer {
         case 1: return .application(message: try FfiConverterTypeFfiDecryptedMessage.read(from: &buf)
         )
         
-        case 2: return .stateUpdate(kind: try FfiConverterString.read(from: &buf)
+        case 2: return .commit(groupIdHex: try FfiConverterString.read(from: &buf), addedPubkeys: try FfiConverterSequenceString.read(from: &buf), removedPubkeys: try FfiConverterSequenceString.read(from: &buf), epochAfter: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 3: return .needsSelfUpdate(groupIdHex: try FfiConverterString.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 4: return .stateUpdate(kind: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -2969,8 +3340,22 @@ public struct FfiConverterTypeFfiMlsProcessResult: FfiConverterRustBuffer {
             FfiConverterTypeFfiDecryptedMessage.write(message, into: &buf)
             
         
-        case let .stateUpdate(kind):
+        case let .commit(groupIdHex,addedPubkeys,removedPubkeys,epochAfter):
             writeInt(&buf, Int32(2))
+            FfiConverterString.write(groupIdHex, into: &buf)
+            FfiConverterSequenceString.write(addedPubkeys, into: &buf)
+            FfiConverterSequenceString.write(removedPubkeys, into: &buf)
+            FfiConverterUInt64.write(epochAfter, into: &buf)
+            
+        
+        case let .needsSelfUpdate(groupIdHex,reason):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(groupIdHex, into: &buf)
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .stateUpdate(kind):
+            writeInt(&buf, Int32(4))
             FfiConverterString.write(kind, into: &buf)
             
         }
@@ -3133,6 +3518,30 @@ fileprivate struct FfiConverterOptionUInt64: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionBool: FfiConverterRustBuffer {
+    typealias SwiftType = Bool?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterBool.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterBool.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -3256,6 +3665,31 @@ fileprivate struct FfiConverterSequenceTypeFfiMlsGroupInfo: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeFfiPendingWelcome: FfiConverterRustBuffer {
+    typealias SwiftType = [FfiPendingWelcome]
+
+    public static func write(_ value: [FfiPendingWelcome], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFfiPendingWelcome.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FfiPendingWelcome] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FfiPendingWelcome]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFfiPendingWelcome.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeFfiScoredPost: FfiConverterRustBuffer {
     typealias SwiftType = [FfiScoredPost]
 
@@ -3328,6 +3762,18 @@ fileprivate struct FfiConverterSequenceSequenceString: FfiConverterRustBuffer {
     }
 }
 /**
+ * HKDF-SHA256 over the secret key (hex or nsec) → 32-byte key for
+ * `set_mls_db_key`. `app_salt` scopes the key (e.g. `"io.nurunuru.mdk.v1"`).
+ */
+public func deriveMlsDbKeyFromSecret(secretKeyHex: String, appSalt: String)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeNuruNuruFfiError_lift) {
+    uniffi_uniffi_nurunuru_fn_func_derive_mls_db_key_from_secret(
+        FfiConverterString.lower(secretKeyHex),
+        FfiConverterString.lower(appSalt),$0
+    )
+})
+}
+/**
  * One-time global initialisation. Call this once in `Application.onCreate()`
  * before creating any `NuruNuruClient`.
  *
@@ -3341,6 +3787,24 @@ public func initEngine(dbPath: String)throws   {try rustCallWithError(FfiConvert
         FfiConverterString.lower(dbPath),$0
     )
 }
+}
+/**
+ * Issue #181: single source of truth for the on-disk MLS SQLite path.
+ * Given the engine's `db_path` (e.g. `${filesDir}/nostrdb_ndb`), returns
+ * the path the engine will actually open
+ * (e.g. `${filesDir}/nostrdb_ndb_mls.sqlite3`).
+ *
+ * Migration / diagnostic code in Android (Kotlin) and iOS (Swift) MUST
+ * route through this FFI function rather than reproducing the
+ * `"{}_mls.sqlite3"` format locally, to prevent cross-platform path drift
+ * (issue #181 B1).
+ */
+public func mlsDbPathFor(dbPath: String) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_uniffi_nurunuru_fn_func_mls_db_path_for(
+        FfiConverterString.lower(dbPath),$0
+    )
+})
 }
 
 private enum InitializationResult {
@@ -3358,7 +3822,13 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_uniffi_nurunuru_checksum_func_derive_mls_db_key_from_secret() != 19985) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_uniffi_nurunuru_checksum_func_init_engine() != 52824) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_uniffi_nurunuru_checksum_func_mls_db_path_for() != 4127) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_add_relay() != 26516) {
@@ -3436,6 +3906,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mark_not_interested() != 2204) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_accept_welcome() != 19211) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_add_member() != 24579) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3454,6 +3927,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_create_recovery_commit() != 3656) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_decline_welcome() != 4269) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_delete_consumed_key_package_by_hash_ref() != 13887) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3466,7 +3942,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_get_message_history() != 36205) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_get_pending_welcomes() != 20871) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_groups_needing_self_update() != 10252) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_is_encrypted() != 63295) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_leave_group() != 40071) {
@@ -3478,16 +3960,28 @@ private let initializationResult: InitializationResult = {
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_merge_pending_commit() != 48880) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_preview_welcome() != 765) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_message() != 20654) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_message_result() != 18367) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_welcome() != 43793) {
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_welcome() != 55489) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_remove_member() != 42604) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_reset() != 24506) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_subscribe_keypackage_rotations() != 29071) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_subscribe_welcomes() != 25684) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_validate_key_package_event() != 20255) {
@@ -3544,6 +4038,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_send_dm() != 32235) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_set_mls_db_key() != 57395) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_start_live_subscription() != 15505) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3560,6 +4057,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new_read_only() != 26367) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new_read_only_with_mls_db_key() != 46409) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_uniffi_nurunuru_checksum_constructor_nurunuruclient_new_with_mls_db_key() != 62874) {
         return InitializationResult.apiChecksumMismatch
     }
 

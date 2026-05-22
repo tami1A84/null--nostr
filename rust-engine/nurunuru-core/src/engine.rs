@@ -186,6 +186,7 @@ impl NuruNuruEngine {
 
         let pubkey_hex = pubkey.to_hex();
         let db_key = *self.mls_db_key.read().await;
+        let had_key = db_key.is_some();
         let result = match db_key {
             Some(key) => MlsManager::new_with_key(&self.config.mls_db_path, &pubkey_hex, key),
             None => MlsManager::new(&self.config.mls_db_path, &pubkey_hex),
@@ -197,9 +198,26 @@ impl NuruNuruEngine {
                 Ok(())
             }
             Err(e) => {
-                tracing::warn!("[NuruNuruEngine] MLS bind failed (non-fatal): {e}");
                 *self.mls.write().await = None;
-                Ok(())
+                if had_key {
+                    // Issue #181 B5: when an encryption key was explicitly
+                    // supplied and the DB still failed to open, this is
+                    // almost always an unmigrated plaintext file. We MUST
+                    // surface this so the app layer can purge + retry
+                    // instead of silently dropping to mls=None and showing
+                    // an empty Talk UI with no diagnostic.
+                    tracing::error!(
+                        "[NuruNuruEngine] MLS encrypted bind failed (likely plaintext legacy DB at {}): {e}",
+                        self.config.mls_db_path
+                    );
+                    Err(NuruNuruError::MlsError(format!(
+                        "MLS encrypted bind failed: {e}. The on-disk DB may be \
+                         unencrypted (pre-#181). Purge it and retry."
+                    )))
+                } else {
+                    tracing::warn!("[NuruNuruEngine] MLS unencrypted bind failed (non-fatal): {e}");
+                    Ok(())
+                }
             }
         }
     }
@@ -209,6 +227,27 @@ impl NuruNuruEngine {
     pub async fn set_mls_db_key(&self, key: [u8; 32]) {
         *self.mls_db_key.write().await = Some(key);
         *self.mls.write().await = None;
+    }
+
+    /// Issue #181: atomic "set key + login" used by FFI ctors that need to
+    /// inject the SQLCipher key before the first `bind_mls_for_pubkey`
+    /// invocation. The legacy `set_mls_db_key` setter cannot retrofit a
+    /// client whose ctor already called `login()` internally.
+    pub async fn login_with_mls_db_key(
+        &self,
+        pubkey: PublicKey,
+        key: [u8; 32],
+    ) -> Result<()> {
+        *self.mls_db_key.write().await = Some(key);
+        *self.mls.write().await = None;
+        self.login(pubkey).await
+    }
+
+    /// Issue #181 B7: returns `true` if the currently-bound MLS manager
+    /// uses SQLCipher; `false` for legacy unencrypted DB; `None` if no MLS
+    /// manager is bound (e.g. read-only with no key, or bind failed).
+    pub async fn mls_is_encrypted(&self) -> Option<bool> {
+        self.mls.read().await.as_ref().map(|m| m.is_encrypted())
     }
 
     /// Issue #178 #11: wipe + reopen the MLS DB for a new identity (logout/

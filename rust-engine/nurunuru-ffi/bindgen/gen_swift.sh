@@ -18,13 +18,17 @@ CRATE_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$CRATE_DIR"
 
-echo "==> Building nurunuru-ffi for host (macOS)..."
-cargo build --release
+echo "==> Building nurunuru-ffi (debug, for bindgen introspection)..."
+# NOTE: bindgen requires the DEBUG build because the workspace release profile
+# has `strip = true`. uniffi-bindgen reads UNIFFI_META_* symbols from the
+# static symbol table (.symtab); release strip removes it, leaving the
+# generated bindings incomplete (missing types/functions silently). Mirrors
+# the approach used by gen_kotlin.sh.
+cargo build
 
 # Determine the host library path used by uniffi-bindgen.
-# Use dylib for binding generation so all exported checksum symbols are visible.
 if [[ "$(uname)" == "Darwin" ]]; then
-    LIB_PATH="../target/release/libuniffi_nurunuru.dylib"
+    LIB_PATH="../target/debug/libuniffi_nurunuru.dylib"
 else
     echo "ERROR: Swift binding generation requires a macOS host."
     exit 1

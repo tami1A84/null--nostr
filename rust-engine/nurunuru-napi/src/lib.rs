@@ -144,6 +144,10 @@ impl NuruNuruNapi {
     ///
     /// `secret_key_hex` — hex or nsec private key.
     /// `db_path` — directory for nostrdb (e.g. `"./nurunuru-db"`).
+    ///
+    /// NOTE: this factory leaves `mls_db_path` empty, so MLS state is
+    /// disabled. If your desktop integration uses MLS, use
+    /// [`Self::create_with_mls_db_key`] instead (issue #181 parity).
     #[napi(factory)]
     pub async fn create(secret_key_hex: String, db_path: String) -> Result<Self> {
         let keys = Keys::parse(&secret_key_hex).map_err(to_napi_err)?;
@@ -156,6 +160,54 @@ impl NuruNuruNapi {
             .map_err(to_napi_err)?;
 
         Ok(Self { engine })
+    }
+
+    /// Issue #181 parity: create an engine with the MLS DB enabled and
+    /// encrypted via the supplied 32-byte SQLCipher key. `mls_db_key`
+    /// MUST be exactly 32 bytes; derive via
+    /// `derive_mls_db_key_from_secret` or source from an OS keystore.
+    #[napi(factory)]
+    pub async fn create_with_mls_db_key(
+        secret_key_hex: String,
+        db_path: String,
+        mls_db_key: Vec<u8>,
+    ) -> Result<Self> {
+        if mls_db_key.len() != 32 {
+            return Err(to_napi_err(format!(
+                "mls_db_key must be 32 bytes, got {}",
+                mls_db_key.len()
+            )));
+        }
+        let mut key_bytes = [0u8; 32];
+        key_bytes.copy_from_slice(&mls_db_key);
+
+        let keys = Keys::parse(&secret_key_hex).map_err(to_napi_err)?;
+
+        let mut config = NuruNuruConfig::default();
+        config.mls_db_path = format!("{db_path}_mls.sqlite3");
+        config.db_path = db_path;
+
+        let engine = NuruNuruEngine::new(keys, config)
+            .await
+            .map_err(to_napi_err)?;
+
+        // Inject the key + login in one atomic step before any MLS bind.
+        let pk = Keys::parse(&secret_key_hex)
+            .map_err(to_napi_err)?
+            .public_key();
+        engine
+            .login_with_mls_db_key(pk, key_bytes)
+            .await
+            .map_err(to_napi_err)?;
+
+        Ok(Self { engine })
+    }
+
+    /// Issue #181 B7: returns `Some(true)` when MLS DB is SQLCipher-open,
+    /// `Some(false)` for legacy unencrypted, `None` when MLS unbound.
+    #[napi]
+    pub async fn mls_is_encrypted(&self) -> Option<bool> {
+        self.engine.mls_is_encrypted().await
     }
 
     /// Connect to all configured relays.

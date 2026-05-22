@@ -130,6 +130,71 @@ impl NuruNuruClient {
         }))
     }
 
+    /// Issue #181: signing client constructor that *also* injects the
+    /// SQLCipher key for the MLS DB before the engine's internal
+    /// `login()` runs. This is the **only** way to get an encrypted MLS
+    /// open on first launch — the legacy `set_mls_db_key` setter races
+    /// the ctor's internal `login()` call and is effectively a no-op for
+    /// the initial bind.
+    ///
+    /// `mls_db_key` MUST be exactly 32 bytes (derive via
+    /// [`derive_mls_db_key_from_secret`] or platform keystore).
+    ///
+    /// Requires `init_engine()` to have been called first.
+    #[uniffi::constructor]
+    pub fn new_with_mls_db_key(
+        secret_key_hex: String,
+        mls_db_key: Vec<u8>,
+    ) -> Result<Arc<Self>, NuruNuruFfiError> {
+        let key_bytes: [u8; 32] = mls_db_key.try_into().map_err(|v: Vec<u8>| {
+            NuruNuruFfiError::EngineError(format!(
+                "new_with_mls_db_key: key must be 32 bytes, got {}",
+                v.len()
+            ))
+        })?;
+        let db_path = get_db_path()?;
+
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| NuruNuruFfiError::RuntimeError(e.to_string()))?;
+
+        let (engine, secret_key) = rt.block_on(async {
+            let keys = nostr::Keys::parse(&secret_key_hex)
+                .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+            let sk = keys.secret_key().clone();
+
+            let mut config = NuruNuruConfig::default();
+            config.mls_db_path = format!("{}_mls.sqlite3", db_path);
+            #[cfg(target_os = "ios")]
+            {
+                config.db_path = String::new();
+            }
+            #[cfg(not(target_os = "ios"))]
+            {
+                config.db_path = db_path;
+            }
+
+            let engine = NuruNuruEngine::new(keys, config)
+                .await
+                .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+
+            let pk = nostr::Keys::parse(&secret_key_hex)
+                .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?
+                .public_key();
+            engine
+                .login_with_mls_db_key(pk, key_bytes)
+                .await
+                .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+
+            Ok::<_, NuruNuruFfiError>((engine, sk))
+        })?;
+
+        Ok(Arc::new(Self {
+            runtime: rt,
+            engine,
+            secret_key: Some(secret_key),
+        }))
+    }
+
     /// Create a read-only client for users who sign externally (NIP-07 / Amber / NIP-46).
     ///
     /// The client can fetch timeline and profile data normally. Signing happens
@@ -173,6 +238,67 @@ impl NuruNuruClient {
                 .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
             engine
                 .login(pk)
+                .await
+                .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+
+            Ok::<_, NuruNuruFfiError>(engine)
+        })?;
+
+        Ok(Arc::new(Self {
+            runtime: rt,
+            engine,
+            secret_key: None,
+        }))
+    }
+
+    /// Issue #181: read-only client constructor that *also* injects the
+    /// SQLCipher key for the MLS DB before the engine's internal
+    /// `login()` runs. Mirrors [`Self::new_with_mls_db_key`] for the
+    /// external-signer (Amber / NIP-46) path.
+    ///
+    /// For external signers, derive `mls_db_key` from a pubkey-scoped
+    /// random secret stored in the OS keystore (NOT HKDF, since there is
+    /// no nsec to derive from in the Rust process).
+    ///
+    /// Requires `init_engine()` to have been called first.
+    #[uniffi::constructor]
+    pub fn new_read_only_with_mls_db_key(
+        pubkey_hex: String,
+        mls_db_key: Vec<u8>,
+    ) -> Result<Arc<Self>, NuruNuruFfiError> {
+        let key_bytes: [u8; 32] = mls_db_key.try_into().map_err(|v: Vec<u8>| {
+            NuruNuruFfiError::EngineError(format!(
+                "new_read_only_with_mls_db_key: key must be 32 bytes, got {}",
+                v.len()
+            ))
+        })?;
+        let db_path = get_db_path()?;
+
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| NuruNuruFfiError::RuntimeError(e.to_string()))?;
+
+        let engine = rt.block_on(async {
+            let keys = nostr::Keys::generate();
+
+            let mut config = NuruNuruConfig::default();
+            config.mls_db_path = format!("{}_mls.sqlite3", db_path);
+            #[cfg(target_os = "ios")]
+            {
+                config.db_path = String::new();
+            }
+            #[cfg(not(target_os = "ios"))]
+            {
+                config.db_path = db_path;
+            }
+
+            let engine = NuruNuruEngine::new(keys, config)
+                .await
+                .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+
+            let pk = nostr::PublicKey::from_hex(&pubkey_hex)
+                .map_err(|e| NuruNuruFfiError::KeyError(e.to_string()))?;
+            engine
+                .login_with_mls_db_key(pk, key_bytes)
                 .await
                 .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
 
@@ -944,6 +1070,16 @@ impl NuruNuruClient {
             .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))
     }
 
+    /// Issue #181 B7: returns `Some(true)` when the MLS DB is currently
+    /// open under SQLCipher, `Some(false)` for legacy unencrypted open,
+    /// `None` when no MLS manager is bound (e.g. ctor without key, or
+    /// bind failed). The app layer MUST assert `Some(true)` after
+    /// constructing the client via `new_with_mls_db_key` and refuse to
+    /// proceed otherwise.
+    pub fn mls_is_encrypted(&self) -> Option<bool> {
+        self.runtime.block_on(self.engine.mls_is_encrypted())
+    }
+
     /// Retrieve decrypted message history for a group from MDK's local SQLite.
     /// Use this on app startup to restore history without re-processing relay events.
     ///
@@ -1702,6 +1838,20 @@ pub fn derive_mls_db_key_from_secret(
     let sk_bytes = keys.secret_key().to_secret_bytes();
     let key = nurunuru_core::mls::derive_mls_db_key(&sk_bytes, app_salt.as_bytes());
     Ok(key.to_vec())
+}
+
+/// Issue #181: single source of truth for the on-disk MLS SQLite path.
+/// Given the engine's `db_path` (e.g. `${filesDir}/nostrdb_ndb`), returns
+/// the path the engine will actually open
+/// (e.g. `${filesDir}/nostrdb_ndb_mls.sqlite3`).
+///
+/// Migration / diagnostic code in Android (Kotlin) and iOS (Swift) MUST
+/// route through this FFI function rather than reproducing the
+/// `"{}_mls.sqlite3"` format locally, to prevent cross-platform path drift
+/// (issue #181 B1).
+#[uniffi::export]
+pub fn mls_db_path_for(db_path: String) -> String {
+    nurunuru_core::mls::mls_db_path_for(&db_path)
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
