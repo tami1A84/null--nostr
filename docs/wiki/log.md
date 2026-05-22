@@ -2,6 +2,16 @@
 
 LLM Wiki の時系列ログです。追記専用として扱います。
 
+## [2026-05-23] sec | Dependabot 9 件 (high 2 / moderate 2 / low 5) 解消
+
+- GHSA-hc3c-63hc-2r9f **high** `libcrux-chacha20poly1305 0.0.7 → 0.0.8` — Overlong ciphertext buffer での panic を修正。`libcrux-aead` も 0.0.7→0.0.8 へ追従。
+- GHSA-82j2-j2ch-gfr8 **high** `rustls-webpki 0.103.9 → 0.103.13` — Malformed CRL BIT STRING による panic / DoS を修正。同時に GHSA-pwjx-qhcg-rvj4 (moderate, CRL distribution-point matching) と GHSA-965h-392x-2mh5 / GHSA-xgp8-3hg3-c2mh (low, URI / wildcard name constraints) も同バージョンで解消。
+- GHSA-qx2v-qp2m-jg93 **moderate** `postcss 8.4.38 → 8.5.15` (>=8.5.10) — `</style>` の unescape による XSS を修正。`next` 内部の transitive な 8.4.31 を抑止するため `overrides` を併用。
+- GHSA-cq8v-f236-94qc **low** `rand 0.8.5 → 0.8.6`, `0.9.2 → 0.9.3`, `0.10.0 → 0.10.1` — カスタムロガー + `rand::rng()` での unsoundness を修正。
+- 直接 `cargo update --precise 0.0.8` は `hpke-rs-libcrux 0.6.1` の `libcrux-aead = "0.0.7"` ピンに阻まれるため、`rust-engine/Cargo.toml` に `[patch.crates-io]` セクションを追加し `cryspen/hpke-rs` の `franziskus/bump-libcrux` PR (#154, rev 110d7477) を一時的に取り込んだ。upstream が 0.6.2 をリリースしたら patch を撤去予定。
+- 検証: `cargo check --workspace` 通過 / `cargo test -p nurunuru-core --no-run` 通過 / `npm run test` 189 passed / `npm audit` 0 vulnerabilities / `npm run tokens:check` in sync。
+- 変更ファイル: `package.json`, `package-lock.json`, `rust-engine/Cargo.toml`, `rust-engine/Cargo.lock`。Rust ソースコード (`lib.rs` 等) は無変更のため Android `.so` の再ビルドは次回リリース時で十分。
+
 ## [2026-05-23] perf | Send-button spinner reflects only the MLS send call (not pre-flight)
 
 - `TalkViewModel.sendMessage` on both iOS and Android no longer sets `sendingMessage = true` at the top of the function. The flag is now set immediately before the `repository.sendMlsMessage(...)` call so the spinner covers only the actual MLS network round-trip.

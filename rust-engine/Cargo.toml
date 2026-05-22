@@ -38,3 +38,12 @@ lto = true
 codegen-units = 1
 opt-level = 3
 strip = true
+
+# Temporary patch to bump libcrux-aead/libcrux-chacha20poly1305 to 0.0.8
+# Fixes GHSA-hc3c-63hc-2r9f
+# TODO: Remove once cryspen/hpke-rs releases 0.6.2 (or whichever version) including the bump
+[patch.crates-io]
+hpke-rs = { git = "https://github.com/cryspen/hpke-rs.git", rev = "110d7477d64317724581955d8975a68c34efbed6" }
+hpke-rs-libcrux = { git = "https://github.com/cryspen/hpke-rs.git", rev = "110d7477d64317724581955d8975a68c34efbed6" }
+hpke-rs-rust-crypto = { git = "https://github.com/cryspen/hpke-rs.git", rev = "110d7477d64317724581955d8975a68c34efbed6" }
+hpke-rs-crypto = { git = "https://github.com/cryspen/hpke-rs.git", rev = "110d7477d64317724581955d8975a68c34efbed6" }
