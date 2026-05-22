@@ -64,7 +64,15 @@ actor NostrClient {
     /// after failures, and failures place them in a long local cooldown to avoid
     /// creating load for relay operators. Users can still explicitly select them later.
     fileprivate static let operatorFriendlyCooldownRelays: Set<String> = ["relay.nostr.wirednet.jp", "relay.0xchat.com", "realy.westernbtc.com"]
-    fileprivate static let excludedRelays: Set<String> = ["wss://relay.nostr.band"]
+    /// Relays that must never be connected to from this layer.
+    /// MUST stay in sync with `NostrRepository.deadRelays`.
+    /// - `relay.nostr.band`: 503/429 on AUTH; no read access for non-paying clients.
+    /// - `relay.nostr.bg`: DNS/TLS handshake regularly times out after ~16s on real devices,
+    ///   producing repeated noisy reconnect logs with no functional benefit.
+    fileprivate static let excludedRelays: Set<String> = [
+        "wss://relay.nostr.band",
+        "wss://relay.nostr.bg",
+    ]
 
     fileprivate static func canonicalRelayUrl(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
