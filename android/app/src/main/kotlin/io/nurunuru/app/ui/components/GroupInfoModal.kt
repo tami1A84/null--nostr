@@ -20,6 +20,11 @@ import io.nurunuru.app.ui.theme.LocalNuruColors
  * @param myPubkeyHex  Logged-in user's pubkey (used to determine admin status).
  * @param onDismiss    Called when the sheet is closed.
  * @param onLeave      Called when the user confirms leaving the group.
+ * @param onRepair     Called when the user requests a full MLS history refetch
+ *                     for the active group. UI-only entry point that delegates
+ *                     to TalkViewModel.repairCurrentGroup() — does not touch
+ *                     receive-path logic.
+ * @param isRepairing  True while a repair is in-flight; disables the action.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,7 +32,9 @@ fun GroupInfoModal(
     group: MlsGroup,
     myPubkeyHex: String,
     onDismiss: () -> Unit,
-    onLeave: () -> Unit
+    onLeave: () -> Unit,
+    onRepair: () -> Unit = {},
+    isRepairing: Boolean = false
 ) {
     val nuruColors = LocalNuruColors.current
     var showLeaveConfirm by remember { mutableStateOf(false) }
@@ -98,6 +105,13 @@ fun GroupInfoModal(
             }
 
             Spacer(Modifier.height(16.dp))
+            TextButton(
+                onClick = onRepair,
+                enabled = !isRepairing,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isRepairing) "メッセージを修復中…" else "メッセージを修復")
+            }
             TextButton(
                 onClick = { showLeaveConfirm = true },
                 colors = ButtonDefaults.textButtonColors(

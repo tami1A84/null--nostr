@@ -57,3 +57,48 @@ LLM Wiki の時系列ログです。追記専用として扱います。
 - `AGENTS.md` に Culture セクションを追加し、Wiki から AGENTS へのエントリを確立。
 - `docs/wiki/index.md` に Culture セクションを追加し、ADR-0007/0008 とテンプレートをリストに追加。
 - 本件はコード変更を伴わない文化憲章 (Proposed)。Phase 1 (Talk Marmot 完成) → Phase 2 (経済) → Phase 3 (配布) のロードマップは [[culture/four-freedoms]] を参照。
+
+## [2026-05-22] security | Issue #181 MLS DB encryption (Android verified, iOS shipped)
+
+- Rust core: `mls_db_path_for(db_path)` as single source of truth for the on-disk MLS SQLite path. `bind_mls_for_pubkey` errors hard on `had_key && bind_failed` (B5). New `mls_is_encrypted() -> Option<bool>` (B7) lifted through UniFFI + napi-rs for app-layer assertion.
+- FFI: `NuruNuruClient::new_with_mls_db_key` / `new_read_only_with_mls_db_key` validate 32-byte key length before SQLCipher bind. `derive_mls_db_key_from_secret(secret_hex, app_salt)` exposes HKDF-SHA256 derivation to Kotlin + Swift.
+- Android: new `MlsDbKeyStore` (HKDF for internal signer, `EncryptedSharedPreferences` + `MasterKey` for external signer, `synchronized` lock + `commit()` for B4 race). New `MlsLegacyMigration` (content-based plaintext detection via FFI `mls_db_path_for`, runs every launch — B1+B2). `NuruNuruApp.onCreate()` purges before `initEngine()` (M5). Logout clears external key before `prefs.clear()`.
+- iOS: mirror `MlsDbKeyStore` (Keychain `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` + `NSLock`) and `MlsLegacyMigration` (`isExcludedFromBackup` on DB/WAL/SHM — M6 partial). `MlsFFILiveClient` uses new encrypted ctors with `inout Data` zeroize via `Data.resetBytes(in:)` (B3). `mlsIsEncrypted() -> Bool?` lifted to `MlsFFIBridge` protocol + stub.
+- Verified: a physical Android device runtime confirms plaintext purge + SQLCipher header (`53 51 4c…00` → `21 1d c0…c4`) + `MLS DB encrypted (SQLCipher) — issue #181 guard OK` log. iOS xcodebuild for iPhone 17 simulator returns BUILD SUCCEEDED.
+- Bindings: `gen_swift.sh` switched to debug build (workspace `release` profile has `strip = true` which removes UniFFI metadata `.symtab`, causing silent missing-types in bindgen output).
+- Wiki: added [[features/mls-db-encryption]] (threat model + verification trace) and [[decisions/adr-0009-mls-db-encryption]] (rationale + alternatives + consequences). Updated `index.md`.
+- Open: CI lint to block legacy unkeyed ctor reintroduction (M2), Settings UI status indicator (M4), release notes + CHANGELOG (M6 user-facing).
+
+## [2026-05-23] security | Issue #181 follow-up (M2 CI guard + M6 release notes; M4 dropped)
+
+- M2 (CI guard): added `scripts/issue-181-guard.mjs` + `npm run lint:issue-181`. Walks `ios/NuruNuru/` and `android/app/src/main/kotlin/`, fails on reintroduction of unkeyed `NuruNuruClient(secretKeyHex:)` / `NuruNuruClient.newReadOnly(pubkeyHex:)` ctors. Skips generated `bindgen/` directories. Verified: 214 files scanned, 141 596 pattern checks, 0 violations on clean tree; negative test with 2 injected violations reports both with file:line + remediation hint.
+- M6 (release notes): added `[Unreleased] > Security` + `Upgrade notes` to `CHANGELOG.md` documenting the SQLCipher migration and the unavoidable past-message loss on upgrade. Added `docs/release-notes/issue-181-mls-db-encryption.md` with JP + EN short forms for zapstore / GitHub Release / Google Play / TestFlight, plus a support-facing FAQ ("過去メッセージが見えなくなった理由").
+- M4 (Settings UI "encrypted ✓"): dropped by product decision. The runtime guard already hard-fails on missing encryption (`MLS DB encrypted (SQLCipher) — issue #181 guard OK` line is mandatory), so a green checkmark would be redundant UI noise without an actionable user signal.
+- Verification log unchanged: a physical Android device + a physical iPhone 12 mini both show the guard line on cold launch + SQLCipher random-bytes header on disk. Talk receive-loop logic (PR #180) is NOT touched by this change — `git diff HEAD --stat -- ios/NuruNuru/Data/NostrRepository+Talk.swift android/app/src/main/kotlin/io/nurunuru/app/data/NostrRepositoryTalk.kt` returns empty.
+- Unrelated open issue surfaced during log analysis: iOS-sent kind:445 messages occasionally retry-queue on Android as `state_not_ready` (MDK epoch lag). Tracked separately — not an Issue #181 regression.
+
+## [2026-05-23] ux | Android Talk pull-to-refresh and auto-repair
+
+- Added Android open-conversation pull-to-refresh for Talk MLS history catch-up, aligned with the existing Material3 pull-to-refresh pattern used by Timeline.
+- Added guarded Android Talk auto-repair after repeated empty Kind-445 relay fetches for an already-populated conversation, using relay fetch stats from `NostrRepositoryTalk.kt`.
+- Kept explicit Group Info "メッセージを修復" as the stronger manual repair path while pull/auto refresh avoid clearing pending commits.
+## [2026-05-23] fix | Android Talk pull-to-refresh top-edge fallback
+
+- Root cause: Material3 `PullToRefreshContainer` only receives downward drags via `nestedScrollConnection` when the inner scrollable is already at scroll position 0. `GroupChatScreen` runs `listState.animateScrollToItem(messages.size - 1)` on every message update so the LazyColumn is almost always scrolled toward the newest message; the user's pull gesture was consumed by the list as a normal upward scroll and never reached `PullToRefresh`.
+- Fix: added a `pointerInput` top-edge drag detector around the message-area `Box` in `TalkScreen.kt`. Touches that start within ~120dp of the conversation viewport top and accumulate ~72dp of downward travel call `pullRefreshState.startRefresh()` directly, which triggers the existing `refreshCurrentGroup()` → `runMlsRepair(source = "pull", clearPendingCommit = false)` path. The Material3 `nestedScrollConnection` is kept as the secondary path for the case where the user has scrolled to the oldest message.
+- Visual layout is unchanged (oldest → newest top → bottom, auto-scroll to newest); only the gesture surface is extended.
+- Verified by rebuild + reinstall: `BUILD SUCCESSFUL`, versionName=1.5.0, on a physical Android device. iOS parity for this fallback is tracked separately.
+## [2026-05-23] ux | Android Talk pull-to-refresh redesigned for LINE-grade parity
+
+- Removed the temporary TopBar refresh icon and the `gid:xxx msg:N` debug subtitle on the conversation screen. Both were diagnostic, not aligned with the LINE-grade visual language.
+- Changed conversation auto-scroll to only follow new messages when the user is already within 3 items of the list bottom (`lastVisibleIndex >= totalItems - 3`). While the user is scrolled up to read history, the LazyColumn stays put, so the Material3 `PullToRefreshContainer.nestedScrollConnection` can receive downward drags and pull-to-refresh works naturally from any scroll position.
+- The conversation `pointerInput` top-edge fallback is retained as a secondary trigger.
+- Conversation pull-to-refresh now performs a STRONG repair (`clearPendingCommit = true`) instead of the weak `repairFull=true`-only path. iOS frequently advances MLS epoch ahead of Android; an explicit user-initiated refresh should clear any stranded Android pending commit so iOS-originated messages decrypt. This matches the strength of the Group Info「メッセージを修復」action.
+- Added pull-to-refresh to the Talk list (GroupListScreen) across all three filter pages (すべて / 友だち / グループ) via a shared `PullToRefreshState` and `refreshGroupList()` on the ViewModel. Achieves iOS Talk-list parity.
+- Verified by rebuild + reinstall: `BUILD SUCCESSFUL`, versionName=1.5.0, on a physical Android device.
+## [2026-05-23] fix | Android Talk render decrypted iOS messages despite residual MLS gaps
+
+- Root cause for "iOS new message fetched but not shown on Android": Android was successfully fetching Kind-445 events and could apply at least one iOS-originated application message, but `TalkViewModel.startMessageStream()` stopped the polling loop on a residual DM MLS gap before writing the normalized message list into `_uiState.messages`. Logs showed `application id=... len=3` followed by residual `state_not_ready` retryables, so the relay/decrypt path was not the only issue; the UI render path was dropping usable history.
+- Fix: update `_uiState.messages` before handling residual DM gap diagnostics, and do not break the stream solely because `mlsStateGapCount() > 0` when usable normalized history exists. Manual pull and guarded auto-repair remain responsible for reducing the remaining gap.
+- Kept the LINE-grade Talk UX changes: no TopBar refresh icon, no debug `gid:/msg:` subtitle, Android Talk-list pull-to-refresh added, and conversation pull-to-refresh uses strong repair.
+- Verified by rebuild + reinstall + launch on a physical Android device: versionName=1.5.0.

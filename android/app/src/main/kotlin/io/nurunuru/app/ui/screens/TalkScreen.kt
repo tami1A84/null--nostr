@@ -11,6 +11,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,10 +26,15 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,6 +93,35 @@ private fun GroupListScreen(
     var showAddMenu by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState { 3 }
     val coroutineScope = rememberCoroutineScope()
+
+    // ── Talk 一覧の pull-to-refresh (iOS Talk リストとパリティ) ─────────
+    val listPullRefreshState = rememberPullToRefreshState()
+    var listPullInFlight by remember { mutableStateOf(false) }
+    var listPullSawLoading by remember { mutableStateOf(false) }
+
+    if (listPullRefreshState.isRefreshing && !listPullInFlight) {
+        LaunchedEffect(listPullRefreshState.isRefreshing) {
+            listPullInFlight = true
+            listPullSawLoading = false
+            viewModel.refreshGroupList()
+            // Safety timeout: loadGroups() の in-flight ガードや例外パスで
+            // isLoading 遷移が見られないケースでも必ずスピナーを解除する。
+            kotlinx.coroutines.delay(15_000)
+            if (listPullInFlight) {
+                listPullRefreshState.endRefresh()
+                listPullInFlight = false
+                listPullSawLoading = false
+            }
+        }
+    }
+    LaunchedEffect(isLoading, listPullInFlight) {
+        if (listPullInFlight && isLoading) listPullSawLoading = true
+        if (listPullInFlight && listPullSawLoading && !isLoading) {
+            listPullRefreshState.endRefresh()
+            listPullInFlight = false
+            listPullSawLoading = false
+        }
+    }
 
     val activeFilter = remember(pagerState.currentPage) {
         listOf(TalkFilter.ALL, TalkFilter.FRIENDS, TalkFilter.GROUPS)[pagerState.currentPage]
@@ -182,7 +218,11 @@ private fun GroupListScreen(
                         TalkFilter.GROUPS  -> groups.filter { !it.isDm }
                     }
                 }
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(listPullRefreshState.nestedScrollConnection)
+                ) {
                     when {
                         isLoading && groups.isEmpty() -> Column { repeat(8) { ListItemSkeleton() } }
                         filteredGroups.isEmpty() -> TalkEmptyState()
@@ -205,6 +245,12 @@ private fun GroupListScreen(
                             }
                         }
                     }
+                    PullToRefreshContainer(
+                        state = listPullRefreshState,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        containerColor = if (listPullRefreshState.isRefreshing || listPullRefreshState.progress > 0f) MaterialTheme.colorScheme.surface else Color.Transparent,
+                        contentColor = LineGreen
+                    )
                 }
             }
         }
@@ -262,12 +308,53 @@ private fun GroupChatScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+    val pullRefreshState = rememberPullToRefreshState()
+    var pullRefreshInFlight by remember { mutableStateOf(false) }
+    var pullRefreshSawLoading by remember { mutableStateOf(false) }
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { _ -> /* TODO: image upload */ }
 
+    if (pullRefreshState.isRefreshing && !pullRefreshInFlight) {
+        LaunchedEffect(group.groupIdHex, pullRefreshState.isRefreshing) {
+            pullRefreshInFlight = true
+            pullRefreshSawLoading = false
+            viewModel.refreshCurrentGroup()
+            // Safety timeout: in-flight dedupe path or any other case where the
+            // ViewModel never toggles messagesLoading must still release the
+            // spinner so the user is never stuck. ~15s matches the relay fetch
+            // timeout in fetchMlsMessages(repairFull=true).
+            kotlinx.coroutines.delay(15_000)
+            if (pullRefreshInFlight) {
+                pullRefreshState.endRefresh()
+                pullRefreshInFlight = false
+                pullRefreshSawLoading = false
+            }
+        }
+    }
+    LaunchedEffect(isLoading, pullRefreshInFlight) {
+        if (pullRefreshInFlight && isLoading) pullRefreshSawLoading = true
+        if (pullRefreshInFlight && pullRefreshSawLoading && !isLoading) {
+            pullRefreshState.endRefresh()
+            pullRefreshInFlight = false
+            pullRefreshSawLoading = false
+        }
+    }
+
+    // ユーザがリスト末尾付近 (最後から 3 件以内) にいるときだけ自動スクロールする。
+    // 上にスクロールして過去メッセージを読んでいる最中は介入しない。
+    // これにより:
+    //   * 新着メッセージで自然に末尾追従する (LINE / Discord と同じ挙動)
+    //   * 上にスクロールしている間は Material3 PullToRefreshContainer の
+    //     nestedScrollConnection が下方向ドラッグを受け取れるようになり、
+    //     pull-to-refresh が綺麗に発火する。
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
+        if (messages.isEmpty()) return@LaunchedEffect
+        val layoutInfo = listState.layoutInfo
+        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+        val totalItems = layoutInfo.totalItemsCount
+        val isNearBottom = totalItems == 0 || lastVisibleIndex >= totalItems - 3
+        if (isNearBottom) listState.animateScrollToItem(messages.size - 1)
     }
 
     val title = if (!group.isDm && group.name.isNotBlank()) {
@@ -284,15 +371,7 @@ private fun GroupChatScreen(
             TopAppBar(
                 windowInsets = WindowInsets.statusBars,
                 title = {
-                    Column {
-                        Text(title, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                        Text(
-                            "gid:" + group.groupIdHex.take(12) + " msg:" + messages.size,
-                            fontSize = 10.sp,
-                            color = LocalNuruColors.current.textTertiary,
-                            maxLines = 1
-                        )
-                    }
+                    Text(title, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.closeGroup() }) {
@@ -312,7 +391,56 @@ private fun GroupChatScreen(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Box(modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .nestedScroll(pullRefreshState.nestedScrollConnection)
+                    // Chat screens normally auto-scroll to the latest message at
+                    // the visual bottom. Material3 PullToRefresh only receives a
+                    // downward drag after the child LazyColumn is already at
+                    // scroll position 0, so a user pulling from the top edge of
+                    // the visible message area can otherwise just scroll older
+                    // messages without ever reaching PullToRefresh. Observe a
+                    // top-edge downward drag as an explicit Talk refresh fallback.
+                    .pointerInput(group.groupIdHex, pullRefreshInFlight) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = PointerEventPass.Initial
+                            )
+                            val topEdgeTriggerPx = 200.dp.toPx()
+                            val refreshThresholdPx = 40.dp.toPx()
+                            if (down.position.y > topEdgeTriggerPx) return@awaitEachGesture
+
+                            var previousY = down.position.y
+                            var pulledDown = 0f
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) break
+
+                                val dy = change.position.y - previousY
+                                previousY = change.position.y
+                                pulledDown = maxOf(0f, pulledDown + dy)
+
+                                if (
+                                    pulledDown >= refreshThresholdPx &&
+                                    !pullRefreshState.isRefreshing &&
+                                    !pullRefreshInFlight
+                                ) {
+                                    android.util.Log.d(
+                                        "TalkScreen",
+                                        "edgePullRefresh group=" + group.groupIdHex +
+                                            " pulled=" + pulledDown.toInt()
+                                    )
+                                    pullRefreshState.startRefresh()
+                                    change.consume()
+                                    break
+                                }
+                            }
+                        }
+                    }
+            ) {
                 if (isLoading && messages.isEmpty()) {
                     Column(Modifier.padding(top = 16.dp)) {
                         repeat(5) { i -> MessageSkeleton(alignRight = i % 2 == 1) }
@@ -329,6 +457,12 @@ private fun GroupChatScreen(
                         }
                     }
                 }
+                PullToRefreshContainer(
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0f) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    contentColor = LineGreen
+                )
             }
 
             HorizontalDivider(
@@ -354,7 +488,9 @@ private fun GroupChatScreen(
             group = group,
             myPubkeyHex = myPubkeyHex,
             onDismiss = { viewModel.hideGroupInfo() },
-            onLeave = { viewModel.leaveGroup() }
+            onLeave = { viewModel.leaveGroup() },
+            onRepair = { viewModel.repairCurrentGroup() },
+            isRepairing = uiState.messagesLoading
         )
     }
 }

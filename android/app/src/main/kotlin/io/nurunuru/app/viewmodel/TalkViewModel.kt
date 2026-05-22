@@ -76,6 +76,8 @@ class TalkViewModel(
     private val canonicalDmGroupByConversationKey = mutableMapOf<String, String>()
     private val mlsGroupRetryCooldownUntil = mutableMapOf<String, Long>()
     private val mlsPollHealth = mutableMapOf<String, MlsPollHealth>()
+    private val mlsAutoRepairCooldownUntil = mutableMapOf<String, Long>()
+    private val mlsRepairInFlight = mutableSetOf<String>()
     private var lastMessageActivityAt = System.currentTimeMillis()
 
     private data class MlsPollHealth(
@@ -83,9 +85,11 @@ class TalkViewModel(
         var relaySweeps: Int = 0,
         var errors: Int = 0,
         var lastFetched: Int = 0,
+        var lastRelayFetched: Int = 0,
         var lastNormalized: Int = 0,
         var lastGapCount: Int = 0,
-        var lastRelaySweep: Boolean = false
+        var lastRelaySweep: Boolean = false,
+        var consecutiveEmptyRelayFetches: Int = 0
     )
 
 
@@ -576,36 +580,158 @@ class TalkViewModel(
                 if (_uiState.value.activeGroupId != groupIdHex) break
                 try {
                     val base = _uiState.value.activeGroup ?: allGroupsForLookup().firstOrNull { it.groupIdHex == groupIdHex }
-                    val messages = if (base != null) {
-                        val siblings = siblingConversationGroups(base).sortedWith(compareByDescending<MlsGroup> { it.lastMessageTime }.thenBy { it.groupIdHex }).take(24)
-                        coroutineScope { siblings.map { g -> async(Dispatchers.IO) { repository.fetchMlsMessages(g.groupIdHex) } }.awaitAll() }.flatten()
-                    } else repository.fetchMlsMessages(groupIdHex)
+                    val fetchTargets = conversationFetchGroupIds(groupIdHex, base)
+                    val messages = fetchConversationMlsMessages(fetchTargets, repairFull = false)
                     val normalized = dedupeMessages(_uiState.value.messages + messages)
                     val health = mlsPollHealth.getOrPut(groupIdHex) { MlsPollHealth() }
-                    health.polls++; health.relaySweeps++; health.lastFetched = messages.size; health.lastNormalized = normalized.size; health.lastGapCount = repository.mlsStateGapCount(groupIdHex); health.lastRelaySweep = true
-                    android.util.Log.d("TalkVM", "poll group=" + groupIdHex + " fetched=" + messages.size + " normalized=" + normalized.size + " current=" + _uiState.value.messages.size + " siblings=" + (base?.let { siblingConversationGroups(it).size } ?: 1) + " relayFetchAll=true health=" + mlsHealthSummary(groupIdHex))
-                    if (base != null && base.isDm && health.lastGapCount > 0 && normalized.isNotEmpty()) {
-                        recoverGapDmOnOpenIfNeeded(base)
-                        break
+                    val relayFetched = fetchTargets.sumOf { repository.getMlsFetchStats(it)?.relayFetched ?: 0 }
+                    health.polls++
+                    health.relaySweeps++
+                    health.lastFetched = messages.size
+                    health.lastRelayFetched = relayFetched
+                    health.lastNormalized = normalized.size
+                    health.lastGapCount = repository.mlsStateGapCount(groupIdHex)
+                    health.lastRelaySweep = true
+                    health.consecutiveEmptyRelayFetches = if (relayFetched == 0) health.consecutiveEmptyRelayFetches + 1 else 0
+                    android.util.Log.d("TalkVM", "poll group=" + groupIdHex + " fetched=" + messages.size + " relayFetched=" + relayFetched + " emptyRelay=" + health.consecutiveEmptyRelayFetches + " normalized=" + normalized.size + " current=" + _uiState.value.messages.size + " siblings=" + (base?.let { siblingConversationGroups(it).size } ?: 1) + " relayFetchAll=true health=" + mlsHealthSummary(groupIdHex))
+                    if (shouldReplaceMessages(_uiState.value.messages, normalized)) {
+                        _uiState.update { it.copy(messages = normalized) }
                     }
-                    if (shouldReplaceMessages(_uiState.value.messages, normalized)) _uiState.update { it.copy(messages = normalized) }
+                    if (base != null && base.isDm && health.lastGapCount > 0 && normalized.isNotEmpty()) {
+                        // Residual MLS gaps can coexist with already-applied application
+                        // messages. Do not stop the stream before rendering the usable
+                        // history; otherwise iOS-originated messages can be decrypted into
+                        // MDK SQLite but never reach the Android UI. Keep polling and let
+                        // manual pull / guarded auto-repair handle the remaining gap.
+                        recoverGapDmOnOpenIfNeeded(base)
+                    }
+                    maybeAutoRepairMlsGroup(groupIdHex, health)
                 } catch (_: Exception) { mlsPollHealth.getOrPut(groupIdHex) { MlsPollHealth() }.errors++ }
             }
         }
     }
 
+    private fun conversationFetchGroupIds(groupIdHex: String, base: MlsGroup?): List<String> {
+        val groups = base?.let { siblingConversationGroups(it) }
+            ?.sortedWith(compareByDescending<MlsGroup> { it.lastMessageTime }.thenBy { it.groupIdHex })
+            ?.take(24)
+            ?.map { it.groupIdHex }
+            .orEmpty()
+        return (if (groups.isEmpty()) listOf(groupIdHex) else groups).distinct()
+    }
+
+    private suspend fun fetchConversationMlsMessages(groupIds: List<String>, repairFull: Boolean): List<MlsMessage> =
+        if (groupIds.size <= 1) {
+            repository.fetchMlsMessages(groupIds.first(), repairFull = repairFull)
+        } else {
+            coroutineScope {
+                groupIds.map { gid ->
+                    async(Dispatchers.IO) { repository.fetchMlsMessages(gid, repairFull = repairFull) }
+                }.awaitAll().flatten()
+            }
+        }
+
     private fun mlsHealthSummary(groupIdHex: String): String {
         val h = mlsPollHealth[groupIdHex] ?: return "polls=0"
         val cooldownLeft = maxOf(0L, (mlsGroupRetryCooldownUntil[groupIdHex] ?: 0L) - System.currentTimeMillis())
-        return "polls=${h.polls},sweeps=${h.relaySweeps},errors=${h.errors},fetched=${h.lastFetched},shown=${h.lastNormalized},gap=${h.lastGapCount},relaySweep=${h.lastRelaySweep},cooldownMs=$cooldownLeft"
+        val autoRepairCooldownLeft = maxOf(0L, (mlsAutoRepairCooldownUntil[groupIdHex] ?: 0L) - System.currentTimeMillis())
+        return "polls=${h.polls},sweeps=${h.relaySweeps},errors=${h.errors},fetched=${h.lastFetched},relayFetched=${h.lastRelayFetched},emptyRelay=${h.consecutiveEmptyRelayFetches},shown=${h.lastNormalized},gap=${h.lastGapCount},relaySweep=${h.lastRelaySweep},cooldownMs=$cooldownLeft,autoRepairCooldownMs=$autoRepairCooldownLeft"
+    }
+
+    private suspend fun maybeAutoRepairMlsGroup(groupIdHex: String, health: MlsPollHealth) {
+        if (health.consecutiveEmptyRelayFetches < 5) return
+        if (health.lastNormalized == 0) return
+        if (health.lastGapCount > 0) return
+        if (mlsRepairInFlight.contains(groupIdHex)) return
+
+        val now = System.currentTimeMillis()
+        val cooldownUntil = mlsAutoRepairCooldownUntil[groupIdHex] ?: 0L
+        if (now < cooldownUntil) return
+
+        mlsAutoRepairCooldownUntil[groupIdHex] = now + 60_000L
+        health.consecutiveEmptyRelayFetches = 0
+        android.util.Log.w("TalkVM", "autoRepair group=$groupIdHex reason=consecutive_empty_relay_fetches")
+        runMlsRepair(groupIdHex, showLoading = false, source = "auto", clearPendingCommit = false)
+    }
+
+    private suspend fun repairConversationMessages(groupIdHex: String, clearPendingCommit: Boolean): List<MlsMessage> {
+        val base = _uiState.value.activeGroup ?: allGroupsForLookup().firstOrNull { it.groupIdHex == groupIdHex }
+        val targets = conversationFetchGroupIds(groupIdHex, base)
+        if (!clearPendingCommit) return fetchConversationMlsMessages(targets, repairFull = true)
+
+        return if (targets.size <= 1) {
+            repository.repairMlsGroupHistory(targets.first())
+        } else {
+            coroutineScope {
+                targets.map { gid ->
+                    async(Dispatchers.IO) { repository.repairMlsGroupHistory(gid) }
+                }.awaitAll().flatten()
+            }
+        }
+    }
+
+    private suspend fun runMlsRepair(groupIdHex: String, showLoading: Boolean, source: String, clearPendingCommit: Boolean) {
+        if (!mlsRepairInFlight.add(groupIdHex)) {
+            // Another repair is already in-flight for this group. Don't toggle
+            // messagesLoading here (would cause StateFlow churn / UI flicker).
+            // The caller (TalkScreen pull-to-refresh) has its own safety timeout
+            // to end the refresh spinner if no loading transition is observed.
+            android.util.Log.d("TalkVM", "repair source=$source group=$groupIdHex skipped (in-flight)")
+            return
+        }
+        try {
+            if (showLoading) _uiState.update { it.copy(messagesLoading = true) }
+            val before = _uiState.value.messages
+            val repaired = repairConversationMessages(groupIdHex, clearPendingCommit = clearPendingCommit)
+            val merged = dedupeMessages(before + repaired)
+            val base = _uiState.value.activeGroup ?: allGroupsForLookup().firstOrNull { it.groupIdHex == groupIdHex }
+            val targets = conversationFetchGroupIds(groupIdHex, base)
+            val relayFetched = targets.sumOf { repository.getMlsFetchStats(it)?.relayFetched ?: 0 }
+            val historyCount = targets.sumOf { repository.getMlsFetchStats(it)?.historyCount ?: 0 }
+            val health = mlsPollHealth.getOrPut(groupIdHex) { MlsPollHealth() }
+            health.consecutiveEmptyRelayFetches = 0
+            health.lastRelayFetched = relayFetched
+            health.lastFetched = historyCount
+            health.lastNormalized = merged.size
+            android.util.Log.d("TalkVM", "repair source=$source group=$groupIdHex repaired=${repaired.size} merged=${merged.size} relayFetched=$relayFetched")
+            if (_uiState.value.activeGroupId == groupIdHex) {
+                _uiState.update { it.copy(messages = merged, messagesLoading = false, error = null) }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("TalkVM", "repair source=$source group=$groupIdHex failed: ${e.message ?: e::class.java.simpleName}")
+            if (showLoading && _uiState.value.activeGroupId == groupIdHex) {
+                _uiState.update { it.copy(messagesLoading = false) }
+            }
+        } finally {
+            mlsRepairInFlight.remove(groupIdHex)
+        }
+    }
+
+    /**
+     * Talk 一覧 (GroupListScreen) の pull-to-refresh から呼ばれる。
+     * loadGroups() を強制的に再走させてキャッシュとリレーの両方を更新する。
+     */
+    fun refreshGroupList() {
+        // loadGroups() は loadGroupsInFlight ガードを持っているので、
+        // 既に進行中なら自然に no-op になる。
+        loadGroups()
+    }
+
+    fun refreshCurrentGroup() {
+        val groupId = _uiState.value.activeGroupId ?: return
+        viewModelScope.launch {
+            // 明示的なユーザ操作 (pull-to-refresh) は強いリペアを行う。
+            // iOS が先行で epoch を進めた状態など、Android 側に取り残された
+            // pending commit があると弱いリペアでは復号できないことがあるため、
+            // GroupInfo「メッセージを修復」と同等の強さで再構築する。
+            runMlsRepair(groupId, showLoading = true, source = "pull", clearPendingCommit = true)
+        }
     }
 
     fun repairCurrentGroup() {
         val groupId = _uiState.value.activeGroupId ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(messagesLoading = true) }
-            val repaired = repository.repairMlsGroupHistory(groupId)
-            _uiState.update { it.copy(messages = dedupeMessages(repaired), messagesLoading = false, error = null) }
+            runMlsRepair(groupId, showLoading = true, source = "manual", clearPendingCommit = true)
         }
     }
 

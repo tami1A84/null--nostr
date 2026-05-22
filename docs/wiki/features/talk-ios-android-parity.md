@@ -11,6 +11,11 @@ Android and iOS native Talk should remain compatible at the Marmot MLS protocol 
 - Both platforms rely on Rust/MDK for cryptographic MLS operations and use repository-level orchestration for relay fetch/publish/retry.
 - Group ID / `h` tag normalization, Welcome timing, and message apply order are critical for parity.
 - Android and iOS both must avoid mutating peer-signed KeyPackage events.
+- Android Talk supports manual pull-to-refresh on an open conversation. The pull path performs a STRONG repair (`clearPendingCommit = true`) — iOS frequently advances the MLS epoch ahead of Android, so an explicit user-initiated refresh must be able to clear any stranded Android pending commit. The Group Info "メッセージを修復" action and pull-to-refresh now have equivalent strength.
+- Android Talk auto-scrolls to the newest message only when the user is already within 3 items of the list bottom. Scrolled-up history reading leaves the LazyColumn position untouched, which lets the Material3 `PullToRefreshContainer.nestedScrollConnection` receive downward drags naturally (the same way LINE / Discord behave). A `pointerInput` top-edge drag fallback (`~200dp` start / `~40dp` accumulated downward travel) is kept as a secondary trigger.
+- Android Talk list (`GroupListScreen`) supports pull-to-refresh on all three filter pages (すべて / 友だち / グループ), achieving iOS Talk-list parity. Pull calls `TalkViewModel.refreshGroupList()` which re-runs `loadGroups()` against cache + relays.
+- The conversation TopBar shows the conversation title only — no debug `gid:` / `msg:` subtitle, no transient refresh icon — to match the LINE-grade visual language.
+- Android foreground polling tracks relay fetch counts and can trigger a guarded auto-repair after repeated empty relay fetches for an already-populated conversation. This avoids requiring repeated user taps when relays transiently return empty Kind-445 results.
 
 ## Parity checklist
 

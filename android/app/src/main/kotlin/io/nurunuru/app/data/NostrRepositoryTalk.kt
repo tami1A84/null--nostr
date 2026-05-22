@@ -345,7 +345,7 @@ suspend fun NostrRepository.fetchMlsMessages(groupIdHex: String, repairFull: Boo
                 client.fetchEvents(filter, timeoutMs = if (repairFull) 12_000 else 5_000)
             }.distinctBy { it.id }
                 .filter { event -> repairFull || (mlsRetryableEventCooldownUntil[groupIdHex]?.get(event.id) ?: 0L) <= System.currentTimeMillis() }
-                .filter { event -> preHistoryWatermark == 0L || event.createdAt >= (preHistoryWatermark - 5L) }
+                .filter { event -> repairFull || preHistoryWatermark == 0L || event.createdAt >= (preHistoryWatermark - 5L) }
 
             if (events.isNotEmpty()) recordMlsRelayHits(allRelays, events.size)
             android.util.Log.d("NostrRepository",
@@ -500,6 +500,16 @@ suspend fun NostrRepository.fetchMlsMessages(groupIdHex: String, repairFull: Boo
             // 3. Rust SQLite から全履歴（= single source of truth）
             var history = rustClient.mlsGetMessageHistory(groupIdHex, 300u)
             android.util.Log.d("NostrRepository", "fetchMlsMessages($groupIdHex): history count=${history.size}")
+            mlsFetchStats[groupIdHex] = MlsFetchStats(
+                relayFetched = events.size,
+                historyCount = history.size,
+                applied = applied,
+                stateOnly = stateOnly,
+                dropped = dropped,
+                retryable = retryable,
+                duplicates = duplicates,
+                updatedAtMs = System.currentTimeMillis()
+            )
 
             // Retryable state_not_ready can be a stale replay diagnostic for an
             // already-persisted application message. Do not let old wrapper events
@@ -628,13 +638,27 @@ internal fun NostrRepository.scheduleMlsSelfUpdate(groupIdHex: String) {
     }
 }
 
+data class MlsFetchStats(
+    val relayFetched: Int = 0,
+    val historyCount: Int = 0,
+    val applied: Int = 0,
+    val stateOnly: Int = 0,
+    val dropped: Int = 0,
+    val retryable: Int = 0,
+    val duplicates: Int = 0,
+    val updatedAtMs: Long = 0L
+)
+
 private val mlsMessageRetryQueues = java.util.concurrent.ConcurrentHashMap<String, MutableMap<String, NostrEvent>>()
 private val mlsRetryableStateCounts = java.util.concurrent.ConcurrentHashMap<String, Int>()
 private val mlsRetryableEventCooldownUntil = java.util.concurrent.ConcurrentHashMap<String, MutableMap<String, Long>>()
 private val mlsRelayHitScores = java.util.concurrent.ConcurrentHashMap<String, Int>()
+private val mlsFetchStats = java.util.concurrent.ConcurrentHashMap<String, MlsFetchStats>()
 
 
 fun NostrRepository.hasMlsStateGaps(groupIdHex: String): Boolean = mlsStateGapCount(groupIdHex) > 0
+
+fun NostrRepository.getMlsFetchStats(groupIdHex: String): MlsFetchStats? = mlsFetchStats[groupIdHex]
 
 fun NostrRepository.mlsStateGapCount(groupIdHex: String): Int =
     maxOf(mlsRetryableStateCounts[groupIdHex] ?: 0, mlsMessageRetryQueues[groupIdHex]?.size ?: 0)
