@@ -2,6 +2,35 @@
 
 LLM Wiki の時系列ログです。追記専用として扱います。
 
+## [2026-05-23] fix | Android MLS peer-epoch catch-up (issue #183)
+
+- Added a sidecar SQLite replay cache (`{mls_db_path}.replay.sqlite3`, 30-day
+  TTL, 2,000-row per-group cap) so peer Kind-445 wrappers survive relay aging
+  and app process death. Cache writes are best-effort and never alter
+  PR #180's receive-path semantics.
+- Added `MlsManager::catch_up_to_peer(group_id_hex, candidates)` which
+  replays caller-supplied + cached wrappers in `created_at` order across up
+  to 8 retry passes and returns a typed `MlsCatchUpReport` with status
+  `Recovered` / `PartiallyRecovered` / `NotRecoverable` / `NoSuchGroup`.
+  Never touches pending-commit state, so PR #180's invariants are preserved.
+- FFI: added `mls_catch_up_to_peer`, `mls_prune_replay_cache`,
+  `mls_replay_cache_size` plus `FfiMlsCatchUpReport` /
+  `FfiMlsCatchUpStatus`; regenerated Kotlin bindings and cross-compiled the
+  arm64-v8a `.so`.
+- Android: `NostrRepositoryTalk.deepCatchUpMlsGroup` orchestrates the wider
+  Kind-445 relay pull and the FFI catch-up call; `recreateDmConversation`
+  automates "workaround A" (leave + create fresh DM). `TalkViewModel`
+  escalates to deep catch-up after every standard repair and after the
+  send-preflight fullRepair fallback; new `recoveryStatus` UI state plus
+  `MlsRecoveryBanner` in `TalkScreen` prompts the user with
+  「メッセージを完全に復元できません — 作り直す / 後で」 when the missing
+  Commit is no longer retrievable from configured relays and is not in the
+  cache (AC2).
+- Tests: new `rust-engine/nurunuru-core/tests/issue_183_catch_up.rs`
+  (8 tests, all passing); existing 47-test core suite still green.
+- Wiki: new `docs/wiki/features/mls-peer-epoch-catch-up.md` and updated
+  `docs/wiki/index.md`.
+
 ## [2026-05-21] setup | Initial LLM Wiki scaffold
 
 - `AGENTS.md` に LLM Wiki 運用ルールを追加。

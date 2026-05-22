@@ -876,6 +876,12 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -951,6 +957,8 @@ fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_accept_welcome(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_add_member(
 ): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_catch_up_to_peer(
+): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_clear_pending_commit(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_create_group(
@@ -991,7 +999,11 @@ fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_message_re
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_welcome(
 ): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_prune_replay_cache(
+): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_remove_member(
+): Short
+fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_replay_cache_size(
 ): Short
 fun uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_reset(
 ): Short
@@ -1168,6 +1180,8 @@ fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_accept_welcome(`ptr`: Po
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_add_member(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,`keyPackageEventJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_catch_up_to_peer(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,`candidateEventsJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_clear_pending_commit(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_create_group(`ptr`: Pointer,`name`: RustBuffer.ByValue,`adminPubkeys`: RustBuffer.ByValue,`relays`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1208,8 +1222,12 @@ fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_process_message_result(`
 ): RustBuffer.ByValue
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_process_welcome(`ptr`: Pointer,`welcomeEventJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_prune_replay_cache(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Long
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_remove_member(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,`memberPubkey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_replay_cache_size(`ptr`: Pointer,`groupIdHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Long
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_reset(`ptr`: Pointer,`newPubkeyHex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_subscribe_keypackage_rotations(`ptr`: Pointer,`contactPubkeys`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1484,6 +1502,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_add_member() != 24579.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_catch_up_to_peer() != 53723.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_clear_pending_commit() != 40727.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1544,7 +1565,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_process_welcome() != 55489.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_prune_replay_cache() != 8411.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_remove_member() != 42604.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_replay_cache_size() != 26318.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_uniffi_nurunuru_checksum_method_nurunuruclient_mls_reset() != 24506.toShort()) {
@@ -2242,6 +2269,22 @@ public interface NuruNuruClientInterface {
     fun `mlsAddMember`(`groupIdHex`: kotlin.String, `keyPackageEventJson`: kotlin.String): FfiAddMemberResult
     
     /**
+     * Issue #183: replay every available Kind-445 wrapper for a group
+     * (caller-supplied candidates + locally cached) to catch up the local
+     * MDK epoch to the peer's epoch.
+     *
+     * `candidate_events_json` — raw JSON of Kind-445 events the caller just
+     * fetched from relays. May overlap with the cache; deduped by event id.
+     *
+     * Returns a structured report so the app can decide whether to prompt
+     * the user to recreate the conversation when recovery is not possible
+     * (issue #183 AC2). Never calls clear_pending_commit /
+     * merge_pending_commit, preserving PR #180 receive-path semantics
+     * (AC3).
+     */
+    fun `mlsCatchUpToPeer`(`groupIdHex`: kotlin.String, `candidateEventsJson`: List<kotlin.String>): FfiMlsCatchUpReport
+    
+    /**
      * Clear (rollback) pending MLS commit for recovery from stuck state.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
@@ -2380,11 +2423,23 @@ public interface NuruNuruClientInterface {
     fun `mlsProcessWelcome`(`welcomeEventJson`: kotlin.String): FfiMlsGroupInfo
     
     /**
+     * Issue #183: prune Kind-445 wrappers older than the 30-day TTL.
+     * Returns the number of rows removed. Best-effort: safe to call on any
+     * cadence (no-op when the cache file does not exist).
+     */
+    fun `mlsPruneReplayCache`(): kotlin.ULong
+    
+    /**
      * Remove a member from a group. Returns the Kind-445 commit event data.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
      */
     fun `mlsRemoveMember`(`groupIdHex`: kotlin.String, `memberPubkey`: kotlin.String): FfiEncryptedMessageData
+    
+    /**
+     * Issue #183 diagnostic: number of cached Kind-445 wrappers for a group.
+     */
+    fun `mlsReplayCacheSize`(`groupIdHex`: kotlin.String): kotlin.ULong
     
     /**
      * Issue #178 #11: wipe + reopen the MLS DB for a new identity.
@@ -3156,6 +3211,33 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
 
     
     /**
+     * Issue #183: replay every available Kind-445 wrapper for a group
+     * (caller-supplied candidates + locally cached) to catch up the local
+     * MDK epoch to the peer's epoch.
+     *
+     * `candidate_events_json` — raw JSON of Kind-445 events the caller just
+     * fetched from relays. May overlap with the cache; deduped by event id.
+     *
+     * Returns a structured report so the app can decide whether to prompt
+     * the user to recreate the conversation when recovery is not possible
+     * (issue #183 AC2). Never calls clear_pending_commit /
+     * merge_pending_commit, preserving PR #180 receive-path semantics
+     * (AC3).
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsCatchUpToPeer`(`groupIdHex`: kotlin.String, `candidateEventsJson`: List<kotlin.String>): FfiMlsCatchUpReport {
+            return FfiConverterTypeFfiMlsCatchUpReport.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_catch_up_to_peer(
+        it, FfiConverterString.lower(`groupIdHex`),FfiConverterSequenceString.lower(`candidateEventsJson`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Clear (rollback) pending MLS commit for recovery from stuck state.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
@@ -3508,6 +3590,24 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
 
     
     /**
+     * Issue #183: prune Kind-445 wrappers older than the 30-day TTL.
+     * Returns the number of rows removed. Best-effort: safe to call on any
+     * cadence (no-op when the cache file does not exist).
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsPruneReplayCache`(): kotlin.ULong {
+            return FfiConverterULong.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_prune_replay_cache(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Remove a member from a group. Returns the Kind-445 commit event data.
      *
      * group_id_hex argument: external group id is Nostr group id, wrapper resolves to internal MLS group id.
@@ -3518,6 +3618,22 @@ open class NuruNuruClient: Disposable, AutoCloseable, NuruNuruClientInterface
     uniffiRustCallWithError(NuruNuruFfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_remove_member(
         it, FfiConverterString.lower(`groupIdHex`),FfiConverterString.lower(`memberPubkey`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Issue #183 diagnostic: number of cached Kind-445 wrappers for a group.
+     */
+    @Throws(NuruNuruFfiException::class)override fun `mlsReplayCacheSize`(`groupIdHex`: kotlin.String): kotlin.ULong {
+            return FfiConverterULong.lift(
+    callWithPointer {
+    uniffiRustCallWithError(NuruNuruFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_uniffi_nurunuru_fn_method_nurunuruclient_mls_replay_cache_size(
+        it, FfiConverterString.lower(`groupIdHex`),_status)
 }
     }
     )
@@ -4304,6 +4420,69 @@ public object FfiConverterTypeFfiKeyPackageEventData: FfiConverterRustBuffer<Ffi
 
 
 
+/**
+ * Issue #183: structured report returned by `mls_catch_up_to_peer`.
+ */
+data class FfiMlsCatchUpReport (
+    var `groupIdHex`: kotlin.String, 
+    var `epochBefore`: kotlin.ULong, 
+    var `epochAfter`: kotlin.ULong, 
+    var `candidatesConsidered`: kotlin.UInt, 
+    var `applicationMessagesApplied`: kotlin.UInt, 
+    var `commitsApplied`: kotlin.UInt, 
+    var `stillUnprocessable`: kotlin.UInt, 
+    var `cacheHits`: kotlin.UInt, 
+    var `status`: FfiMlsCatchUpStatus
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiMlsCatchUpReport: FfiConverterRustBuffer<FfiMlsCatchUpReport> {
+    override fun read(buf: ByteBuffer): FfiMlsCatchUpReport {
+        return FfiMlsCatchUpReport(
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterTypeFfiMlsCatchUpStatus.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiMlsCatchUpReport) = (
+            FfiConverterString.allocationSize(value.`groupIdHex`) +
+            FfiConverterULong.allocationSize(value.`epochBefore`) +
+            FfiConverterULong.allocationSize(value.`epochAfter`) +
+            FfiConverterUInt.allocationSize(value.`candidatesConsidered`) +
+            FfiConverterUInt.allocationSize(value.`applicationMessagesApplied`) +
+            FfiConverterUInt.allocationSize(value.`commitsApplied`) +
+            FfiConverterUInt.allocationSize(value.`stillUnprocessable`) +
+            FfiConverterUInt.allocationSize(value.`cacheHits`) +
+            FfiConverterTypeFfiMlsCatchUpStatus.allocationSize(value.`status`)
+    )
+
+    override fun write(value: FfiMlsCatchUpReport, buf: ByteBuffer) {
+            FfiConverterString.write(value.`groupIdHex`, buf)
+            FfiConverterULong.write(value.`epochBefore`, buf)
+            FfiConverterULong.write(value.`epochAfter`, buf)
+            FfiConverterUInt.write(value.`candidatesConsidered`, buf)
+            FfiConverterUInt.write(value.`applicationMessagesApplied`, buf)
+            FfiConverterUInt.write(value.`commitsApplied`, buf)
+            FfiConverterUInt.write(value.`stillUnprocessable`, buf)
+            FfiConverterUInt.write(value.`cacheHits`, buf)
+            FfiConverterTypeFfiMlsCatchUpStatus.write(value.`status`, buf)
+    }
+}
+
+
+
 data class FfiMlsGroupInfo (
     /**
      * Nostr group id hex / Kind 445 h tag value.
@@ -4585,6 +4764,55 @@ public object FfiConverterTypeFfiWelcomeEventData: FfiConverterRustBuffer<FfiWel
             FfiConverterSequenceSequenceString.write(value.`tags`, buf)
     }
 }
+
+
+
+/**
+ * Issue #183: status of `mls_catch_up_to_peer`.
+ */
+
+enum class FfiMlsCatchUpStatus {
+    
+    /**
+     * Local epoch advanced and no retryable events remain — aligned with peer.
+     */
+    RECOVERED,
+    /**
+     * At least one event was applied but some retryables remain.
+     * Caller should poll relays again before escalating.
+     */
+    PARTIALLY_RECOVERED,
+    /**
+     * No progress made; the missing Commit is no longer retrievable.
+     * UI should prompt the user to recreate the conversation.
+     */
+    NOT_RECOVERABLE,
+    /**
+     * The group is not present in the local MLS store.
+     */
+    NO_SUCH_GROUP;
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiMlsCatchUpStatus: FfiConverterRustBuffer<FfiMlsCatchUpStatus> {
+    override fun read(buf: ByteBuffer) = try {
+        FfiMlsCatchUpStatus.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: FfiMlsCatchUpStatus) = 4UL
+
+    override fun write(value: FfiMlsCatchUpStatus, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 

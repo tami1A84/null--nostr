@@ -50,6 +50,7 @@
 | [[features/talk-debugging]] | Talk/Marmot debugging guidance and raw-log handling。 |
 | [[features/talk-ios-android-parity]] | Android/iOS native Talk protocol parity checklist。 |
 | [[features/mls-db-encryption]] | MLS storage SQLite encryption (SQLCipher) — issue #181, threat model, migration. |
+| [[features/mls-peer-epoch-catch-up]] | Peer-epoch catch-up + replay cache + recovery banner — issue #183. |
 | [[features/relay-management]] | NIP-65 relay list、outbox model、target relay publish、接続制限。 |
 
 ## UI / Design

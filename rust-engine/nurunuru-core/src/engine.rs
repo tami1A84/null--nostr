@@ -264,11 +264,18 @@ impl NuruNuruEngine {
         *self.mls.write().await = None;
 
         let db_path = self.config.mls_db_path.clone();
+        // Issue #183: also wipe the replay cache sidecar so a new identity
+        // does not inherit cached Kind-445 wrappers from the previous user.
+        let replay_path = crate::mls::replay_cache_path_for(&db_path);
         let sidecars = [
             db_path.clone(),
             format!("{db_path}-wal"),
             format!("{db_path}-shm"),
             format!("{db_path}-journal"),
+            replay_path.clone(),
+            format!("{replay_path}-wal"),
+            format!("{replay_path}-shm"),
+            format!("{replay_path}-journal"),
         ];
         for path in &sidecars {
             match std::fs::remove_file(path) {
@@ -1766,6 +1773,39 @@ impl NuruNuruEngine {
     /// Clear (rollback) pending commit for recovery from stuck MLS state.
     pub async fn mls_clear_pending_commit(&self, group_id_hex: &str) -> Result<()> {
         self.require_mls().await?.clear_pending_commit(group_id_hex)
+    }
+
+    // ─── Issue #183: peer-epoch catch-up ──────────────────────────────────
+
+    /// Issue #183: replay all available Kind-445 wrappers for a group
+    /// (caller-supplied candidates + locally cached) to catch the local
+    /// MDK epoch up to the peer's epoch.
+    ///
+    /// Receive-path semantics: this method NEVER calls
+    /// `clear_pending_commit` or `merge_pending_commit`. PR #180's receive
+    /// invariants are preserved (AC3).
+    pub async fn mls_catch_up_to_peer(
+        &self,
+        group_id_hex: &str,
+        candidate_events_json: Vec<String>,
+    ) -> Result<crate::types::MlsCatchUpReport> {
+        self.require_mls()
+            .await?
+            .catch_up_to_peer(group_id_hex, &candidate_events_json)
+    }
+
+    /// Issue #183: prune Kind-445 wrappers older than the replay cache TTL
+    /// (30 days). Safe to call on any cadence — no-op when the cache does
+    /// not yet exist.
+    pub async fn mls_prune_replay_cache(&self) -> Result<u64> {
+        self.require_mls().await?.prune_replay_cache()
+    }
+
+    /// Issue #183 (diagnostic): number of cached Kind-445 wrappers for a group.
+    pub async fn mls_replay_cache_size(&self, group_id_hex: &str) -> Result<u64> {
+        self.require_mls()
+            .await?
+            .replay_cache_size(group_id_hex)
     }
 
     // ─── MLS subscription helpers (issue #178 #9, #10) ────────────────────

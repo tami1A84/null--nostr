@@ -228,6 +228,55 @@ pub enum MlsProcessResult {
     },
 }
 
+/// Issue #183: outcome of `MlsManager::catch_up_to_peer`.
+///
+/// The wrapper attempts a deterministic catch-up by replaying every
+/// candidate Kind-445 event (caller-supplied + cached) in `createdAt` order
+/// until either MDK reports an Application/Commit at every position or
+/// progress stalls. The status reflects whether the local epoch is now
+/// usable, plus a hint about what the UI should do next.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MlsCatchUpStatus {
+    /// `epoch_after > epoch_before` and the unresolved retryable count is
+    /// `0`. The local installation is aligned with the peer.
+    Recovered,
+    /// At least one retryable event was applied but unresolved events remain.
+    /// Caller should poll relays again (the missing Commit may still be in
+    /// flight) before escalating to `NotRecoverable`.
+    PartiallyRecovered,
+    /// No new state was applied. Same epoch, same retryable count. Either
+    /// the missing Commit has aged out of every configured relay (and is not
+    /// in the local replay cache) or it never reached this device. The UI
+    /// should prompt the user to recreate the conversation.
+    NotRecoverable,
+    /// The group is not present in the local MLS store. Caller should not
+    /// schedule retries.
+    NoSuchGroup,
+}
+
+/// Issue #183: structured report returned by `catch_up_to_peer`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MlsCatchUpReport {
+    pub group_id_hex: String,
+    /// Local epoch before the replay pass.
+    pub epoch_before: u64,
+    /// Local epoch after the replay pass.
+    pub epoch_after: u64,
+    /// Total candidate Kind-445 events the replay considered (caller
+    /// supplied + cached, after dedup).
+    pub candidates_considered: u32,
+    /// Application messages decrypted during the replay.
+    pub application_messages_applied: u32,
+    /// Commits / Proposals applied during the replay.
+    pub commits_applied: u32,
+    /// Candidates that could not be applied even after every retry pass.
+    pub still_unprocessable: u32,
+    /// Candidates retrieved from the local replay cache (not duplicated in
+    /// the caller-supplied list). Surfaced for diagnostics.
+    pub cache_hits: u32,
+    pub status: MlsCatchUpStatus,
+}
+
 /// Issue #178 #4: a Welcome staged for accept/decline UX.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PendingWelcome {

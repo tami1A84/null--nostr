@@ -38,6 +38,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.nurunuru.app.data.MlsRecoveryStatus
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.NostrRepository
 import io.nurunuru.app.data.models.MlsGroup
@@ -391,6 +392,17 @@ private fun GroupChatScreen(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // Issue #183: when the Rust catch-up reports the missing Commit
+            // is no longer retrievable from any configured relay AND is not
+            // in the local replay cache, surface an actionable prompt so the
+            // user is not stuck silently in a state_not_ready loop (AC2).
+            if (uiState.recoveryStatus == MlsRecoveryStatus.NotRecoverable) {
+                MlsRecoveryBanner(
+                    isWorking = uiState.recreatingConversation,
+                    onRecreate = { viewModel.recreateActiveDmConversation() },
+                    onDismiss = { viewModel.dismissRecoveryBanner() }
+                )
+            }
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -492,5 +504,73 @@ private fun GroupChatScreen(
             onRepair = { viewModel.repairCurrentGroup() },
             isRepairing = uiState.messagesLoading
         )
+    }
+}
+
+/**
+ * Issue #183: in-conversation banner that appears when the Rust MLS
+ * `catch_up_to_peer` reports `NotRecoverable` for the active DM — i.e. the
+ * missing peer Commit is no longer retrievable from any configured relay
+ * and is not in the local replay cache. Offers the user the only known
+ * recovery path: recreating the DM from scratch (issue report
+ * "workaround A", now wired into the UI as AC2).
+ *
+ * Visual: a soft amber stripe at the top of the message area so it sits
+ * outside the message bubbles but is impossible to miss; pull-to-refresh
+ * and message rendering continue to work normally beneath it.
+ *
+ * Buttons:
+ *   - 作り直す  primary action — leaves the old DM and starts a fresh one
+ *                with the same peer at epoch 0. Disabled while the
+ *                recreate flow is in flight (`isWorking`).
+ *   - 後で       dismiss action — hides the banner. Next failed catch-up
+ *                during send or background poll will re-surface it.
+ */
+@Composable
+private fun MlsRecoveryBanner(
+    isWorking: Boolean,
+    onRecreate: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color(0xFFFFF7E0),
+        contentColor = Color(0xFF6B5500),
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = "メッセージを完全に復元できません",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "相手の最新メッセージを取り戻すために必要なデータがリレーから取得できません。会話を作り直すと、相手と再び新しいメッセージをやり取りできます。",
+                fontSize = 12.sp,
+                lineHeight = 16.sp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = onDismiss,
+                    enabled = !isWorking
+                ) {
+                    Text("後で")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                FilledTonalButton(
+                    onClick = onRecreate,
+                    enabled = !isWorking
+                ) {
+                    Text(if (isWorking) "作り直し中…" else "作り直す")
+                }
+            }
+        }
     }
 }

@@ -655,6 +655,43 @@ private val mlsRetryableEventCooldownUntil = java.util.concurrent.ConcurrentHash
 private val mlsRelayHitScores = java.util.concurrent.ConcurrentHashMap<String, Int>()
 private val mlsFetchStats = java.util.concurrent.ConcurrentHashMap<String, MlsFetchStats>()
 
+// ─── Issue #183: per-group recovery status ───────────────────────────────────
+// In-memory only — the source of truth for "is this group recoverable?" is
+// the Rust `catch_up_to_peer` result. We cache the most recent classification
+// so the UI can render the banner without re-running catch-up every poll.
+private val mlsRecoveryStatuses = java.util.concurrent.ConcurrentHashMap<String, MlsRecoveryStatus>()
+
+/**
+ * Issue #183: client-facing classification of a group's catch-up state.
+ * Mirrors [uniffi.nurunuru.FfiMlsCatchUpStatus] but stays inside the data
+ * layer so TalkViewModel does not have to import the FFI enum directly.
+ *
+ * - [Healthy]            no gap or last catch-up reported Recovered.
+ * - [Recovering]         last catch-up reported PartiallyRecovered — keep polling.
+ * - [NotRecoverable]     last catch-up reported NotRecoverable — the missing
+ *                        Commit is not retrievable from configured relays and
+ *                        is not in the local replay cache. UI should prompt
+ *                        the user to recreate the conversation (AC2).
+ * - [Unknown]            never attempted catch-up for this group.
+ */
+enum class MlsRecoveryStatus { Healthy, Recovering, NotRecoverable, Unknown }
+
+/**
+ * Issue #183: deep-catch-up result mirrored to the app layer.
+ * Strictly read-only — the wrapper writes only into the in-memory status map.
+ */
+data class MlsDeepCatchUpResult(
+    val groupIdHex: String,
+    val status: MlsRecoveryStatus,
+    val epochBefore: Long,
+    val epochAfter: Long,
+    val candidatesConsidered: Int,
+    val applicationMessagesApplied: Int,
+    val commitsApplied: Int,
+    val stillUnprocessable: Int,
+    val cacheHits: Int
+)
+
 
 fun NostrRepository.hasMlsStateGaps(groupIdHex: String): Boolean = mlsStateGapCount(groupIdHex) > 0
 
@@ -662,6 +699,21 @@ fun NostrRepository.getMlsFetchStats(groupIdHex: String): MlsFetchStats? = mlsFe
 
 fun NostrRepository.mlsStateGapCount(groupIdHex: String): Int =
     maxOf(mlsRetryableStateCounts[groupIdHex] ?: 0, mlsMessageRetryQueues[groupIdHex]?.size ?: 0)
+
+/**
+ * Issue #183: most recent recovery classification for the group. Defaults to
+ * [MlsRecoveryStatus.Unknown] until [deepCatchUpMlsGroup] runs at least once.
+ */
+fun NostrRepository.mlsRecoveryStatusFor(groupIdHex: String): MlsRecoveryStatus =
+    mlsRecoveryStatuses[groupIdHex] ?: MlsRecoveryStatus.Unknown
+
+/**
+ * Issue #183: clear the cached recovery status for a group (used after the
+ * user successfully recreates the conversation).
+ */
+fun NostrRepository.clearMlsRecoveryStatus(groupIdHex: String) {
+    mlsRecoveryStatuses.remove(groupIdHex)
+}
 
 
 private enum class MlsProcessPolicy {
@@ -945,6 +997,198 @@ suspend fun NostrRepository.repairMlsGroupHistory(groupIdHex: String): List<MlsM
             android.util.Log.w("NostrRepository", "repairMlsGroupHistory($groupIdHex): ${mlsRedactedError(e)}")
             getLocalMlsMessages(groupIdHex)
         }
+    }
+}
+
+/**
+ * Issue #183: deep peer-epoch catch-up.
+ *
+ * Called when standard repair (`repairMlsGroupHistory` / `fetchMlsMessages(repairFull = true)`)
+ * still leaves `mlsStateGapCount > 0` for a DM. Pulls a wider Kind-445 window
+ * (no history-watermark filter, higher limit, longer timeout) and hands the
+ * raw events + every cached wrapper Rust has stored over to
+ * `catch_up_to_peer`. The Rust side replays them in `created_at` order
+ * across up to 8 retry passes, applies any missing Commits, and reports
+ * whether the local epoch is now usable.
+ *
+ * Receive-path semantics: this function never calls
+ * `mlsClearPendingCommit` / `mlsMergePendingCommit`. PR #180's invariant
+ * (the receive path must not tear down our own in-flight commits) is
+ * preserved (AC3).
+ *
+ * Returns null when the Rust client is not ready or the group is unknown
+ * to MDK; callers should treat that as `MlsRecoveryStatus.Unknown` and
+ * fall back to standard polling.
+ */
+suspend fun NostrRepository.deepCatchUpMlsGroup(groupIdHex: String): MlsDeepCatchUpResult? {
+    val rustClient = client.getRustClient() ?: return null
+
+    return withContext(Dispatchers.IO) {
+        try {
+            // Resolve relay set the same way fetchMlsMessages does so we hit
+            // the same group + inbox relays the peer publishes to.
+            val groupInfo = try { rustClient.mlsGetGroupInfo(groupIdHex) } catch (_: Exception) { null }
+            if (groupInfo == null || !isCurrentAccountMlsGroup(groupInfo.memberPubkeys)) {
+                android.util.Log.w(
+                    "NostrRepository",
+                    "deepCatchUpMlsGroup($groupIdHex): unknown / cross-account group"
+                )
+                return@withContext null
+            }
+            val groupRelays = groupInfo.relays
+            val inboxRelays = resolveMlsInboxRelaysForMembers(groupInfo.memberPubkeys)
+            val allRelays = mlsPublishRelays(groupRelays + inboxRelays)
+
+            // Wider pull than repairFull: no history-watermark filter, no
+            // per-event cooldown, larger limit, longer timeout. This is the
+            // "look harder for the missing Commit" pass.
+            val filter = NostrClient.Filter(
+                kinds = listOf(NostrKind.MLS_GROUP_MESSAGE),
+                tags = mapOf("h" to listOf(groupIdHex)),
+                limit = 2_000
+            )
+            val rawEvents = if (allRelays.isNotEmpty()) {
+                client.fetchEventsFrom(allRelays, filter, timeoutMs = 25_000)
+            } else {
+                client.fetchEvents(filter, timeoutMs = 20_000)
+            }.distinctBy { it.id }
+
+            android.util.Log.d(
+                "NostrRepository",
+                "deepCatchUpMlsGroup($groupIdHex): relays=${allRelays.size} fetched=${rawEvents.size}"
+            )
+
+            // Serialize the relay batch and hand it to Rust along with any
+            // cached wrappers Rust itself stored from earlier polls.
+            val candidatesJson = rawEvents.mapNotNull { ev ->
+                try { json.encodeToString(NostrEvent.serializer(), ev) } catch (_: Exception) { null }
+            }
+
+            val report = try {
+                rustClient.mlsCatchUpToPeer(groupIdHex, candidatesJson)
+            } catch (e: Exception) {
+                android.util.Log.w(
+                    "NostrRepository",
+                    "deepCatchUpMlsGroup($groupIdHex) FFI failed: ${mlsRedactedError(e)}"
+                )
+                return@withContext null
+            }
+
+            val mapped = when (report.status) {
+                uniffi.nurunuru.FfiMlsCatchUpStatus.RECOVERED -> MlsRecoveryStatus.Healthy
+                uniffi.nurunuru.FfiMlsCatchUpStatus.PARTIALLY_RECOVERED -> MlsRecoveryStatus.Recovering
+                uniffi.nurunuru.FfiMlsCatchUpStatus.NOT_RECOVERABLE -> MlsRecoveryStatus.NotRecoverable
+                uniffi.nurunuru.FfiMlsCatchUpStatus.NO_SUCH_GROUP -> MlsRecoveryStatus.Unknown
+            }
+            mlsRecoveryStatuses[groupIdHex] = mapped
+
+            // If Rust advanced the epoch, re-run the normal pull so the
+            // session-only processed-ids cache picks up the newly decryptable
+            // application messages and the UI sees them on the next stream tick.
+            if (report.epochAfter > report.epochBefore) {
+                mlsProcessedIds.remove(groupIdHex)
+                mlsMessageRetryQueues.remove(groupIdHex)
+                mlsRetryableStateCounts.remove(groupIdHex)
+                fetchMlsMessages(groupIdHex, repairFull = true)
+            }
+
+            android.util.Log.i(
+                "NostrRepository",
+                "deepCatchUpMlsGroup($groupIdHex): status=${report.status} " +
+                    "epoch=${report.epochBefore}->${report.epochAfter} " +
+                    "apps=${report.applicationMessagesApplied} commits=${report.commitsApplied} " +
+                    "unresolved=${report.stillUnprocessable} cacheHits=${report.cacheHits}"
+            )
+
+            MlsDeepCatchUpResult(
+                groupIdHex = groupIdHex,
+                status = mapped,
+                epochBefore = report.epochBefore.toLong(),
+                epochAfter = report.epochAfter.toLong(),
+                candidatesConsidered = report.candidatesConsidered.toInt(),
+                applicationMessagesApplied = report.applicationMessagesApplied.toInt(),
+                commitsApplied = report.commitsApplied.toInt(),
+                stillUnprocessable = report.stillUnprocessable.toInt(),
+                cacheHits = report.cacheHits.toInt()
+            )
+        } catch (e: Exception) {
+            android.util.Log.e(
+                "NostrRepository",
+                "deepCatchUpMlsGroup($groupIdHex) failed: ${mlsRedactedError(e)}"
+            )
+            null
+        }
+    }
+}
+
+/**
+ * Issue #183: best-effort periodic prune of the Rust replay-cache sidecar.
+ * Safe to call at most once per app session (no-op when the cache file does
+ * not exist yet).
+ */
+suspend fun NostrRepository.pruneMlsReplayCache(): Long = withContext(Dispatchers.IO) {
+    val rustClient = client.getRustClient() ?: return@withContext 0L
+    try {
+        rustClient.mlsPruneReplayCache().toLong()
+    } catch (e: Exception) {
+        android.util.Log.w(
+            "NostrRepository",
+            "pruneMlsReplayCache failed: ${mlsRedactedError(e)}"
+        )
+        0L
+    }
+}
+
+/**
+ * Issue #183 fallback (AC2): recreate the DM with `partnerPubkey` from
+ * scratch when [deepCatchUpMlsGroup] reports [MlsRecoveryStatus.NotRecoverable].
+ *
+ * This is the user-facing equivalent of the issue report's "workaround A"
+ * (leave the DM on both ends and recreate). We:
+ *
+ * 1. Leave the old group locally (and publish a leave Commit so the peer
+ *    can prune their side).
+ * 2. Create a fresh DM group anchored at epoch 0 — both ends realign.
+ * 3. Clear the cached recovery status for the old group so stale banners
+ *    do not linger in the UI.
+ *
+ * Returns the new [MlsGroup] on success, or null when the partner's
+ * KeyPackage could not be fetched (caller should surface a user-facing
+ * "相手の公開鍵が見つかりません" error).
+ */
+suspend fun NostrRepository.recreateDmConversation(
+    oldGroupIdHex: String,
+    partnerPubkey: String
+): MlsGroup? = withContext(Dispatchers.IO) {
+    try {
+        // Best-effort leave on the old group. We don't fail the recreate if
+        // the leave commit cannot publish — the local SQLite is already
+        // marked-as-left, which is what the local UI cares about.
+        runCatching { leaveGroup(oldGroupIdHex) }
+        clearMlsRecoveryStatus(oldGroupIdHex)
+        mlsProcessedIds.remove(oldGroupIdHex)
+        mlsMessageRetryQueues.remove(oldGroupIdHex)
+        mlsRetryableStateCounts.remove(oldGroupIdHex)
+
+        val fresh = createDmGroup(partnerPubkey)
+        if (fresh != null) {
+            android.util.Log.i(
+                "NostrRepository",
+                "recreateDmConversation: old=$oldGroupIdHex new=${fresh.groupIdHex}"
+            )
+        } else {
+            android.util.Log.w(
+                "NostrRepository",
+                "recreateDmConversation: failed to create fresh DM for partner=${mlsLogPrefix(partnerPubkey)}"
+            )
+        }
+        fresh
+    } catch (e: Exception) {
+        android.util.Log.e(
+            "NostrRepository",
+            "recreateDmConversation($oldGroupIdHex) failed: ${mlsRedactedError(e)}"
+        )
+        null
     }
 }
 

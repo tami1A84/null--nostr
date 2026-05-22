@@ -65,6 +65,30 @@ fn mls_process_result_label<T: std::fmt::Debug>(value: &T) -> &'static str {
     }
 }
 
+/// Issue #183: classify a `process_message_result` error as permanent (drop)
+/// or retryable (leave in the catch-up pool). Mirrors Android's
+/// `isPermanentMlsProcessDropError` in `NostrRepositoryTalk.kt` so both
+/// sides agree on what is recoverable.
+fn is_permanent_process_error(e: &NuruNuruError) -> bool {
+    let msg = e.to_string().to_lowercase();
+    let permanent_signals = [
+        "invalid_base64_content",
+        "invalid base64",
+        "malformed_content_too_short",
+        "too_short",
+        "invalid kind",
+        "wrong kind",
+        "missing h",
+        "wrong h",
+        "group mismatch",
+        "bad signature",
+        "invalid signature",
+        "not a nostr event",
+        "invalid event json",
+    ];
+    permanent_signals.iter().any(|s| msg.contains(s))
+}
+
 fn mls_error_label(error: &dyn std::fmt::Display) -> &'static str {
     let lower = error.to_string().to_lowercase();
     if lower.contains("hmac") {
@@ -85,14 +109,40 @@ fn mls_error_label(error: &dyn std::fmt::Display) -> &'static str {
 
 // ─── MlsManager ──────────────────────────────────────────────────────────────
 
+/// Issue #183: 30-day TTL for cached Kind-445 wrappers. Long enough to span
+/// week-long device-off / app-killed windows that triggered the issue
+/// (observed 2026-05-23), short enough that the sidecar SQLite does not
+/// grow unbounded for chatty groups.
+pub(crate) const MLS_REPLAY_CACHE_TTL_SECS: u64 = 30 * 24 * 60 * 60;
+
+/// Issue #183: hard cap on cached wrappers per group. Defends against a
+/// chatty group filling the sidecar before the periodic TTL prune runs.
+/// When exceeded, the oldest entries for that group are evicted.
+pub(crate) const MLS_REPLAY_CACHE_MAX_PER_GROUP: u64 = 2_000;
+
 /// Wraps `mdk_core::MDK` and produces/consumes Nostr event payloads for
 /// Marmot kinds 30443/444/1059/445. Identity is bound at construction; to
 /// switch users, drop this manager (see `NuruNuruEngine::mls_reset`).
+///
+/// Also owns the issue-#183 "replay cache" — a sidecar SQLite file
+/// (`{mls_db_path}.replay.sqlite3`) that stores raw Kind-445 wrappers as
+/// they arrive so they can be replayed when a peer's Commit catches up
+/// later. The cache stores only MLS ciphertext envelopes (kind, content,
+/// tags, id, created_at); no decrypted plaintext is ever written.
 pub struct MlsManager {
     mdk: Mdk,
     user_pubkey: PublicKey,
     db_path: String,
     encrypted: bool,
+    /// Replay-cache connection (see Issue #183).
+    ///
+    /// Held behind a `Mutex` so the immutable `MlsManager` reference shared
+    /// via `Arc<MlsManager>` (from `NuruNuruEngine::require_mls`) can still
+    /// mutate the underlying SQLite connection. Lazily opened the first time
+    /// it is needed; failures degrade gracefully (catch-up still works on
+    /// the caller-supplied event list, just without cache hits).
+    replay_cache: std::sync::Mutex<Option<rusqlite::Connection>>,
+    replay_cache_path: String,
 }
 
 impl MlsManager {
@@ -109,8 +159,10 @@ impl MlsManager {
         Ok(Self {
             mdk,
             user_pubkey: pubkey,
+            replay_cache_path: replay_cache_path_for(db_path),
             db_path: db_path.to_string(),
             encrypted: false,
+            replay_cache: std::sync::Mutex::new(None),
         })
     }
 
@@ -128,8 +180,10 @@ impl MlsManager {
         Ok(Self {
             mdk,
             user_pubkey: pubkey,
+            replay_cache_path: replay_cache_path_for(db_path),
             db_path: db_path.to_string(),
             encrypted: true,
+            replay_cache: std::sync::Mutex::new(None),
         })
     }
 
@@ -175,6 +229,14 @@ pub fn derive_mls_db_key(nsec_bytes: &[u8; 32], app_salt: &[u8]) -> [u8; 32] {
 /// to avoid cross-platform path drift (issue #181).
 pub fn mls_db_path_for(db_path: &str) -> String {
     format!("{db_path}_mls.sqlite3")
+}
+
+/// Issue #183: derive the replay-cache SQLite path from the MLS DB path.
+/// The replay cache lives next to the MLS DB (`{mls_db_path}.replay.sqlite3`)
+/// and stores raw Kind-445 wrappers so peer Commits can be replayed after
+/// they have aged out of relays.
+pub fn replay_cache_path_for(mls_db_path: &str) -> String {
+    format!("{mls_db_path}.replay.sqlite3")
 }
 
 #[cfg(test)]
@@ -809,6 +871,20 @@ impl MlsManager {
             .and_then(|gid| self.mdk.get_members(&gid).ok())
             .map(|set| set.iter().map(|pk| pk.to_hex()).collect());
 
+        // Issue #183: persist the wrapper into the replay cache *before*
+        // handing to MDK so a peer Commit that we currently cannot decrypt
+        // (state_not_ready) survives relay aging and can be retried later
+        // by `catch_up_to_peer`. Best-effort: failures here must not change
+        // the existing receive semantics (PR #180 / AC3).
+        if let Err(e) = self.cache_kind445_event(group_id_hex, &event) {
+            tracing::debug!(
+                "[MLS][replay_cache] cache write failed group={} event_id={} reason={}",
+                group_id_hex,
+                event.id.to_hex(),
+                mls_error_label(&e)
+            );
+        }
+
         let result = self
             .mdk
             .process_message(&event)
@@ -1187,5 +1263,455 @@ impl MlsManager {
     /// Return the SQLite path this manager is using (for diagnostics).
     pub fn db_path(&self) -> &str {
         &self.db_path
+    }
+
+    /// Return the replay-cache SQLite path (Issue #183, for diagnostics).
+    pub fn replay_cache_path(&self) -> &str {
+        &self.replay_cache_path
+    }
+}
+
+// ─── Issue #183: Kind-445 replay cache + peer-epoch catch-up ─────────────────
+
+/// Schema for the sidecar replay cache. Stored in a plain (un-encrypted)
+/// SQLite file: the rows carry MLS ciphertext only — never plaintext — and
+/// the contents are protected by the group's MLS keys. Storing MLS
+/// ciphertext at rest is the same threat model as keeping a Nostr relay
+/// dump on the device.
+const REPLAY_CACHE_SCHEMA: &str = "
+    CREATE TABLE IF NOT EXISTS replay_cache (
+        event_id    TEXT PRIMARY KEY,
+        group_id    TEXT NOT NULL,
+        created_at  INTEGER NOT NULL,
+        cached_at   INTEGER NOT NULL,
+        event_json  TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS replay_cache_group_idx
+        ON replay_cache(group_id, created_at);
+    CREATE INDEX IF NOT EXISTS replay_cache_cached_at_idx
+        ON replay_cache(cached_at);
+";
+
+impl MlsManager {
+    /// Open (or initialise) the replay-cache SQLite connection on first use.
+    /// Returns an error only when the file cannot be created at all;
+    /// schema/index creation failures are also surfaced so the caller can
+    /// log a diagnostic, but callers that just want best-effort caching
+    /// should treat them as recoverable.
+    fn ensure_replay_cache(&self) -> Result<()> {
+        let mut guard = self.replay_cache.lock().map_err(|_| {
+            NuruNuruError::MlsError("replay_cache mutex poisoned".to_string())
+        })?;
+        if guard.is_some() {
+            return Ok(());
+        }
+        let conn = rusqlite::Connection::open(&self.replay_cache_path).map_err(|e| {
+            NuruNuruError::MlsError(format!("replay_cache open: {e}"))
+        })?;
+        conn.execute_batch(REPLAY_CACHE_SCHEMA).map_err(|e| {
+            NuruNuruError::MlsError(format!("replay_cache schema: {e}"))
+        })?;
+        *guard = Some(conn);
+        Ok(())
+    }
+
+    /// Issue #183: persist a single Kind-445 wrapper into the replay cache.
+    ///
+    /// Called from `process_message_result` for every kind:445 event that
+    /// passes the basic envelope guards (kind, h-tag, base64 length). MLS
+    /// ciphertext only — never plaintext. Best-effort: any storage error
+    /// is logged at debug level and swallowed so the receive path stays
+    /// non-destructive (AC3 — no regression to PR #180 receive semantics).
+    pub fn cache_kind445_event(&self, group_id_hex: &str, event: &nostr::Event) -> Result<()> {
+        self.ensure_replay_cache()?;
+        let event_json = serde_json::to_string(event)
+            .map_err(|e| NuruNuruError::MlsError(format!("replay_cache serialize: {e}")))?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let event_id = event.id.to_hex();
+        let created_at = event.created_at.as_secs() as i64;
+        let group = group_id_hex.to_string();
+
+        let guard = self.replay_cache.lock().map_err(|_| {
+            NuruNuruError::MlsError("replay_cache mutex poisoned".to_string())
+        })?;
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| NuruNuruError::MlsError("replay_cache not initialised".to_string()))?;
+
+        // Idempotent INSERT — duplicate event_id is the common case.
+        conn.execute(
+            "INSERT OR IGNORE INTO replay_cache \
+                (event_id, group_id, created_at, cached_at, event_json) \
+              VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![event_id, group, created_at, now, event_json],
+        )
+        .map_err(|e| NuruNuruError::MlsError(format!("replay_cache insert: {e}")))?;
+
+        // Per-group cap: evict oldest entries if we are over MLS_REPLAY_CACHE_MAX_PER_GROUP.
+        let count: u64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM replay_cache WHERE group_id = ?1",
+                rusqlite::params![group],
+                |row| row.get::<_, i64>(0).map(|v| v as u64),
+            )
+            .unwrap_or(0);
+        if count > MLS_REPLAY_CACHE_MAX_PER_GROUP {
+            let excess = count - MLS_REPLAY_CACHE_MAX_PER_GROUP;
+            let _ = conn.execute(
+                "DELETE FROM replay_cache \
+                    WHERE event_id IN ( \
+                        SELECT event_id FROM replay_cache \
+                          WHERE group_id = ?1 \
+                          ORDER BY created_at ASC \
+                          LIMIT ?2 \
+                    )",
+                rusqlite::params![group, excess as i64],
+            );
+        }
+        Ok(())
+    }
+
+    /// Issue #183: prune cache entries older than [`MLS_REPLAY_CACHE_TTL_SECS`].
+    /// Returns the number of rows removed. Safe to call on any cadence
+    /// (no-op when the cache file does not exist).
+    pub fn prune_replay_cache(&self) -> Result<u64> {
+        if !std::path::Path::new(&self.replay_cache_path).exists() {
+            return Ok(0);
+        }
+        self.ensure_replay_cache()?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let cutoff = now - MLS_REPLAY_CACHE_TTL_SECS as i64;
+        let guard = self.replay_cache.lock().map_err(|_| {
+            NuruNuruError::MlsError("replay_cache mutex poisoned".to_string())
+        })?;
+        let conn = guard.as_ref().ok_or_else(|| {
+            NuruNuruError::MlsError("replay_cache not initialised".to_string())
+        })?;
+        let removed = conn
+            .execute(
+                "DELETE FROM replay_cache WHERE cached_at < ?1",
+                rusqlite::params![cutoff],
+            )
+            .map_err(|e| NuruNuruError::MlsError(format!("replay_cache prune: {e}")))?;
+        Ok(removed as u64)
+    }
+
+    /// Issue #183: load all cached wrappers for `group_id_hex`, oldest first.
+    ///
+    /// Returns the raw event JSON; the caller can deduplicate against any
+    /// additional candidates (e.g. fresh relay reads) before calling
+    /// [`Self::catch_up_to_peer`].
+    pub fn load_cached_kind445(&self, group_id_hex: &str) -> Result<Vec<String>> {
+        if !std::path::Path::new(&self.replay_cache_path).exists() {
+            return Ok(Vec::new());
+        }
+        self.ensure_replay_cache()?;
+        let guard = self.replay_cache.lock().map_err(|_| {
+            NuruNuruError::MlsError("replay_cache mutex poisoned".to_string())
+        })?;
+        let conn = guard.as_ref().ok_or_else(|| {
+            NuruNuruError::MlsError("replay_cache not initialised".to_string())
+        })?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT event_json FROM replay_cache \
+                   WHERE group_id = ?1 \
+                ORDER BY created_at ASC, event_id ASC",
+            )
+            .map_err(|e| NuruNuruError::MlsError(format!("replay_cache prepare: {e}")))?;
+        let rows = stmt
+            .query_map(rusqlite::params![group_id_hex], |row| row.get::<_, String>(0))
+            .map_err(|e| NuruNuruError::MlsError(format!("replay_cache query: {e}")))?;
+        let mut out = Vec::new();
+        for row in rows {
+            match row {
+                Ok(s) => out.push(s),
+                Err(e) => {
+                    tracing::warn!(
+                        "[MLS][replay_cache] row decode failed: {}",
+                        mls_error_label(&e)
+                    );
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Issue #183: per-group cache size (for diagnostics + tests).
+    pub fn replay_cache_size(&self, group_id_hex: &str) -> Result<u64> {
+        if !std::path::Path::new(&self.replay_cache_path).exists() {
+            return Ok(0);
+        }
+        self.ensure_replay_cache()?;
+        let guard = self.replay_cache.lock().map_err(|_| {
+            NuruNuruError::MlsError("replay_cache mutex poisoned".to_string())
+        })?;
+        let conn = guard.as_ref().ok_or_else(|| {
+            NuruNuruError::MlsError("replay_cache not initialised".to_string())
+        })?;
+        let count: u64 = conn
+            .query_row(
+                "SELECT COUNT(1) FROM replay_cache WHERE group_id = ?1",
+                rusqlite::params![group_id_hex],
+                |row| row.get::<_, i64>(0).map(|v| v as u64),
+            )
+            .unwrap_or(0);
+        Ok(count)
+    }
+
+    /// Issue #183: peer-epoch catch-up.
+    ///
+    /// Attempts to advance the local MDK epoch for `group_id_hex` by
+    /// replaying every available Kind-445 wrapper in `created_at` order
+    /// until either every event has been classified (Application / Commit /
+    /// permanently dropped) or progress stalls.
+    ///
+    /// Inputs:
+    ///   * `candidate_events_json` — raw event JSON strings the caller just
+    ///     fetched from relays. May overlap with the replay cache; the
+    ///     wrapper dedupes by `event_id`.
+    ///
+    /// Returns a [`crate::types::MlsCatchUpReport`] describing what was
+    /// applied and whether the local epoch is now usable. The caller's UI
+    /// layer (TalkViewModel on Android) uses
+    /// [`crate::types::MlsCatchUpStatus`] to decide whether to prompt the
+    /// user to recreate the conversation (AC2).
+    ///
+    /// Receive-path semantics: this method only invokes
+    /// `mdk.process_message`. It never calls `clear_pending_commit` or
+    /// `merge_pending_commit`. This is the same contract `process_message_result`
+    /// holds, so PR #180's receive-path invariants are preserved (AC3).
+    pub fn catch_up_to_peer(
+        &self,
+        group_id_hex: &str,
+        candidate_events_json: &[String],
+    ) -> Result<crate::types::MlsCatchUpReport> {
+        use crate::types::{MlsCatchUpReport, MlsCatchUpStatus};
+
+        // Resolve up-front so a missing group short-circuits with a clean status.
+        let group_resolved = self.resolve_group_id(group_id_hex);
+        let group_id_for_epoch = match group_resolved {
+            Ok(g) => g,
+            Err(_) => {
+                return Ok(MlsCatchUpReport {
+                    group_id_hex: group_id_hex.to_string(),
+                    epoch_before: 0,
+                    epoch_after: 0,
+                    candidates_considered: 0,
+                    application_messages_applied: 0,
+                    commits_applied: 0,
+                    still_unprocessable: 0,
+                    cache_hits: 0,
+                    status: MlsCatchUpStatus::NoSuchGroup,
+                });
+            }
+        };
+
+        let epoch_before = self
+            .mdk
+            .get_group(&group_id_for_epoch)
+            .ok()
+            .flatten()
+            .map(|g| g.epoch)
+            .unwrap_or(0);
+
+        // Collect caller-supplied candidates.
+        let mut by_id: std::collections::BTreeMap<String, (u64, String)> =
+            std::collections::BTreeMap::new();
+        for raw in candidate_events_json {
+            // Parse just enough to dedupe + order; full validation happens in
+            // process_message_result.
+            let parsed: std::result::Result<nostr::Event, _> = serde_json::from_str(raw);
+            if let Ok(ev) = parsed {
+                if u16::from(ev.kind) != 445 {
+                    continue;
+                }
+                by_id.insert(ev.id.to_hex(), (ev.created_at.as_secs(), raw.clone()));
+            }
+        }
+        let supplied_count = by_id.len();
+
+        // Merge in cached wrappers. Failures degrade gracefully — the cache
+        // is best-effort by design.
+        let cached_jsons = match self.load_cached_kind445(group_id_hex) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    "[MLS][catch_up] replay cache read failed group={} reason={}",
+                    group_id_hex,
+                    mls_error_label(&e)
+                );
+                Vec::new()
+            }
+        };
+        let mut cache_hits = 0u32;
+        for raw in cached_jsons {
+            let parsed: std::result::Result<nostr::Event, _> = serde_json::from_str(&raw);
+            if let Ok(ev) = parsed {
+                if u16::from(ev.kind) != 445 {
+                    continue;
+                }
+                let id_hex = ev.id.to_hex();
+                if !by_id.contains_key(&id_hex) {
+                    cache_hits += 1;
+                }
+                by_id
+                    .entry(id_hex)
+                    .or_insert_with(|| (ev.created_at.as_secs(), raw));
+            }
+        }
+
+        let mut ordered: Vec<(String, u64, String)> = by_id
+            .into_iter()
+            .map(|(id, (ts, raw))| (id, ts, raw))
+            .collect();
+        ordered.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+        let candidates_considered = ordered.len() as u32;
+
+        tracing::info!(
+            "[MLS][catch_up] start group={} supplied={} cache_hits={} total={} epoch_before={}",
+            group_id_hex,
+            supplied_count,
+            cache_hits,
+            candidates_considered,
+            epoch_before
+        );
+
+        let mut application_messages_applied = 0u32;
+        let mut commits_applied = 0u32;
+        let mut applied_or_dropped: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+
+        // Deterministic, finite replay. 8 passes is enough to drain a chain
+        // of out-of-order commits/applications without risking an infinite
+        // loop on a pathological event set.
+        const MAX_PASSES: u8 = 8;
+        for pass in 0..MAX_PASSES {
+            let mut progressed = false;
+            for (id, _ts, raw) in &ordered {
+                if applied_or_dropped.contains(id) {
+                    continue;
+                }
+                match self.process_message_result(group_id_hex, raw) {
+                    Ok(crate::types::MlsProcessResult::ApplicationMessage(_)) => {
+                        application_messages_applied += 1;
+                        applied_or_dropped.insert(id.clone());
+                        progressed = true;
+                    }
+                    Ok(crate::types::MlsProcessResult::Commit { .. }) => {
+                        commits_applied += 1;
+                        applied_or_dropped.insert(id.clone());
+                        progressed = true;
+                    }
+                    Ok(crate::types::MlsProcessResult::NeedsSelfUpdate { .. }) => {
+                        // Pending proposal: mark as touched so we do not
+                        // re-attempt forever, but do not credit it as a
+                        // catch-up "apply" since no new app message is now
+                        // decryptable.
+                        applied_or_dropped.insert(id.clone());
+                        progressed = true;
+                    }
+                    Ok(crate::types::MlsProcessResult::StateUpdate { kind }) => {
+                        // Permanent classifications: drop immediately so we
+                        // do not retry. Retryable (state_not_ready / pending
+                        // / proposal / commit-shape) stays in the pool until
+                        // a later pass; another event may advance MDK enough
+                        // to make it decryptable.
+                        let is_permanent = kind.starts_with("unhandled:Unprocessable:missing_h_tag")
+                            || kind.starts_with("unhandled:Unprocessable:group_id_mismatch")
+                            || kind.starts_with("unhandled:Unprocessable:invalid_kind");
+                        if is_permanent {
+                            applied_or_dropped.insert(id.clone());
+                            progressed = true;
+                        }
+                    }
+                    Err(e) => {
+                        // process_message_result itself failed.
+                        //
+                        // MDK surfaces state_not_ready / missing-epoch-key
+                        // cases as `Err("Failed to decrypt message with any
+                        // exporter secret...")` rather than
+                        // `Ok(StateUpdate { state_not_ready })`. Those are
+                        // the exact events the catch-up loop wants to retry
+                        // — leave them in the unresolved pool so a later
+                        // pass (after a sibling Commit advances MDK) can
+                        // decrypt them.
+                        //
+                        // Only structural problems (bad base64, wrong h tag,
+                        // not a Nostr event JSON, bad signature) are
+                        // permanent drops. The classifier mirrors Android's
+                        // `isPermanentMlsProcessDropError` so the two sides
+                        // agree on what is recoverable.
+                        if is_permanent_process_error(&e) {
+                            applied_or_dropped.insert(id.clone());
+                            progressed = true;
+                        }
+                    }
+                }
+            }
+            if !progressed {
+                tracing::info!(
+                    "[MLS][catch_up] pass={} stalled — exiting early group={}",
+                    pass,
+                    group_id_hex
+                );
+                break;
+            }
+        }
+
+        let still_unprocessable =
+            (candidates_considered as usize - applied_or_dropped.len()) as u32;
+        let epoch_after = self
+            .mdk
+            .get_group(&group_id_for_epoch)
+            .ok()
+            .flatten()
+            .map(|g| g.epoch)
+            .unwrap_or(epoch_before);
+
+        let status = if epoch_after > epoch_before && still_unprocessable == 0 {
+            MlsCatchUpStatus::Recovered
+        } else if (epoch_after > epoch_before || commits_applied > 0
+            || application_messages_applied > 0)
+            && still_unprocessable > 0
+        {
+            MlsCatchUpStatus::PartiallyRecovered
+        } else if still_unprocessable > 0 {
+            MlsCatchUpStatus::NotRecoverable
+        } else {
+            // No retryables, no progress — already aligned with peer.
+            MlsCatchUpStatus::Recovered
+        };
+
+        tracing::info!(
+            "[MLS][catch_up] done group={} epoch_before={} epoch_after={} considered={} apps={} commits={} unresolved={} cache_hits={} status={:?}",
+            group_id_hex,
+            epoch_before,
+            epoch_after,
+            candidates_considered,
+            application_messages_applied,
+            commits_applied,
+            still_unprocessable,
+            cache_hits,
+            status
+        );
+
+        Ok(MlsCatchUpReport {
+            group_id_hex: group_id_hex.to_string(),
+            epoch_before,
+            epoch_after,
+            candidates_considered,
+            application_messages_applied,
+            commits_applied,
+            still_unprocessable,
+            cache_hits,
+            status,
+        })
     }
 }

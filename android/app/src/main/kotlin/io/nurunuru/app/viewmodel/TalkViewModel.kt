@@ -53,7 +53,18 @@ data class TalkUiState(
     val showCreateGroup: Boolean = false,
     // Following list for member picker (loaded on demand)
     val followingProfiles: List<UserProfile> = emptyList(),
-    val followingLoading: Boolean = false
+    val followingLoading: Boolean = false,
+    /**
+     * Issue #183: recovery state of the currently-open DM. When set to
+     * [MlsRecoveryStatus.NotRecoverable] the UI renders a banner offering
+     * "会話を作り直す" (AC2). `null` = no banner.
+     */
+    val recoveryStatus: MlsRecoveryStatus? = null,
+    /**
+     * Issue #183: true while [TalkViewModel.recreateActiveDmConversation]
+     * is in flight so the banner can disable its button.
+     */
+    val recreatingConversation: Boolean = false
 )
 
 class TalkViewModel(
@@ -217,13 +228,21 @@ class TalkViewModel(
                     finalGroup = recoverGapDmOnOpenIfNeeded(finalGroup)
                     finalMessages = repository.getLocalMlsMessages(finalGroup.groupIdHex)
                 }
+                // Issue #183: surface any cached recovery classification for
+                // this group so a previously-detected NotRecoverable banner
+                // re-appears when the user re-enters the same DM. The banner
+                // is cleared by recreateActiveDmConversation() on success.
+                val cachedRecovery = repository.mlsRecoveryStatusFor(finalGroup.groupIdHex)
+                    .takeIf { it == MlsRecoveryStatus.NotRecoverable }
                 _uiState.update {
                     it.copy(
                         activeGroupId = finalGroup.groupIdHex,
                         activeGroup = finalGroup,
                         messages = dedupeMessages(finalMessages),
                         messagesLoading = false,
-                        error = null
+                        error = null,
+                        recoveryStatus = cachedRecovery,
+                        recreatingConversation = false
                     )
                 }
                 startMessageStream(finalGroup.groupIdHex)
@@ -243,9 +262,85 @@ class TalkViewModel(
                 activeGroupId = null,
                 activeGroup = null,
                 messages = emptyList(),
-                showGroupInfo = false
+                showGroupInfo = false,
+                // Issue #183: drop the per-group recovery banner state on close.
+                recoveryStatus = null,
+                recreatingConversation = false
             )
         }
+    }
+
+    /**
+     * Issue #183: user accepted "会話を作り直す" on the recovery banner.
+     * Leaves the unrecoverable DM and opens a fresh one with the same peer.
+     * No-op when the active group is not a DM or has no recoverable partner pubkey.
+     */
+    fun recreateActiveDmConversation() {
+        val current = _uiState.value.activeGroup ?: return
+        if (!current.isDm) return
+        val partner = current.memberPubkeys.firstOrNull { it != myPubkeyHex } ?: run {
+            _uiState.update { it.copy(error = "相手の公開鍵が解決できません") }
+            return
+        }
+        if (_uiState.value.recreatingConversation) return
+        _uiState.update { it.copy(recreatingConversation = true) }
+        viewModelScope.launch {
+            try {
+                val fresh = withTimeout(60_000) {
+                    repository.recreateDmConversation(current.groupIdHex, partner)
+                }
+                if (fresh == null) {
+                    _uiState.update {
+                        it.copy(
+                            recreatingConversation = false,
+                            error = "会話を作り直せませんでした。相手の鍵情報を取得できない可能性があります。"
+                        )
+                    }
+                    return@launch
+                }
+                // Refresh group list so the new DM shows in TalkList, then jump into it.
+                val groups = repository.fetchMlsGroups()
+                allMlsGroups = groups
+                messageStreamJob?.cancel()
+                messageStreamJob = null
+                _uiState.update {
+                    it.copy(
+                        groups = groups,
+                        activeGroupId = fresh.groupIdHex,
+                        activeGroup = fresh,
+                        messages = emptyList(),
+                        messagesLoading = true,
+                        recoveryStatus = null,
+                        recreatingConversation = false,
+                        error = null
+                    )
+                }
+                val initial = repository.fetchMlsMessages(fresh.groupIdHex, repairFull = false)
+                _uiState.update {
+                    it.copy(
+                        messages = dedupeMessages(initial),
+                        messagesLoading = false
+                    )
+                }
+                startMessageStream(fresh.groupIdHex)
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        recreatingConversation = false,
+                        error = normalizeMlsError(e, "会話を作り直せませんでした")
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Issue #183: user dismissed the banner without recreating.
+     * Hides the banner; the next poll/send can re-surface it if the gap
+     * persists. Does not affect any underlying MLS state.
+     */
+    fun dismissRecoveryBanner() {
+        _uiState.update { it.copy(recoveryStatus = null) }
     }
 
     private suspend fun selectCanonicalDmGroup(group: MlsGroup, allowPinned: Boolean = true): Pair<MlsGroup, String> {
@@ -335,6 +430,35 @@ class TalkViewModel(
                             " repaired=" + repaired.size
                     )
                     postGapCount = repairedGap
+
+                    // Issue #183: standard repair still leaves a gap → escalate to
+                    // deep peer-epoch catch-up (Rust replays cached + freshly
+                    // fetched Kind-445 wrappers, AC1). If even that can't recover
+                    // the missing Commit, surface the recovery banner (AC2).
+                    if (postGapCount > 0) {
+                        val deepReport = try {
+                            withTimeout(35_000) { repository.deepCatchUpMlsGroup(group.groupIdHex) }
+                        } catch (_: Exception) { null }
+                        if (deepReport != null) {
+                            postGapCount = repository.mlsStateGapCount(group.groupIdHex)
+                            android.util.Log.d(
+                                "TalkVM",
+                                "sendMessage: deepCatchUp group=" + group.groupIdHex +
+                                    " status=" + deepReport.status +
+                                    " epoch=" + deepReport.epochBefore + "->" + deepReport.epochAfter +
+                                    " commits=" + deepReport.commitsApplied +
+                                    " apps=" + deepReport.applicationMessagesApplied +
+                                    " unresolved=" + deepReport.stillUnprocessable +
+                                    " afterGap=" + postGapCount
+                            )
+                            if (deepReport.status == MlsRecoveryStatus.NotRecoverable) {
+                                _uiState.update { it.copy(recoveryStatus = MlsRecoveryStatus.NotRecoverable) }
+                            } else if (_uiState.value.recoveryStatus == MlsRecoveryStatus.NotRecoverable) {
+                                // Cleared up since the last banner — drop it.
+                                _uiState.update { it.copy(recoveryStatus = null) }
+                            }
+                        }
+                    }
                 }
                 val gapCount = postGapCount
                 android.util.Log.d(
@@ -697,6 +821,38 @@ class TalkViewModel(
             if (_uiState.value.activeGroupId == groupIdHex) {
                 _uiState.update { it.copy(messages = merged, messagesLoading = false, error = null) }
             }
+
+            // Issue #183: if the repair drained the relay queue but a peer-epoch
+            // gap remains for a DM, escalate to deep peer-epoch catch-up. This
+            // is the path that addresses the original bug where strong repair
+            // alone left Android stranded behind iOS (AC1).
+            val isDm = base?.isDm == true
+            val postGap = repository.mlsStateGapCount(groupIdHex)
+            if (isDm && postGap > 0 && _uiState.value.activeGroupId == groupIdHex) {
+                runCatching {
+                    val deep = repository.deepCatchUpMlsGroup(groupIdHex)
+                    android.util.Log.i(
+                        "TalkVM",
+                        "repair source=$source group=$groupIdHex escalated to deep catch-up status=${deep?.status} unresolved=${deep?.stillUnprocessable}"
+                    )
+                    if (_uiState.value.activeGroupId == groupIdHex) {
+                        when (deep?.status) {
+                            MlsRecoveryStatus.NotRecoverable ->
+                                _uiState.update { it.copy(recoveryStatus = MlsRecoveryStatus.NotRecoverable) }
+                            MlsRecoveryStatus.Healthy,
+                            MlsRecoveryStatus.Recovering ->
+                                _uiState.update { it.copy(recoveryStatus = null) }
+                            else -> { /* leave existing banner alone on Unknown */ }
+                        }
+                    }
+                }
+            } else if (isDm && postGap == 0 &&
+                _uiState.value.activeGroupId == groupIdHex &&
+                _uiState.value.recoveryStatus == MlsRecoveryStatus.NotRecoverable
+            ) {
+                // Repair closed the gap on its own — drop a stale banner.
+                _uiState.update { it.copy(recoveryStatus = null) }
+            }
         } catch (e: Exception) {
             android.util.Log.w("TalkVM", "repair source=$source group=$groupIdHex failed: ${e.message ?: e::class.java.simpleName}")
             if (showLoading && _uiState.value.activeGroupId == groupIdHex) {
@@ -739,6 +895,17 @@ class TalkViewModel(
         viewModelScope.launch {
             try {
                 repository.ensureKeyPackagePublished()
+            } catch (_: Exception) {
+                // Non-critical.
+            }
+            // Issue #183: piggy-back a best-effort prune of the Kind-445
+            // replay cache on the same Talk-open boot-up path. Bounded by
+            // the 30-day TTL on the Rust side; safe to call on every open.
+            try {
+                val removed = repository.pruneMlsReplayCache()
+                if (removed > 0) {
+                    android.util.Log.i("TalkVM", "replayCachePrune removed=$removed (issue #183)")
+                }
             } catch (_: Exception) {
                 // Non-critical.
             }

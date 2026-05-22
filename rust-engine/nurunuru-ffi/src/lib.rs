@@ -1194,6 +1194,52 @@ impl NuruNuruClient {
             .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))
     }
 
+    /// Issue #183: replay every available Kind-445 wrapper for a group
+    /// (caller-supplied candidates + locally cached) to catch up the local
+    /// MDK epoch to the peer's epoch.
+    ///
+    /// `candidate_events_json` — raw JSON of Kind-445 events the caller just
+    /// fetched from relays. May overlap with the cache; deduped by event id.
+    ///
+    /// Returns a structured report so the app can decide whether to prompt
+    /// the user to recreate the conversation when recovery is not possible
+    /// (issue #183 AC2). Never calls clear_pending_commit /
+    /// merge_pending_commit, preserving PR #180 receive-path semantics
+    /// (AC3).
+    pub fn mls_catch_up_to_peer(
+        &self,
+        group_id_hex: String,
+        candidate_events_json: Vec<String>,
+    ) -> Result<FfiMlsCatchUpReport, NuruNuruFfiError> {
+        let report = self
+            .runtime
+            .block_on(
+                self.engine
+                    .mls_catch_up_to_peer(&group_id_hex, candidate_events_json),
+            )
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))?;
+        Ok(core_catch_up_report_to_ffi(report))
+    }
+
+    /// Issue #183: prune Kind-445 wrappers older than the 30-day TTL.
+    /// Returns the number of rows removed. Best-effort: safe to call on any
+    /// cadence (no-op when the cache file does not exist).
+    pub fn mls_prune_replay_cache(&self) -> Result<u64, NuruNuruFfiError> {
+        self.runtime
+            .block_on(self.engine.mls_prune_replay_cache())
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))
+    }
+
+    /// Issue #183 diagnostic: number of cached Kind-445 wrappers for a group.
+    pub fn mls_replay_cache_size(
+        &self,
+        group_id_hex: String,
+    ) -> Result<u64, NuruNuruFfiError> {
+        self.runtime
+            .block_on(self.engine.mls_replay_cache_size(&group_id_hex))
+            .map_err(|e| NuruNuruFfiError::EngineError(e.to_string()))
+    }
+
     // ─── Search / Feed ─────────────────────────────────────────────────────
 
     /// Full-text search (NIP-50). Returns matching event ID hex strings.
@@ -1766,6 +1812,35 @@ pub enum FfiMlsProcessResult {
     },
 }
 
+/// Issue #183: status of `mls_catch_up_to_peer`.
+#[derive(uniffi::Enum, Clone, Copy)]
+pub enum FfiMlsCatchUpStatus {
+    /// Local epoch advanced and no retryable events remain — aligned with peer.
+    Recovered,
+    /// At least one event was applied but some retryables remain.
+    /// Caller should poll relays again before escalating.
+    PartiallyRecovered,
+    /// No progress made; the missing Commit is no longer retrievable.
+    /// UI should prompt the user to recreate the conversation.
+    NotRecoverable,
+    /// The group is not present in the local MLS store.
+    NoSuchGroup,
+}
+
+/// Issue #183: structured report returned by `mls_catch_up_to_peer`.
+#[derive(uniffi::Record)]
+pub struct FfiMlsCatchUpReport {
+    pub group_id_hex: String,
+    pub epoch_before: u64,
+    pub epoch_after: u64,
+    pub candidates_considered: u32,
+    pub application_messages_applied: u32,
+    pub commits_applied: u32,
+    pub still_unprocessable: u32,
+    pub cache_hits: u32,
+    pub status: FfiMlsCatchUpStatus,
+}
+
 #[derive(uniffi::Record)]
 pub struct FfiPendingWelcome {
     /// Inner Welcome rumor (kind:444) event id — the lookup key for
@@ -1808,6 +1883,31 @@ fn core_encrypted_msg_to_ffi(
         content: data.content,
         tags: data.tags,
         ephemeral_pubkey: data.ephemeral_pubkey,
+    }
+}
+
+fn core_catch_up_report_to_ffi(
+    r: nurunuru_core::types::MlsCatchUpReport,
+) -> FfiMlsCatchUpReport {
+    FfiMlsCatchUpReport {
+        group_id_hex: r.group_id_hex,
+        epoch_before: r.epoch_before,
+        epoch_after: r.epoch_after,
+        candidates_considered: r.candidates_considered,
+        application_messages_applied: r.application_messages_applied,
+        commits_applied: r.commits_applied,
+        still_unprocessable: r.still_unprocessable,
+        cache_hits: r.cache_hits,
+        status: match r.status {
+            nurunuru_core::types::MlsCatchUpStatus::Recovered => FfiMlsCatchUpStatus::Recovered,
+            nurunuru_core::types::MlsCatchUpStatus::PartiallyRecovered => {
+                FfiMlsCatchUpStatus::PartiallyRecovered
+            }
+            nurunuru_core::types::MlsCatchUpStatus::NotRecoverable => {
+                FfiMlsCatchUpStatus::NotRecoverable
+            }
+            nurunuru_core::types::MlsCatchUpStatus::NoSuchGroup => FfiMlsCatchUpStatus::NoSuchGroup,
+        },
     }
 }
 
