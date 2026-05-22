@@ -394,6 +394,23 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun logout() {
         val app = getApplication<Application>()
+
+        // Issue #181: external-signer MLS DB key is pubkey-scoped, so we
+        // wipe it via the current pubkey BEFORE prefs.clear() forgets it.
+        // For the internal-signer path the key is derived from nsec via
+        // HKDF and not persisted, so deleteAll() / clearLocalRustDatabases()
+        // is sufficient.
+        try {
+            val currentPubkey = prefs.publicKeyHex
+            if (currentPubkey != null && currentPubkey.length == 64) {
+                io.nurunuru.app.data.MlsDbKeyStore.clearExternalKey(app, currentPubkey)
+            } else if (currentPubkey != null) {
+                // bech32 form or unexpected — wipe everything in the
+                // external keystore to be safe.
+                io.nurunuru.app.data.MlsDbKeyStore.clearAllExternalKeys(app)
+            }
+        } catch (_: Exception) { }
+
         keyManager.deleteAll()
 
         // Privacy/account isolation: Talk uses Rust MLS SQLite as its source of truth.

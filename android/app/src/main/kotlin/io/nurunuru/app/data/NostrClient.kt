@@ -60,7 +60,14 @@ class NostrClient(
                         Log.e(TAG, "Key not available from SecureKeyManager, cannot initialize Rust Client")
                         return@launch
                     }
-                    NuruNuruClient(keyHex)
+                    // Issue #181: derive the SQLCipher key via HKDF(nsec, APP_SALT)
+                    // and pass it to the *encrypted* ctor. Zeroize after handoff.
+                    val dbKey = MlsDbKeyStore.deriveInternalKey(keyHex)
+                    try {
+                        NuruNuruClient.newWithMlsDbKey(keyHex, dbKey)
+                    } finally {
+                        dbKey.fill(0)
+                    }
                 } else {
                     // Normalise pubkey to 64-char lowercase hex.
                     // prefs may store npub1... bech32 if the login flow stored it
@@ -76,11 +83,34 @@ class NostrClient(
                         Log.e(TAG, "Invalid pubkey for Rust client (len=${hexPubkey.length})")
                         return@launch
                     }
-                    NuruNuruClient.newReadOnly(hexPubkey)
+                    // External-signer path: no nsec available; use a
+                    // random pubkey-scoped key persisted in EncryptedSharedPreferences.
+                    val dbKey = MlsDbKeyStore.getOrCreateExternalKey(context, hexPubkey.lowercase())
+                    try {
+                        NuruNuruClient.newReadOnlyWithMlsDbKey(hexPubkey, dbKey)
+                    } finally {
+                        dbKey.fill(0)
+                    }
                 }
 
                 sdkClient = client
                 _isReady.value = true
+
+                // Issue #181 B7: assert the engine actually opened the MLS DB
+                // under SQLCipher. Any other state (None / false) means the
+                // encrypted bind silently fell back or never ran — refuse to
+                // proceed so a regression cannot ship plaintext to users.
+                val encState = client.mlsIsEncrypted()
+                if (encState == true) {
+                    Log.i(TAG, "MLS DB encrypted (SQLCipher) — issue #181 guard OK")
+                } else {
+                    Log.e(TAG, "MLS DB encryption check FAILED (mlsIsEncrypted=$encState) — aborting client init")
+                    sdkClient = null
+                    _isReady.value = false
+                    try { client.disconnect() } catch (_: Exception) { }
+                    return@launch
+                }
+
                 client.connect()
 
                 Log.d(TAG, "NuruNuru Rust Client connected")

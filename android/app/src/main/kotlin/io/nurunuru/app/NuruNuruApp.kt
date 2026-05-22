@@ -3,6 +3,7 @@ package io.nurunuru.app
 import android.app.Application
 import android.util.Log
 import io.nurunuru.app.data.ExternalSigner
+import io.nurunuru.app.data.MlsLegacyMigration
 import io.nurunuru.app.data.NostrClient
 import io.nurunuru.app.data.NostrKeyUtils
 import io.nurunuru.app.data.RecommendationEngine
@@ -31,6 +32,21 @@ class NuruNuruApp : Application() {
         prefs = AppPreferences(this)
         nostrCache = NostrCache(this).also { it.applySettings(prefs) }
         recommendationEngine = RecommendationEngine(this)
+
+        // Issue #181: BEFORE the engine ever opens the MLS DB, detect any
+        // legacy plaintext `nostrdb_ndb_mls.sqlite3` left by pre-#181
+        // builds and purge it. SQLCipher cannot open a plaintext file
+        // produced by an older build; without this purge, the encrypted
+        // ctor would fail and Talk would silently disable.
+        //
+        // Content-based check on every launch (not a one-shot flag) so
+        // any future regression is caught + repaired automatically.
+        try {
+            val purged = MlsLegacyMigration.purgePlaintextDbIfDetected(this)
+            if (purged) Log.w("NuruNuruApp", "MlsLegacyMigration: plaintext MLS DB purged (issue #181)")
+        } catch (e: Exception) {
+            Log.e("NuruNuruApp", "MlsLegacyMigration failed", e)
+        }
 
         // Initialise the Rust core database path once at startup.
         // Must happen before any NuruNuruClient is created.

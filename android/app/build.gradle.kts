@@ -22,10 +22,17 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(localProps["KEYSTORE_PATH"] as? String ?: "")
-            storePassword = localProps["KEYSTORE_PASSWORD"] as? String ?: ""
-            keyAlias = localProps["KEY_ALIAS"] as? String ?: ""
-            keyPassword = localProps["KEY_PASSWORD"] as? String ?: ""
+            // Only wire the release keystore when local.properties actually
+            // provides a path; otherwise debug builds on dev machines without
+            // the release keystore would fail config-time with
+            // "path may not be null or empty string".
+            val keystorePath = localProps["KEYSTORE_PATH"] as? String
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                storePassword = localProps["KEYSTORE_PASSWORD"] as? String ?: ""
+                keyAlias = localProps["KEY_ALIAS"] as? String ?: ""
+                keyPassword = localProps["KEY_PASSWORD"] as? String ?: ""
+            }
         }
     }
 
