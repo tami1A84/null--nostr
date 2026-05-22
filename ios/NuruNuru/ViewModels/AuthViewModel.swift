@@ -180,6 +180,14 @@ final class AuthViewModel {
         Task {
             await externalSigner.disconnect()
         }
+        // Issue #181: drop the per-pubkey SQLCipher key from Keychain
+        // *before* `prefs.clear()` wipes the pubkey we need to scope it.
+        // Internal-signer path is deterministic (HKDF over nsec) so no
+        // explicit key removal is needed there — `keyManager.deleteAll()`
+        // already drops the nsec, which is the root secret.
+        if let pubkey = prefs.publicKeyHex, prefs.isExternalSigner {
+            MlsDbKeyStore.clearExternalKey(pubkeyHex: pubkey)
+        }
         keyManager.deleteAll()
         prefs.clear()
         state = .loggedOut

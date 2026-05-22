@@ -49,6 +49,7 @@
 | [[features/talk-relays]] | Talk 用 KeyPackage / Welcome / message relay strategy。 |
 | [[features/talk-debugging]] | Talk/Marmot debugging guidance and raw-log handling。 |
 | [[features/talk-ios-android-parity]] | Android/iOS native Talk protocol parity checklist。 |
+| [[features/mls-db-encryption]] | MLS storage SQLite encryption (SQLCipher) — issue #181, threat model, migration. |
 | [[features/relay-management]] | NIP-65 relay list、outbox model、target relay publish、接続制限。 |
 
 ## UI / Design
@@ -95,6 +96,7 @@
 | [[decisions/adr-0006-web-rust-bridge-is-stub]] | Web Rust bridge は現状 stub。 |
 | [[decisions/adr-0007-design-crit-ritual]] | Weekly Nuru Design Crit を制度化する判断。 |
 | [[decisions/adr-0008-four-freedoms-mission]] | 4軸自由ドクトリンを長期ミッションとして起票する判断。 |
+| [[decisions/adr-0009-mls-db-encryption]] | MLS storage DB を SQLCipher で暗号化する判断 (issue #181)。 |
 
 ## Maintenance checklist for agents
 

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security (Android / iOS / Rust core) — Issue #181
+
+- Marmot / MDK の MLS DB (`*_mls.sqlite3`) を **SQLCipher 4 で暗号化** するよう変更しました。これまで端末ディスク上に **平文で書かれていた MLS の署名鍵 / 暗号鍵 / epoch key pair / KeyPackage 秘密素材** がディスク窃取で抜けるリスクを塞ぐ修正です。
+- DB 鍵の取り扱い:
+  - 自分の nsec をアプリ内保持する内部署名モード: nsec から HKDF-SHA256 で **デバイス決定論的に派生** (`derive_mls_db_key`)、永続保存は無し。
+  - 外部署名モード (Android Amber / iOS NIP-46 bunker) では、nsec を持たないため **32 byte 乱数を端末に紐づいた安全領域に保存**:
+    - Android: `EncryptedSharedPreferences` (AES256-GCM, MasterKey)。
+    - iOS: Keychain `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`、サービス `io.nurunuru.app.mls`、`isExcludedFromBackup` を MLS DB / WAL / SHM に付与し iCloud / iTunes バックアップから除外。
+- 起動時にコンテンツベースで旧平文 DB を検出し自動 purge する `MlsLegacyMigration` を Android / iOS 双方に追加。WAL / SHM / journal サイドカーも一緒に削除します。
+- FFI に `mls_is_encrypted()` を追加し、暗号化されていなければ起動を hard-fail させる guard を `NostrClient.connect()` (Android) と `NuruNuruFFILiveClient.assertEncrypted()` (iOS) に挟みました。ログには `MLS DB encrypted (SQLCipher) — issue #181 guard OK` が必ず出ます。
+- CI lint guard `npm run lint:issue-181` を追加し、unkeyed な `NuruNuruClient(secretKeyHex:)` / `newReadOnly(pubkeyHex:)` の再導入を block します。
+- 詳細: [`docs/wiki/features/mls-db-encryption.md`](docs/wiki/features/mls-db-encryption.md) / [`docs/wiki/decisions/adr-0009-mls-db-encryption.md`](docs/wiki/decisions/adr-0009-mls-db-encryption.md)
+
+### Upgrade notes — Issue #181
+
+**⚠️ アップグレード時に Talk グループの暗号状態 (MLS state) が一度クリアされ、過去のメッセージ履歴は復号できなくなります。** 旧バージョンの平文 DB はセキュリティ上残せないため、起動時に自動削除されるためです。
+
+- アップグレード後の挙動:
+  - 既存のグループ ID は relay 側にあるため一覧自体は見えます。
+  - グループ内の過去メッセージは復号できません。新規メッセージから順に表示されます。
+  - 既存メンバーが KeyPackage rotation を待たずに会話を継続するには、グループから再招待を受ける必要があります。
+- KeyPackage 鍵自体は新規 SQLCipher DB で再生成・再 publish されます (`publishKeyPackage: published kind=30443`)。
+- 平文 DB が存在しないクリーンインストールでは影響ありません。
+- npub / nsec 自体には影響ありません — それらは引き続き旧来どおり Keychain / EncryptedSharedPreferences に保存されています。
+
+### Known issues (Talk — separate from #181)
+
+- iOS の MDK epoch が Android より先行している既存環境では、iOS が送った kind:445 メッセージが Android 側で `state_not_ready` として retry queue に滞留することがあります (PR #180 由来の MDK 振る舞いで、Issue #181 の暗号化対応とは独立)。Android で Talk タブを開き直すか、グループを再選択することで `fetchMlsMessages` の `repairFull` 経路が走り、追従できる場合があります。継続調査中。
+
 ## [1.5.0] - 2026-05-17
 
 ### Added (Web)

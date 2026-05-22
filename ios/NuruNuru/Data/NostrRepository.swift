@@ -174,37 +174,51 @@ actor NostrRepository {
         let dbPath = dbPathURL.path
         AppLogger.log("FFI", "ensureMlsClient: dbPath=\(dbPath)")
 
+        // Issue #181 M5: purge any pre-#181 plaintext MLS DB *before* we let
+        // Rust open a handle to it. Content-based detection (B2) — runs every
+        // launch so future regressions can't lock users out permanently.
+        MlsLegacyMigration.purgePlaintextDbIfDetected(dbDirectoryPath: dbPath)
+
         do {
+            let ffi: MlsFFILiveClient
+            let accountPubkey: String
+
             if prefs.isExternalSigner {
                 guard let pubkey = prefs.publicKeyHex else {
                     AppLogger.log("FFI", "ensureMlsClient: missing publicKeyHex for external signer")
                     return nil
                 }
-                let ffi = try MlsFFILiveClient(pubkeyHex: pubkey, dbPath: dbPath)
-                ffi.connect()
-                self.mlsClient = ffi
-                Self.sharedFfiLock.lock()
-                Self.sharedMlsClient = ffi
-                Self.sharedMlsAccountPubkey = pubkey.lowercased()
-                Self.sharedFfiLock.unlock()
-                AppLogger.log("FFI", "ensureMlsClient: initialized read-only FFI account=\(String(pubkey.prefix(8)))… + connected")
-                return ffi
+                // Issue #181: random 32-byte key, scoped to pubkey, stored in
+                // Keychain (kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly).
+                // Lock-guarded inside MlsDbKeyStore (B4 race).
+                var dbKey = try MlsDbKeyStore.getOrCreateExternalKey(pubkeyHex: pubkey)
+                // MlsFFILiveClient zeroizes `dbKey` via `inout` after FFI hand-off (B3).
+                ffi = try MlsFFILiveClient(pubkeyHex: pubkey, dbPath: dbPath, mlsDbKey: &dbKey)
+                accountPubkey = pubkey
             } else {
                 guard let keyHex = keyManager.getKeyHexTemporary() else {
                     AppLogger.log("FFI", "ensureMlsClient: secret key is not unlocked")
                     return nil
                 }
-                let ffi = try MlsFFILiveClient(secretKeyHex: keyHex, dbPath: dbPath)
-                ffi.connect()
-                let accountPubkey = keyManager.getStoredPublicKeyHex() ?? requestedPubkey ?? ""
-                self.mlsClient = ffi
-                Self.sharedFfiLock.lock()
-                Self.sharedMlsClient = ffi
-                Self.sharedMlsAccountPubkey = accountPubkey.lowercased()
-                Self.sharedFfiLock.unlock()
-                AppLogger.log("FFI", "ensureMlsClient: initialized full FFI account=\(String(accountPubkey.prefix(8)))… + connected")
-                return ffi
+                // Deterministic HKDF-SHA256 over the nsec — no persistence
+                // required, regenerable as long as the user has their nsec.
+                var dbKey = try MlsDbKeyStore.deriveInternalKey(secretKeyHex: keyHex)
+                ffi = try MlsFFILiveClient(secretKeyHex: keyHex, dbPath: dbPath, mlsDbKey: &dbKey)
+                accountPubkey = keyManager.getStoredPublicKeyHex() ?? requestedPubkey ?? ""
             }
+
+            // Issue #181 M6: exclude DB + WAL/SHM from iCloud/iTunes backup.
+            // A restored device with no Keychain entry could not decrypt them.
+            MlsLegacyMigration.excludeMlsDbFromBackup(dbDirectoryPath: dbPath)
+
+            ffi.connect()
+            self.mlsClient = ffi
+            Self.sharedFfiLock.lock()
+            Self.sharedMlsClient = ffi
+            Self.sharedMlsAccountPubkey = accountPubkey.lowercased()
+            Self.sharedFfiLock.unlock()
+            AppLogger.log("FFI", "ensureMlsClient: initialized \(prefs.isExternalSigner ? "read-only" : "full") FFI account=\(String(accountPubkey.prefix(8)))… + connected (MLS DB encrypted)")
+            return ffi
         } catch {
             AppLogger.log("FFI", "ensureMlsClient failed: \(error)")
             return nil
