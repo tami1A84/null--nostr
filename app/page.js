@@ -7,6 +7,7 @@ import BottomNav from '@/components/BottomNav'
 import HomeTab from '@/components/HomeTab'
 import TalkTab from '@/components/TalkTab'
 import TimelineTab from '@/components/TimelineTab'
+import NewsTab from '@/components/NewsTab'
 import MiniAppTab from '@/components/MiniAppTab'
 import { loadPubkey, clearPubkey, getLoginMethod, getAutoSignEnabled, startBackgroundPrefetch, clearPrefetchPromises, restoreStoredPrivateKey, clearStoredPrivateKey, getPrivateKeyHex, nip19, hexToBytes } from '@/lib/nostr'
 import { initCache } from '@/lib/cache'
@@ -53,8 +54,17 @@ const navItems = [
     )
   },
   {
+    id: 'news',
+    label: 'ニュース',
+    icon: (active) => (
+      <svg className="w-7 h-7" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 1.8}>
+        {active ? <path d="M4 4h14a2 2 0 012 2v14l-4-2H4a2 2 0 01-2-2V6a2 2 0 012-2zm3 4v2h10V8H7zm0 4v2h8v-2H7z"/> : <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h14a2 2 0 012 2v14l-4-2H4a2 2 0 01-2-2V6a2 2 0 012-2zM7 8h10M7 12h8"/>}
+      </svg>
+    )
+  },
+  {
     id: 'miniapp',
-    label: 'ミニアプリ',
+    label: 'ミニ',
     icon: (active) => (
       <svg className="w-7 h-7" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 1.8}>
         {active ? (
@@ -82,6 +92,7 @@ export default function Home() {
   const timelineContainerRef = useRef(null)
   const homeContainerRef = useRef(null)
   const talkContainerRef = useRef(null)
+  const newsContainerRef = useRef(null)
   const miniappContainerRef = useRef(null)
 
   // Detect desktop/mobile
@@ -266,6 +277,9 @@ export default function Home() {
           talkRef.current?.refresh?.()
           talkContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
           break
+        case 'news':
+          newsContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+          break
         case 'miniapp':
           miniappContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
           break
@@ -440,6 +454,17 @@ export default function Home() {
           </div>
         )}
         
+        {/* News - render when active */}
+        {activeTab === 'news' && (
+          <div
+            ref={newsContainerRef}
+            className="fixed inset-0 lg:left-[240px] xl:left-[280px] bottom-16 lg:bottom-0 overflow-y-auto"
+            style={{ zIndex: 1 }}
+          >
+            <NewsTab />
+          </div>
+        )}
+
         {/* MiniApp - only render when active (settings don't need prefetch) */}
         {activeTab === 'miniapp' && (
           <div

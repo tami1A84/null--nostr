@@ -10,7 +10,7 @@ This directory stores lightweight Architecture Decision Records (ADRs). Use ADRs
 |---|---|
 | [[adr-0001-ios-observation]] | iOS ViewModels use iOS 17+ Observation. |
 | [[adr-0002-native-talk-uses-marmot-mls]] | Native Talk is Marmot MLS-oriented; NIP-17 is legacy/compatibility. |
-| [[adr-0003-ios-external-signing-uses-nip46]] | iOS external signing uses NIP-46, not NIP-55. |
+| [[adr-0003-ios-external-signing-uses-nip46]] | Superseded historical decision: iOS external signing used NIP-46, not NIP-55. |
 | [[adr-0004-design-tokens-are-source-of-truth]] | Design tokens are source of truth for generated constants. |
 | [[adr-0005-postactions-no-reply-button]] | PostActions has no reply button and may include optional bookmark. |
 | [[adr-0006-web-rust-bridge-is-stub]] | Web Rust bridge is currently stubbed; Web Nostr operations use JS modules. |
@@ -29,6 +29,9 @@ This directory stores lightweight Architecture Decision Records (ADRs). Use ADRs
 | [[adr-0019-ios-rust-ffi-write-path]] | iOS Rust FFI write-path migration starts from keygen/sign/publish contracts. |
 | [[adr-0020-safe-starter-graph]] | Safe starter graph for first Home experience without reintroducing relay-wide feeds. |
 | [[adr-0021-open-speech-scoped-reach]] | Open speech with scoped reach, relationship-scoped primary surfaces, and native posting parity. |
+| [[adr-0022-ios-four-tab-navigation]] | iOS root navigation is ホーム / トーク / タイムライン / ミニアプリ. |
+| [[adr-0023-ios-remove-nip46-signer]] | iOS NIP-46 signer is removed; use internal nsec/Keychain or Passkey/Nosskey. |
+| [[adr-0024-ios-startup-relay-connection-dedupe]] | Proposed startup relay connection dedupe for iOS. |
 
 ## ADR convention
 

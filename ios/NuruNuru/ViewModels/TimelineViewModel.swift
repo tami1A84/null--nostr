@@ -86,14 +86,44 @@ final class TimelineViewModel {
         // iOS: nonisolated メソッドで同期的にキャッシュ読み取り → isLoading 解除。
         let cachedFollows = repository.getCachedFollowList(pubkey: pubkeyHex)
 
-        // Network-first timeline: event cache is fallback-only and must not be
-        // mixed into the normal time axis. Profile/follow-list caches remain OK.
-        isRelayLoading = true
-        isFollowingLoading = true
+        let cachedGlobalPosts = Self.cachedScoredPosts(
+            from: repository.getCachedGlobalTimeline(),
+            repository: repository
+        )
+        let cachedFollowingPosts = Self.cachedScoredPosts(
+            from: repository.getCachedFollowingTimeline(),
+            repository: repository
+        )
+
+        relayPosts = cachedGlobalPosts
+        followingPosts = cachedFollowingPosts
+        relayPageCursor = olderCursor(for: cachedGlobalPosts)
+        followingPageCursor = olderCursor(for: cachedFollowingPosts)
+
+        // Local-first: show the last good timeline immediately and refresh relays
+        // in the background. Skeletons are shown only on a truly cold cache.
+        isRelayLoading = cachedGlobalPosts.isEmpty
+        isFollowingLoading = cachedFollowingPosts.isEmpty
         if let follows = cachedFollows, !follows.isEmpty {
             followList = follows
         }
 
+    }
+
+
+    private static func cachedScoredPosts(from events: [NostrEvent], repository: NostrRepository) -> [ScoredPost] {
+        let displayKinds = Set([NostrKind.textNote, NostrKind.longForm])
+        var seen = Set<String>()
+        return events
+            .filter { displayKinds.contains($0.kind) }
+            .sorted { $0.createdAt > $1.createdAt }
+            .filter { seen.insert($0.id).inserted }
+            .prefix(80)
+            .map { event in
+                let post = ScoredPost(event: event)
+                post.profile = repository.getCachedProfile(pubkey: event.pubkey)
+                return post
+            }
     }
 
     /// Starts network work for the retained ViewModel instance.
@@ -110,18 +140,18 @@ final class TimelineViewModel {
             await loadFreshData()
 
             Task {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
                 savedRelayUrls = await repository.getSavedRelayUrls()
-                for url in savedRelayUrls.prefix(3) {
+                for url in savedRelayUrls.prefix(2) {
                     Task { await repository.prefetchRelayTimeline(url) }
                 }
 
+                // NIP-65 can expand selectedRelays substantially. Keep it out of the
+                // first startup minute; compact relays are enough for first paint.
+                try? await Task.sleep(nanoseconds: 82_000_000_000)
                 await repository.syncNip65Relays()
                 savedRelayUrls = await repository.getSavedRelayUrls()
-                for url in savedRelayUrls.prefix(3) {
-                    Task { await repository.prefetchRelayTimeline(url) }
-                }
-                AppLogger.log("Timeline", "NIP-65 sync complete — relays: \(savedRelayUrls)")
+                AppLogger.log("Timeline", "NIP-65 sync complete — relays saved=\(savedRelayUrls.count)")
             }
         }
     }
@@ -145,7 +175,10 @@ final class TimelineViewModel {
         let initialFollowList = followList
         AppLogger.log("Timeline", "Using cached follow list for first paint: \(initialFollowList.count) follows")
         if !initialFollowList.isEmpty {
-            Task { await repository.prefetchProfilesAndBadges(pubkeys: initialFollowList) }
+            Task {
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                await repository.prefetchProfilesAndBadges(pubkeys: initialFollowList, limit: 24)
+            }
         }
 
         // フォロー表示を優先しつつ、リレー取得は fast path で並列先行開始。
@@ -185,7 +218,10 @@ final class TimelineViewModel {
             guard !freshFollows.isEmpty, freshFollows != initialFollowList else { return }
             followList = freshFollows
             AppLogger.log("Timeline", "Fresh follow list applied: \(freshFollows.count) follows")
-            Task { await repository.prefetchProfilesAndBadges(pubkeys: freshFollows) }
+            Task {
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                await repository.prefetchProfilesAndBadges(pubkeys: freshFollows, limit: 24)
+            }
             await restartFollowingLiveTimeline()
             let refreshed = await repository.fetchFollowingTimelineFast(authors: freshFollows)
             if !refreshed.isEmpty {
@@ -307,7 +343,7 @@ final class TimelineViewModel {
 
         // 2. 未取得分のみリレーからフェッチ（Android: missing リストのみ fetch に対応）
         if !missingPubkeys.isEmpty {
-            let fetched = await repository.fetchProfiles(pubkeys: missingPubkeys)
+            let fetched = await repository.fetchProfiles(pubkeys: Array(missingPubkeys.prefix(24)))
             for p in fetched { profileMap[p.pubkey] = p }
             for post in posts {
                 if let p = profileMap[post.event.pubkey] { post.profile = p }
@@ -484,7 +520,17 @@ final class TimelineViewModel {
             NotificationCenter.default.post(name: .nuruHomeLikedPost, object: nil, userInfo: ["event": post.event])
         }
         do {
-            try await repository.publishReaction(to: post.event.id, authorPubkey: post.event.pubkey)
+            if wasLiked {
+                if let likeId = post.myLikeEventId {
+                    try await repository.publishDelete(eventId: likeId)
+                    post.myLikeEventId = nil
+                } else {
+                    throw NSError(domain: "NuruNuru", code: 1, userInfo: [NSLocalizedDescriptionKey: "リアクションイベントが見つかりません"])
+                }
+            } else {
+                let likeEvent = try await repository.publishReaction(to: post.event.id, authorPubkey: post.event.pubkey)
+                post.myLikeEventId = likeEvent.id
+            }
         } catch {
             post.isLiked   = wasLiked
             post.likeCount += wasLiked ? 1 : -1

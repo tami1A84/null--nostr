@@ -20,7 +20,7 @@ NIP-04 appears in code as a legacy encryption/signing compatibility path. Newer 
 
 ### iOS
 
-- iOS signer/bridge files should be checked before adding new NIP-04 UI claims; current main external signer direction is NIP-46 and main Talk direction is Marmot MLS.
+- iOS signer/bridge files should be checked before adding new NIP-04 UI claims; iOS NIP-46 signer is removed by ADR-0023 and main Talk direction is Marmot MLS.
 
 ### Web
 

@@ -219,16 +219,26 @@ final class HomeViewModel {
             AppLogger.log("HomeVM", "Cache-first: showing cached liked posts — count=\(cachedLikes.count)")
         }
 
+        // Wait for the compact startup pool before launching Home's remote refresh.
+        // Home is kept alive in MainTabView, so without this gate profile/badges/notes/likes
+        // all raced the initial connect and produced a large fetchRecovery join storm.
+        await repository.ensureRelayConnections(reason: .homeInitial, waitForUsable: true)
+
         // グレース期間チェック（プロフィール編集直後はリレーデータで上書きしない）
         let inGracePeriod = isOwnProfile && repository.isProfileInGracePeriod(pubkey: targetPubkeyHex)
 
-        // Profile, follow list, and badges in parallel — mirrors Android HomeViewModel async { }
+        // Profile and follow list are the only Home data needed for the header first.
+        // Badges and post/like tabs are refreshed after the header is usable.
         async let profileTask = repository.fetchProfile(pubkey: targetPubkeyHex)
         async let followTask  = repository.fetchFollowList(pubkey: targetPubkeyHex)
-        async let badgesTask  = repository.fetchBadges(pubkeyHex: targetPubkeyHex)
 
-        let (p, follows, badges) = await (profileTask, followTask, badgesTask)
-        badgeUrls = badges.compactMap { $0.imageUrl }
+        let (p, follows) = await (profileTask, followTask)
+        Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            let badges = await repository.fetchBadges(pubkeyHex: targetPubkeyHex)
+            await MainActor.run { self.badgeUrls = badges.compactMap { $0.imageUrl } }
+        }
 
         AppLogger.log("HomeVM", "fetchProfile result — banner=\(p?.banner ?? "nil"), name=\(p?.name ?? "nil")")
 
@@ -264,40 +274,49 @@ final class HomeViewModel {
         followCount = follows.count
         isLoading   = false   // show profile now; posts load below
 
-        // Posts と likes を並列取得（Android: async { } で並列に対応）
-        async let postsTask   = repository.fetchUserNotes(pubkey: targetPubkeyHex)
-        async let likedTask   = repository.fetchLikedEvents(pubkey: targetPubkeyHex)
-        let (postsEvents, likedEvents) = await (postsTask, likedTask)
-        var resolvedPosts = mergePendingPosts(into: postsEvents.map { ScoredPost(event: $0) })
-        var resolvedLikedPosts = mergePendingLikes(into: likedEvents.map { ScoredPost(event: $0) })
+        Task { [weak self] in
+            guard let self else { return }
+            // Defer heavier Home tabs until after first paint / compact relay warmup.
+            // Pull-to-refresh still calls `refresh()` and updates immediately.
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            async let postsTask = repository.fetchUserNotes(pubkey: targetPubkeyHex)
+            async let likedTask = repository.fetchLikedEvents(pubkey: targetPubkeyHex)
+            let (postsEvents, likedEvents) = await (postsTask, likedTask)
+            await MainActor.run {
+                let resolvedPosts = self.mergePendingPosts(into: postsEvents.map { ScoredPost(event: $0) })
+                let resolvedLikedPosts = self.mergePendingLikes(into: likedEvents.map { ScoredPost(event: $0) })
 
-        if !resolvedPosts.isEmpty || posts.isEmpty {
-            posts = resolvedPosts
-            Task { [weak self, resolvedPosts] in
-                guard let self else { return }
-                var withQuotes = resolvedPosts
-                await repository.resolveQuotedPosts(&withQuotes)
-                let mergedWithPending = await MainActor.run { self.mergePendingPosts(into: withQuotes) }
-                if await MainActor.run(body: { self.samePostIds(self.posts, resolvedPosts) || self.samePostIds(self.posts, mergedWithPending) }) {
-                    await MainActor.run { self.posts = mergedWithPending }
+                if !resolvedPosts.isEmpty || self.posts.isEmpty {
+                    self.posts = resolvedPosts
+                    Task { [weak self, resolvedPosts] in
+                        guard let self else { return }
+                        var withQuotes = resolvedPosts
+                        await repository.resolveQuotedPosts(&withQuotes)
+                        let mergedWithPending = await MainActor.run { self.mergePendingPosts(into: withQuotes) }
+                        if await MainActor.run(body: { self.samePostIds(self.posts, resolvedPosts) || self.samePostIds(self.posts, mergedWithPending) }) {
+                            await MainActor.run { self.posts = mergedWithPending }
+                        }
+                    }
+                } else {
+                    AppLogger.log("HomeVM", "Keeping existing posts because refresh returned 0 events")
+                }
+
+                if !resolvedLikedPosts.isEmpty || self.likedPosts.isEmpty {
+                    self.likedPosts = resolvedLikedPosts
+                    Task { [weak self, resolvedLikedPosts] in
+                        guard let self else { return }
+                        var withQuotes = resolvedLikedPosts
+                        await repository.resolveQuotedPosts(&withQuotes)
+                        let mergedWithPending = await MainActor.run { self.mergePendingLikes(into: withQuotes) }
+                        if await MainActor.run(body: { self.samePostIds(self.likedPosts, resolvedLikedPosts) || self.samePostIds(self.likedPosts, mergedWithPending) }) {
+                            await MainActor.run { self.likedPosts = mergedWithPending }
+                        }
+                    }
+                } else {
+                    AppLogger.log("HomeVM", "Keeping existing liked posts because refresh returned 0 events")
                 }
             }
-        } else {
-            AppLogger.log("HomeVM", "Keeping existing posts because refresh returned 0 events")
-        }
-        if !resolvedLikedPosts.isEmpty || likedPosts.isEmpty {
-            likedPosts = resolvedLikedPosts
-            Task { [weak self, resolvedLikedPosts] in
-                guard let self else { return }
-                var withQuotes = resolvedLikedPosts
-                await repository.resolveQuotedPosts(&withQuotes)
-                let mergedWithPending = await MainActor.run { self.mergePendingLikes(into: withQuotes) }
-                if await MainActor.run(body: { self.samePostIds(self.likedPosts, resolvedLikedPosts) || self.samePostIds(self.likedPosts, mergedWithPending) }) {
-                    await MainActor.run { self.likedPosts = mergedWithPending }
-                }
-            }
-        } else {
-            AppLogger.log("HomeVM", "Keeping existing liked posts because refresh returned 0 events")
+            await enrichProfiles()
         }
 
         // Determine isFollowing for other users.
@@ -309,7 +328,8 @@ final class HomeViewModel {
             myFollowList = follows
         }
 
-        // NIP-05 検証 + プロフィールエンリッチメントを並列で実行（バックグラウンド）
+        // NIP-05 検証はバックグラウンド。投稿一覧のプロフィール/バッジ enrich は
+        // deferred Home tab refresh 側で行う。
         let fetchedProfile = p
         Task {
             if let nip05 = fetchedProfile?.nip05, !nip05.isEmpty {
@@ -317,8 +337,6 @@ final class HomeViewModel {
                 isNip05Verified = (resolvedPubkey == targetPubkeyHex)
             }
         }
-        // プロフィールエンリッチメント（1回のみ、重複回避）
-        await enrichProfiles()
     }
 
     private func samePostIds(_ lhs: [ScoredPost], _ rhs: [ScoredPost]) -> Bool {
@@ -355,9 +373,10 @@ final class HomeViewModel {
             likedPosts = likedPosts
         }
 
-        // 2. 未取得分のみリレーからフェッチ
+        // 2. 未取得分のみリレーからフェッチ。ただし Home は起動時も keep-alive で
+        // 走るため、初回 enrich では上限をかける。
         if !missingPubkeys.isEmpty {
-            let fetched = await repository.fetchProfiles(pubkeys: missingPubkeys)
+            let fetched = await repository.fetchProfiles(pubkeys: Array(missingPubkeys.prefix(16)))
             for p in fetched { profileMap[p.pubkey] = p }
             for post in all {
                 if let p = profileMap[post.event.pubkey] { post.profile = p }
@@ -366,26 +385,18 @@ final class HomeViewModel {
             likedPosts = likedPosts
         }
 
-        // 3. NIP-05 検証状態と NIP-58 バッジを投稿一覧へ反映
-        let authors = Array(Set(all.map { $0.event.pubkey }))
-        var verificationMap: [String: Bool] = [:]
+        // 3. Post-list badges are cache-only during Home enrichment. Full badge
+        // resolution is done by profile/settings surfaces, not launch-time Home lists.
         var badgeMap: [String: [String]] = [:]
-
-        for author in authors {
-            if let nip05 = profileMap[author]?.nip05, !nip05.isEmpty {
-                let resolved = await repository.resolveNip05(nip05)
-                verificationMap[author] = (resolved == author)
-            } else {
-                verificationMap[author] = false
+        for author in Set(all.map { $0.event.pubkey }) {
+            if let cached = repository.getCachedBadgeUrls(pubkey: author) {
+                badgeMap[author] = cached
             }
-
-            let badges = await repository.fetchBadges(pubkeyHex: author)
-            badgeMap[author] = badges.compactMap { $0.imageUrl }
         }
 
         for post in all {
             let author = post.event.pubkey
-            post.isVerified = verificationMap[author] ?? false
+            post.isVerified = false
             post.badges = badgeMap[author] ?? []
         }
 

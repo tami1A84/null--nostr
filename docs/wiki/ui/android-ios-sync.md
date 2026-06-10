@@ -16,13 +16,19 @@ Android と iOS は LINE 風 UI を platform native に実装しつつ、見た�
 ### Navigation
 
 - iOS tab bar は `.safeAreaInset(edge: .bottom, spacing: 0)`。
-- Bottom nav は 5 tabs: ホーム / トーク / ろくなな / タイムライン / ミニアプリ。
-- Bottom nav icons は `house` / `message` / `67` / `newspaper` / `square.grid.2x2`。
+- Bottom nav target is 4 tabs: ホーム / トーク / タイムライン / ミニアプリ.
+- Bottom nav icons are `house` / `message` / `newspaper` (or shared Timeline glyph) / `square.grid.2x2`. No `67` or News root icon in the iOS zero-base target.
 - Home icon に `person.crop.circle` を使わない。
 
 
 
 
+
+### News surface
+
+- As of ADR-0022, News is **not** an iOS root tab.
+- Existing News implementation/docs are treated as feature/history or future non-root surface until a new ADR restores it.
+- If News is retained later, category tabs remain トップ / 国内 / エンタメ / スポーツ / 経済 / テック / Nostr and ranking tab remains absent unless re-decided.
 
 ### Home renewal two-layer structure (2026-06-02)
 

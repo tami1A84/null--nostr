@@ -822,16 +822,16 @@ import Foundation
         // If catch-up succeeds, merge it; if it fails/times out, let mlsCreateMessage()
         // decide whether the current MDK state can actually send.
         do {
-            let caughtUp = try await withTimeout(seconds: 12.0) {
+            let caughtUp = try await withTimeout(seconds: 3.0) {
                 try await self.repository.fetchMlsMessages(groupIdHex: group.groupIdHex, repairFull: false)
             }
             let merged = dedupeMessages(messages + caughtUp)
             if shouldReplaceMessages(current: messages, incoming: merged) {
                 messages = merged
             }
-            AppLogger.log("MLS", "TalkVM.sendMessage preflight catchup best-effort ok group=\(group.groupIdHex) messages=\(caughtUp.count) peer=\(caughtUp.filter { $0.senderPubkey != self.myPubkeyHex }.count)")
+            AppLogger.log("MLS", "TalkVM.sendMessage fast preflight catchup ok group=\(group.groupIdHex) messages=\(caughtUp.count) peer=\(caughtUp.filter { $0.senderPubkey != self.myPubkeyHex }.count)")
         } catch {
-            AppLogger.log("MLS", "TalkVM.sendMessage preflight catchup best-effort ignored group=\(group.groupIdHex) err=\(normalizeMlsError(error, fallback: "catchup_failed"))")
+            AppLogger.log("MLS", "TalkVM.sendMessage fast preflight catchup ignored group=\(group.groupIdHex) err=\(normalizeMlsError(error, fallback: "catchup_failed"))")
         }
 
         if group.isDm, await repository.hasMlsStateGaps(groupIdHex: group.groupIdHex) {

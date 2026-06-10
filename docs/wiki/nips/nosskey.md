@@ -150,7 +150,7 @@ prompt and zeroized after use.
 | Cache TTL | 60 min | 5 min | 5 min |
 | RP ID | `location.host` (auto) | `"www.nullnull.app"` | `"www.nullnull.app"` |
 | Sign-up step count | 5 (skip backup) | 5 (skip backup) | 5 (skip backup) |
-| Fallback | nostr-login extension | nsec / NIP-46 | nsec / NIP-55 (Amber) |
+| Fallback | nostr-login extension / Web NIP-46 where enabled | nsec import; NIP-46 signer removed by ADR-0023 | nsec / NIP-55 (Amber) |
 
 ## Source references
 
@@ -191,7 +191,7 @@ prompt and zeroized after use.
 
 - [[../features/onboarding|features/onboarding]] — 5-step passkey sign-up wizard
   with tutorial post step.
-- [[nip-46|NIP-46: Nostr Connect]] — Web/iOS external signing path.
+- [[nip-46|NIP-46: Nostr Connect]] — Web NIP-46 path; iOS signer removed by ADR-0023.
 - [[../decisions/adr-0010-passkey-prf-direct-method|ADR-0010]] — why we chose
   the PRF Direct Method over an encryption/decryption Passkey scheme.
 

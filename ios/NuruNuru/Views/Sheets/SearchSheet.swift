@@ -359,13 +359,18 @@ struct SearchSheet: View {
         let events = await performSearch(parsed: parsed, rawQuery: q)
         let scored  = events.map { ScoredPost(event: $0) }
 
-        // Enrich profiles
+        // Cache-first profiles for instant result rendering; fresh profiles fill gaps.
         let pubkeys  = Array(Set(events.map { $0.pubkey }))
-        let profiles = await repository.fetchProfiles(pubkeys: pubkeys)
-        let profileMap: [String: UserProfile] = Dictionary(
-            profiles.map { ($0.pubkey, $0) },
-            uniquingKeysWith: { a, _ in a }
+        var profileMap: [String: UserProfile] = Dictionary(
+            uniqueKeysWithValues: pubkeys.compactMap { pk in
+                repository.getCachedProfile(pubkey: pk).map { (pk, $0) }
+            }
         )
+        let missing = pubkeys.filter { profileMap[$0] == nil }
+        if !missing.isEmpty {
+            let profiles = await repository.fetchProfiles(pubkeys: missing)
+            for p in profiles { profileMap[p.pubkey] = p }
+        }
         scored.forEach { $0.profile = profileMap[$0.event.pubkey] }
 
         // Client-side filters from ParsedQuery
@@ -407,7 +412,7 @@ struct SearchSheet: View {
 
         results     = filtered
         isSearching = false
-        AppLogger.log("Search", "doSearch complete q=\(q) events=\(events.count) results=\(filtered.count) profiles=0")
+        AppLogger.log("Search", "doSearch complete q=\(q) events=\(events.count) results=\(filtered.count) profiles=\(profileMap.count)")
 
         // Save to recent
         var recent = recentSearches.filter { $0 != q }

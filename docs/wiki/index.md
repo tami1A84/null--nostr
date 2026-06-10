@@ -57,6 +57,9 @@
 |---|---|
 | [[decisions/adr-0020-safe-starter-graph]] | 初回 Home の空白離脱を避ける safe starter graph。任意リレー生フィードを復活させず、公式/ぬるる/日本語 starter accounts を安全候補として扱う Proposed ADR。 |
 | [[decisions/adr-0021-open-speech-scoped-reach]] | 言論の自由を発言 / 公開 / 退出として守り、主要 UI の到達範囲は関係性で絞る。iOS / Android / Web の投稿 parity を維持する Accepted ADR。 |
+| [[decisions/adr-0022-ios-four-tab-navigation]] | iOS root navigation を ホーム / トーク / タイムライン / ミニアプリ に固定する Accepted ADR。 |
+| [[decisions/adr-0023-ios-remove-nip46-signer]] | iOS NIP-46 signer を廃止し、internal nsec/Keychain と Passkey/Nosskey に整理する Accepted ADR。 |
+| [[decisions/adr-0024-ios-startup-relay-connection-dedupe]] | iOS startup relay connection の in-flight dedupe を導入する Proposed ADR。 |
 
 ## Quality / Release
 
@@ -72,6 +75,7 @@
 | [[platforms/web]] | Next.js PWA、Web レイヤー、セキュリティ、接続管理。 |
 | [[platforms/android]] | Kotlin / Jetpack Compose / Rust FFI を使う Android 実装。 |
 | [[platforms/ios]] | SwiftUI / Observation / Keychain / pixel-perfect sync 方針。 |
+| [[platforms/ios-phase0-audit]] | iOS Phase 0 audit: 4tab, NIP-46 signer removal, startup relay dedupe. |
 | [[platforms/rust-engine]] | `nurunuru-core`、UniFFI、Android/iOS/Desktop 連携。 |
 | [[platforms/parity-matrix]] | Web / Android / iOS / Rust の機能・protocol parity matrix。 |
 
@@ -137,7 +141,7 @@
 | [[decisions/_template]] | 新規 ADR を起票するためのテンプレート。 |
 | [[decisions/adr-0001-ios-observation]] | iOS ViewModel に iOS 17+ Observation を使う判断。 |
 | [[decisions/adr-0002-native-talk-uses-marmot-mls]] | Native Talk は Marmot MLS 中心。 |
-| [[decisions/adr-0003-ios-external-signing-uses-nip46]] | iOS external signing は NIP-46。 |
+| [[decisions/adr-0003-ios-external-signing-uses-nip46]] | Superseded: iOS external signing used NIP-46 before ADR-0023. |
 | [[decisions/adr-0004-design-tokens-are-source-of-truth]] | Design tokens を source of truth とする判断。 |
 | [[decisions/adr-0005-postactions-no-reply-button]] | PostActions に reply button を置かない判断。 |
 | [[decisions/adr-0006-web-rust-bridge-is-stub]] | Web Rust bridge は現状 stub。 |
@@ -151,10 +155,13 @@
 | [[decisions/adr-0014-local-first-product-metrics]] | local-first metrics 実装は6月 Phase 1では見送り。実機 manual QA を一次情報としてオンボーディング改善を回す判断。 |
 | [[decisions/adr-0013-relay-feed-removal]] | スパム・違法コンテンツ流入経路になったリレーフィードを主要UIから削除し、リレー設定/投稿/検索用途は維持する判断。 |
 | [[decisions/adr-0018-rokunana-root-tab-removal]] | ろくななは root tab から外し、6月は UI 移設せずコードだけリポジトリに dead-but-preserved として残す。 |
-| [[decisions/adr-0019-ios-rust-ffi-write-path]] | iOS Rust FFI write-path migration starts from keygen/sign/publish contracts; NIP-46/Passkey remain platform signer paths. |
+| [[decisions/adr-0019-ios-rust-ffi-write-path]] | iOS Rust FFI write-path migration starts from keygen/sign/publish contracts; Passkey/Nosskey remains platform signer path and NIP-46 signer is superseded by ADR-0023. |
 | [[decisions/adr-0017-nip-5a-mini-apps]] | NIP-5A ミニアプリを WebView/static-site として安全に起動する manifest / permission 境界。 |
 | [[decisions/adr-0016-news-curation-model]] | ニュースタブは NIP-23 + NIP-32 を 2-hop 信頼グラフで発見・表示する。 |
 | [[decisions/adr-0021-open-speech-scoped-reach]] | Open speech with scoped reach。発言権と表示 / 到達権を分け、ネイティブ投稿 parity を維持する判断。 |
+| [[decisions/adr-0022-ios-four-tab-navigation]] | iOS root navigation は ホーム / トーク / タイムライン / ミニアプリ。 |
+| [[decisions/adr-0023-ios-remove-nip46-signer]] | iOS NIP-46 signer を廃止。 |
+| [[decisions/adr-0024-ios-startup-relay-connection-dedupe]] | iOS startup relay connection dedupe。 |
 
 ## Maintenance checklist for agents
 

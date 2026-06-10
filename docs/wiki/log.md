@@ -1,3 +1,52 @@
+## [2026-06-10] impl | iOS single-profile fetch de-dupe
+
+- Added actor-isolated in-flight de-dupe for `fetchProfile(pubkey:)` so repeated Home/Timeline/Profile requests for the same Kind-0 profile join one network task.
+- Added short cooldown guards: cached profiles refreshed within 60 seconds are reused, and recent cache-miss attempts are not immediately retried during startup.
+- This targets the remaining実機ログ issue where the same self pubkey produced repeated `fetchProfile Kind 0` lines after relay/badge optimizations.
+
+## [2026-06-10] impl | iOS startup profile/enrichment request reduction
+
+- Removed serial per-pubkey fallback from batch profile hydration to avoid dozens of Kind-0 requests during startup enrich.
+- Delayed and capped Timeline follow-list profile warmup; badge warmup is now cache-only outside explicit profile surfaces.
+- Capped Timeline/Home missing-profile fills and made Home post-list badge enrichment cache-only.
+- Added cached badge URL accessor for list enrichment without relay fetches.
+
+## [2026-06-10] impl | iOS broad relay expansion guardrail
+
+- Added an iOS NostrClient global background pool cap of 4 relays so broad NIP-65/saved-relay connect calls cannot expand startup connections to 10+ relays.
+- Delayed Timeline NIP-65 sync to after the first startup minute and reduced early relay prefetch fan-out.
+- Changed syncNip65Relays to persist NIP-65 metadata without rewriting selectedRelays during background sync, preventing later generic connects from inheriting broad write-relay lists.
+
+## [2026-06-10] impl | iOS startup fetch-storm and relay expansion controls
+
+- Gated MainTab startup so compact relay warmup completes before Timeline remote refresh and notification polling.
+- Delayed notification dot polling by 12 seconds after launch to avoid competing with first paint.
+- Updated HomeViewModel to show cached Home data immediately, then wait for compact relay warmup before remote header refresh.
+- Deferred heavier Home badges/user-notes/liked-post refresh to reduce startup fetchRecovery join storm.
+- Adjusted NostrClient connect logging to report only physical new connects or in-flight waits, not every orchestration call.
+
+## [2026-06-09] impl | iOS Phases 2-6 quality implementation
+
+- Implemented local-first Timeline first paint from cached events/profiles, while keeping relay refresh in the background.
+- Added Swift signed-event outbox fallback for fully signed events when all relay ACKs fail, with retry after healthy relay connection.
+- Completed like toggle undo by deleting the user's prior reaction event when available, and storing the new reaction event id after like.
+- Reduced Talk send preflight catch-up timeout to keep optimistic LINE-style send UX responsive.
+- Improved Search result profile rendering with cache-first profiles and fresh fill for misses.
+- Added accessibility labels/values for post action controls.
+
+## [2026-06-09] impl | iOS Phase 1 4tab, NIP-46 removal, relay dedupe
+
+Implemented the Phase 1 code pass for the iOS zero-base plan: `MainTabView` is the 4-tab target with `ミニアプリ` copy and Home default, active iOS NIP-46/Nostr Connect signer code was removed with legacy migration handling, and `NostrRepository.ensureRelayConnections(reason:)` now dedupes startup relay warmup across connect/fetch/publish paths. Verified with an iOS Simulator build.
+
+## [2026-06-09] docs | iOS Phase 0 audit for 4tab, NIP-46 removal, relay dedupe
+
+- Recorded the iOS zero-base Phase 0 audit in `docs/wiki/platforms/ios-phase0-audit.md`.
+- Added ADR-0022 for the 4-tab iOS root target: ホーム / トーク / タイムライン / ミニアプリ.
+- Added ADR-0023 to supersede ADR-0003 and remove the iOS NIP-46 signer path while continuing to reject NIP-55 on iOS.
+- Added ADR-0024 as the proposed design for deduplicating startup relay connection attempts behind a single in-flight coordinator.
+- Updated iOS guardrails/wiki references so News/Rokunana are not iOS root tabs and NIP-46 is no longer an iOS signer requirement.
+- Source references: `ios/NuruNuru/Views/Screens/MainTabView.swift`, `ios/NuruNuru/Data/NostrRepository.swift`, `ios/NuruNuru/Data/NostrClient.swift`, `ios/NuruNuru/Data/ExternalSigner.swift`, `ios/GUARDRAILS.md`.
+
 ## [2026-06-09] performance | Web publish outbox and relay diagnostics parity
 
 - Added a browser-local publish outbox in `lib/publish-outbox.js` that stores fully signed event JSON only in `localStorage`; private keys, unsigned events, and signing material are never stored.
@@ -1020,6 +1069,13 @@ LLM Wiki の時系列ログです。追記専用として扱います。
 - `app/page.js` restores the encrypted key on reload only when `nurunuru_auto_sign` is enabled; logout clears the in-memory and persisted key via `clearStoredPrivateKey()`.
 - Updated Web Nosskey settings to recognize persisted exported keys and removed the legacy `window.nostrPrivateKey` storage path from `NosskeySettings.tsx`.
 - Source references: `lib/secure-key-store.js`, `lib/nostr.js`, `app/page.js`, `components/AccountSecuritySettings.js`, `src/ui/components/settings/NosskeySettings.tsx`, `docs/wiki/nips/nosskey.md`, `docs/wiki/features/onboarding.md`.
+
+## [2026-06-04] fix | Android News category horizontal swipe
+
+- Updated Android News so category content is backed by a HorizontalPager, enabling horizontal swipe between トップ / 国内 / エンタメ / スポーツ / 経済 / テック / Nostr.
+- Kept category chip taps, pager swipes, selected category state, and category row scroll position synchronized.
+- Verified Android debug build, installed the APK on connected real device 9DNBNF45Y9AQFEY9, and launched io.nurunuru.app.
+- Source references: android/app/src/main/kotlin/io/nurunuru/app/ui/screens/NewsScreen.kt, docs/wiki/features/news.md.
 
 ## [2026-06-06] strategy | ThemaDAY 企業文化と open speech / scoped reach
 

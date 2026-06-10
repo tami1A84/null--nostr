@@ -73,15 +73,15 @@ These rules are non-negotiable. Every PR and code review must verify compliance.
 
 ## 9. Navigation Rules
 
-- 5-tab bottom navigation at root. Tab order: ホーム / トーク / ろくなな / タイムライン / ミニアプリ.
+- 4-tab bottom navigation at root. Tab order: ホーム / トーク / タイムライン / ミニアプリ.
 - Modals as `.sheet` (half/full). Image viewer as `.fullScreenCover`.
 - No `NavigationLink` for modals — use `@State` booleans + `.sheet`.
 - Deep link scheme: `nurunuru://`
 
 ## 10. NIP Compliance
 
-- Same NIP support as Android: 01, 02, 05, 07, 09, 11, 17, 19, 25, 27, 30, 32, 42, 44, 46, 50, 51, 57, 58, 59, 62, 65, 70, 71, 98.
-- NIP-46 (Nostr Connect) replaces NIP-55 (Amber) on iOS.
+- Same NIP support as Android where product-aligned, excluding iOS-only signer removals: 01, 02, 05, 07, 09, 11, 17, 19, 25, 27, 30, 32, 42, 44, 50, 51, 57, 58, 59, 62, 65, 70, 71, 98.
+- NIP-46 signer is removed on iOS. Do not add NIP-55 (Amber) as a replacement.
 - Verify NIP-05 with 5-second timeout.
 
 ## 11. Code Quality

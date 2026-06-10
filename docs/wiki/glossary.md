@@ -21,7 +21,7 @@ Project glossary for terms that are easy to confuse across Nostr, Marmot MLS, Bl
 | MLS | Messaging Layer Security. Rust core owns MLS cryptographic/group state for Talk. |
 | NIP-17 | Nostr private DM protocol. Web helpers exist; native Talk is currently Marmot MLS-oriented and treats NIP-17 as legacy/compatibility. |
 | NIP-30 | Custom emoji lists/sets; kind 10030 and kind 30030. |
-| NIP-46 | Nostr Connect remote signing. Used by iOS external signing and Web NIP-46. |
+| NIP-46 | Nostr Connect remote signing. Web support remains; iOS app signer support was removed by ADR-0023. |
 | NIP-51 | Lists such as mute list, bookmarks, and emoji list. |
 | NIP-55 | Android Amber external signer path. Not used on iOS. |
 | NIP-59 | Gift wrap protocol; key for NIP-17 and Marmot Welcome transport. |

@@ -2,6 +2,8 @@
 
 ## Summary
 
+> 2026-06-09 update: iOS NIP-46 signer references in this historical meeting note are superseded by ADR-0023; iOS signer paths now target internal nsec/Keychain and Passkey/Nosskey.
+
 2026-06-01 (月) 11時頃の ThemaDAY 経営会議。テーマは **「マネジメント」**。
 週次振り返り (themaday-2026-05-31-week-review) と 6月ロードマップ (june-2026-roadmap) で
 決まった方向を、**経営会議 → リーダー陣すり合わせ** の二段で着地させる回。

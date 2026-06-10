@@ -75,6 +75,8 @@ struct PostActions: View {
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5).onEnded { _ in onRepostLongPress?() }
             )
+            .accessibilityLabel(post.isReposted ? "リポストを取り消す" : "リポスト")
+            .accessibilityValue(post.repostCount > 0 ? "\(post.repostCount)件" : "")
     }
 
     private var likeButton: some View {
@@ -106,6 +108,8 @@ struct PostActions: View {
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5).onEnded { _ in onLikeLongPress?() }
             )
+            .accessibilityLabel(post.isLiked ? "リアクションを取り消す" : "リアクション")
+            .accessibilityValue(post.likeCount > 0 ? "\(post.likeCount)件" : "")
     }
 
     private var zapButton: some View {
@@ -125,6 +129,8 @@ struct PostActions: View {
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5).onEnded { _ in onZapLongPress?() }
             )
+            .accessibilityLabel("Zap")
+            .accessibilityValue(post.zapAmount > 0 ? "\(post.zapAmount) sats" : "")
     }
 
     private var bookmarkButton: some View {
@@ -141,6 +147,7 @@ struct PostActions: View {
                     isBookmarkInFlight = false
                 }
             }
+            .accessibilityLabel(post.isBookmarked ? "ブックマークを外す" : "ブックマーク")
     }
 
     // MARK: - Helpers

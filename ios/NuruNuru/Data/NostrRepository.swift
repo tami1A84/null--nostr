@@ -47,14 +47,10 @@ actor NostrRepository {
     let client: NostrClient
     private let keyManager: SecureKeyManager
     let prefs: AppPreferences
-    /// Signer abstraction. Real implementations are `InternalSigner` (nsec/Keychain)
-    /// or `NosskeySigner` (Passkey/PRF direct). External signers (NIP-46) take a
-    /// different code path — they bypass this property and use `externalSigner`
-    /// in `NostrRepository+ExternalSign.swift`.
+    /// Signer abstraction. Real implementations are `InternalSigner` (nsec/Keychain),
+    /// `RustInternalSigner` (nsec/Keychain via Rust FFI), or `NosskeySigner`
+    /// (Passkey/PRF direct). iOS NIP-46 remote signing is removed.
     let signer: EventSigner
-    /// Optional NIP-46 platform signer. External signing remains async and platform-owned;
-    /// Rust FFI may create unsigned events / publish signed raw JSON around it.
-    let externalSigner: ExternalSigner?
     /// Optional Rust FFI engine (Phase 5). Lazily initialized for Talk/MLS.
     var mlsClient: MlsFFIBridge?
 #if NURUNURU_FFI_AVAILABLE
@@ -64,6 +60,9 @@ actor NostrRepository {
 #endif
     /// Two-layer cache: in-memory LRU + UserDefaults persistence.
     let cache = NostrCache()
+    /// Durable Swift fallback for fully signed events when all relay ACKs fail.
+    private let signedOutbox = SignedEventOutbox()
+    private var signedOutboxRetryTask: Task<Void, Never>?
     /// Persistent retry metadata for Marmot self-update / message / KeyPackage rotation.
     let mlsRetryStore = MlsRetryMetadataStore()
 
@@ -73,6 +72,12 @@ actor NostrRepository {
     /// True after connect() has finished setting up relay connections.
     /// Used to prevent fetchEvents from running before any connections exist.
     private var isConnected = false
+    /// Repository-level in-flight de-dupe for startup relay warmup. Multiple
+    /// Timeline/Home/notification fetches join this task instead of each starting
+    /// a new `NostrClient.connect(relayUrls:)` orchestration.
+    private var relayConnectTask: Task<Void, Never>?
+    private var lastRelayConnectAttemptAt: Date?
+    private var lastRelayConnectUsableAt: Date?
 
     /// Bookmark Kind 10003 cache/in-flight de-dupe.
     var bookmarkEventIdCache: [String: (ids: [String], cachedAt: Date)] = [:]
@@ -80,6 +85,12 @@ actor NostrRepository {
 
     /// Fast relay selection cache (relay URL -> scored posts, cachedAt).
     var relayTimelineCache: [String: (posts: [ScoredPost], cachedAt: Date)] = [:]
+
+    /// Single-profile fetch de-dupe/cooldown. Home, Timeline enrichment, and sheets
+    /// can request the same Kind-0 profile during startup; keep one in-flight network
+    /// fetch per pubkey and avoid re-fetching a cached profile for a short window.
+    var profileFetchTasks: [String: Task<UserProfile?, Never>] = [:]
+    var profileFetchLastAttemptAt: [String: Date] = [:]
 
     /// Quote event/profile cache to avoid repeated quote-card loading.
     var quotedPostCache: [String: ScoredPost] = [:]
@@ -153,8 +164,7 @@ actor NostrRepository {
         keyManager: SecureKeyManager,
         prefs: AppPreferences,
         mlsClient: MlsFFIBridge? = nil,
-        signer: EventSigner? = nil,
-        externalSigner: ExternalSigner? = nil
+        signer: EventSigner? = nil
     ) {
         self.keyManager = keyManager
         self.prefs = prefs
@@ -192,15 +202,7 @@ actor NostrRepository {
 #endif
         }
         self.signer = resolvedSigner
-        self.externalSigner = externalSigner
         self.client = NostrClient(authEventSigner: { relayUrl, challenge in
-            if prefs.isExternalSigner, let externalSigner {
-                return try await externalSigner.signEvent(
-                    kind: 22242,
-                    content: "",
-                    tags: [["relay", relayUrl], ["challenge", challenge]]
-                )
-            }
             return try resolvedSigner.signEvent(
                 kind: 22242,
                 tags: [["relay", relayUrl], ["challenge", challenge]],
@@ -285,8 +287,8 @@ actor NostrRepository {
 
             if prefs.isExternalSigner || prefs.loginMethod == "nosskey" {
                 let pubkey = activePubkey
-                // External signer and Passkey/Nosskey sessions do not keep an nsec
-                // in Keychain. Bind the MLS DB in read-only identity mode using a
+                // Legacy iOS NIP-46 sessions and current Passkey/Nosskey sessions
+                // do not keep an nsec in Keychain. Bind the MLS DB in read-only identity mode using a
                 // pubkey-scoped SQLCipher key so Settings diagnostics can recover
                 // after account switches instead of reporting permanent unavailable.
                 var dbKey = try MlsDbKeyStore.getOrCreateExternalKey(pubkeyHex: pubkey)
@@ -326,7 +328,8 @@ actor NostrRepository {
             Self.sharedMlsClient = ffi
             Self.sharedMlsAccountPubkey = accountPubkey.lowercased()
             Self.sharedFfiLock.unlock()
-            AppLogger.log("FFI", "ensureMlsClient: initialized \(prefs.isExternalSigner ? "read-only" : "full") FFI account=\(String(accountPubkey.prefix(8)))… + connected (MLS DB encrypted)")
+            let ffiMode = (prefs.isExternalSigner || prefs.loginMethod == "nosskey") ? "read-only" : "full"
+            AppLogger.log("FFI", "ensureMlsClient: initialized \(ffiMode) FFI account=\(String(accountPubkey.prefix(8)))… + connected (MLS DB encrypted)")
             return ffi
         } catch {
             AppLogger.log("FFI", "ensureMlsClient failed: \(error)")
@@ -341,9 +344,10 @@ actor NostrRepository {
 
 #if NURUNURU_FFI_AVAILABLE
     /// Lazily initialize the Rust FFI write-path client. This intentionally uses
-    /// the encrypted constructors only. NIP-46 / Passkey sessions use the
+    /// the encrypted constructors only. Passkey/Nosskey sessions use the
     /// read-only constructor: signing remains platform-owned, Rust only creates
-    /// unsigned events and publishes signed raw JSON.
+    /// unsigned events and publishes signed raw JSON. The `isExternalSigner` branch
+    /// is legacy migration/read-only fallback for pre-ADR-0023 installs.
     @discardableResult
     func ensureRustNostrClient() -> RustNostrFFIClient? {
         if UserDefaults.standard.bool(forKey: "disable_rust_ffi") { return nil }
@@ -526,23 +530,89 @@ actor NostrRepository {
 
     // MARK: - Connection
 
-    /// Connect to all saved relays (NIP-65 or selectedRelays fallback) and FFI engine.
-    /// Mirrors Android: NIP-65 relays take priority, deduplicates URLs.
-    ///
-    /// `client.connect()` は非同期でバックグラウンド実行。actor をブロックしない。
-    /// MLS ポーリング (10秒間隔) が actor を占有しても connect が飢餓にならない。
+    /// Connect to the compact startup relay pool. Calls are de-duped by
+    /// `ensureRelayConnections(reason:)` so initial Timeline/Home/notification
+    /// work does not create repeated connect orchestration.
     func connect() async {
-        let relayUrls = buildRelayConnectionUrls()
-        AppLogger.log("Repository", "connect() — \(relayUrls.count) relays: \(relayUrls)")
-        // バックグラウンドで接続開始。actor をブロックしない。
-        let capturedClient = client
-        let capturedRelays = relayUrls
-        Task.detached {
-            await capturedClient.connect(relayUrls: capturedRelays)
-            AppLogger.log("Repository", "✅ relay connect background task finished")
+        await ensureRelayConnections(reason: .appBootstrap, waitForUsable: true)
+    }
+
+    enum RelayConnectReason: String, Sendable {
+        case appBootstrap
+        case timelineInitial
+        case homeInitial
+        case notificationPoll
+        case publish
+        case manualReconnect
+        case relaySettings
+        case fetchRecovery
+    }
+
+    /// Ensure at least the compact startup relay pool exists. This is intentionally
+    /// repository-level rather than only per-relay-client de-dupe: all startup callers
+    /// share one in-flight task and produce reasoned logs (`started` / `joined` / `skipped`).
+    func ensureRelayConnections(reason: RelayConnectReason, waitForUsable: Bool = true) async {
+        let clientEmpty = await client.isEmpty
+        let state = await client.connectionState
+        if state == .connected && !clientEmpty {
+            isConnected = true
+            lastRelayConnectUsableAt = Date()
+            return
         }
+
+        if let existing = relayConnectTask {
+            AppLogger.log("Repository", "relay ensure joined reason=\(reason.rawValue) state=\(state) empty=\(clientEmpty)")
+            await existing.value
+            isConnected = true
+            return
+        }
+
+        let relayUrls = buildRelayConnectionUrls()
+        lastRelayConnectAttemptAt = Date()
+        AppLogger.log("Repository", "relay ensure started reason=\(reason.rawValue) state=\(state) empty=\(clientEmpty) relays=\(relayUrls.count)")
+        let capturedClient = client
+        let task = Task {
+            await capturedClient.connect(relayUrls: relayUrls)
+        }
+        relayConnectTask = task
+
+        await task.value
+
+        relayConnectTask = nil
         isConnected = true
-        AppLogger.log("Repository", "connect() returned — timeline relays connecting in background")
+        lastRelayConnectUsableAt = Date()
+        AppLogger.log("Repository", "relay ensure connected reason=\(reason.rawValue) relays=\(relayUrls.count)")
+        await retrySignedOutbox(reason: reason.rawValue)
+        _ = waitForUsable
+    }
+
+    private func retrySignedOutbox(reason: String, limit: Int = 5) async {
+        guard signedOutboxRetryTask == nil else { return }
+        let pending = signedOutbox.pending(limit: limit)
+        guard !pending.isEmpty else { return }
+        let outbox = signedOutbox
+        let retryClient = client
+        AppLogger.log("Outbox", "retry start reason=\(reason) count=\(pending.count)")
+        let task = Task {
+            for item in pending {
+                do {
+                    try await retryClient.publishRawEventJSON(item.rawJson, to: item.relays, waitForAllRelays: false)
+                    outbox.remove(id: item.id)
+                    AppLogger.log("Outbox", "retry ok event=\(item.eventId)")
+                } catch {
+                    outbox.markFailed(id: item.id, error: String(describing: error))
+                    AppLogger.log("Outbox", "retry failed event=\(item.eventId) err=\(error)")
+                }
+            }
+        }
+        signedOutboxRetryTask = task
+        await task.value
+        signedOutboxRetryTask = nil
+    }
+
+    private func queueSignedOutbox(event: NostrEvent, rawJSON: String, relays: [String], error: Error) {
+        signedOutbox.enqueue(event: event, rawJson: rawJSON, relays: relays, error: String(describing: error))
+        AppLogger.log("Outbox", "queued signed event=\(event.id) relays=\(relays.count) err=\(error)")
     }
 
     /// Build the canonical relay list used for initial connection and lazy fetch recovery.
@@ -633,28 +703,7 @@ actor NostrRepository {
         filters: [NostrFilter],
         timeoutSeconds: Double = 8.0
     ) async -> [NostrEvent] {
-        // Startup race guard:
-        // Timeline/Home VM can fetch before MainTabView.task { await repository.connect() } finishes.
-        // In that case, proactively establish relay connections here so follow/global timeline queries
-        // do not permanently return 0 on first app launch.
-        let clientEmpty = await client.isEmpty
-        let state = await client.connectionState
-        let shouldEnsureConnection: Bool
-        switch state {
-        case .connected:
-            shouldEnsureConnection = clientEmpty
-        case .connecting, .disconnected, .failed:
-            shouldEnsureConnection = true
-        }
-        if shouldEnsureConnection {
-            let relayUrls = buildRelayConnectionUrls()
-            AppLogger.log(
-                "Repository",
-                "fetchEvents: ensuring relay connections (empty=\(clientEmpty), state=\(state)) relays=\(relayUrls.count)"
-            )
-            await client.connect(relayUrls: relayUrls)
-            isConnected = true
-        }
+        await ensureRelayConnections(reason: .fetchRecovery, waitForUsable: true)
         return await client.fetchEvents(filters: filters, timeoutSeconds: timeoutSeconds)
     }
 
@@ -668,54 +717,15 @@ actor NostrRepository {
         waitForAllRelays: Bool = false
     ) async throws -> NostrEvent {
         // Publish paths can be reached from profile sheets before the timeline
-        // has finished connecting relays.  Ensure at least the compact write
-        // pool exists so follow/profile/reaction events are actually sent.
-        let clientEmpty = await client.isEmpty
-        let state = await client.connectionState
-        let shouldEnsureConnection: Bool
-        switch state {
-        case .connected:
-            shouldEnsureConnection = clientEmpty
-        case .connecting, .disconnected, .failed:
-            shouldEnsureConnection = true
-        }
-        if shouldEnsureConnection {
-            let relayUrls = buildRelayConnectionUrls()
-            AppLogger.log("Repository", "publishEvent: ensuring relay connections (empty=\(clientEmpty), state=\(state)) relays=\(relayUrls.count)")
-            await client.connect(relayUrls: relayUrls)
-            isConnected = true
-        }
+        // has finished connecting relays. Ensure at least the compact write pool exists.
+        await ensureRelayConnections(reason: .publish, waitForUsable: true)
 
         let createdAt = Int64(Date().timeIntervalSince1970)
-        if prefs.isExternalSigner, let externalSigner {
-#if NURUNURU_FFI_AVAILABLE
-            if prefs.iosRustFfiPublishEnabled,
-               let pubkey = prefs.publicKeyHex,
-               let rust = ensureRustNostrClient() {
-                _ = try? rust.createUnsignedEvent(kind: kind, content: content, tags: tags, creatorPubkeyHex: pubkey)
-            }
-#endif
-            let event = try await externalSigner.signEvent(
-                kind: kind,
-                content: content,
-                tags: tags,
-                createdAt: createdAt
-            )
-#if NURUNURU_FFI_AVAILABLE
-            if let raw = rawEventJSON(event),
-               await publishSignedEventViaRustIfEnabled(event, rawJSON: raw) {
-                return event
-            }
-#endif
-            try await client.publish(event: event, waitForAllRelays: waitForAllRelays)
-            return event
-        }
-
         if let passkeySigner = signer as? NosskeySigner {
             try await passkeySigner.warmCache()
         }
 #if NURUNURU_FFI_AVAILABLE
-        // For Passkey/NIP-46-style platform signer paths, exercise Rust unsigned
+        // For Passkey-style platform signer paths, exercise Rust unsigned
         // event construction when the write-path rollout flag is enabled, but
         // keep the actual authorization/signature in the platform signer.
         if prefs.iosRustFfiPublishEnabled,
@@ -726,13 +736,24 @@ actor NostrRepository {
         }
 #endif
         let event = try signer.signEvent(kind: kind, tags: tags, content: content, createdAt: createdAt)
+        let raw = rawEventJSON(event)
 #if NURUNURU_FFI_AVAILABLE
-        if let raw = rawEventJSON(event),
+        if let raw,
            await publishSignedEventViaRustIfEnabled(event, rawJSON: raw) {
             return event
         }
 #endif
-        try await client.publish(event: event, waitForAllRelays: waitForAllRelays)
+        do {
+            try await client.publish(event: event, waitForAllRelays: waitForAllRelays)
+        } catch {
+            if let raw {
+                queueSignedOutbox(event: event, rawJSON: raw, relays: buildRelayConnectionUrls(), error: error)
+                // The event is fully signed and durably queued; keep composer/actions fast
+                // and let the outbox retry on the next healthy relay connection.
+                return event
+            }
+            throw error
+        }
         return event
     }
 
@@ -1162,10 +1183,89 @@ actor NostrRepository {
         cache.getCachedProfile(pubkey)
     }
 
+    /// Return cached NIP-58 badge image URLs only. Used by launch-time list
+    /// enrichment to avoid network badge storms.
+    nonisolated func getCachedBadgeUrls(pubkey: String) -> [String]? {
+        cache.getCachedBadges(pubkey: pubkey)
+    }
+
     /// プロフィールのグレース期間中かどうかを返す。
     /// グレース期間中はリレーからの古いデータで上書きしない。
     nonisolated func isProfileInGracePeriod(pubkey: String) -> Bool {
         cache.isProfileInGracePeriod(pubkey)
+    }
+}
+
+
+// MARK: - Signed Event Outbox (Swift fallback)
+
+final class SignedEventOutbox: @unchecked Sendable {
+    struct Item: Codable, Identifiable, Sendable {
+        let id: String
+        let eventId: String
+        let rawJson: String
+        let relays: [String]
+        let createdAt: Int64
+        var attempts: Int
+        var lastError: String?
+    }
+
+    private let defaults = UserDefaults.standard
+    private let key = "nurunuru_signed_event_outbox_v1"
+    private let lock = NSLock()
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    func pending(limit: Int = 20) -> [Item] {
+        lock.lock(); defer { lock.unlock() }
+        return Array(loadLocked().sorted { $0.createdAt < $1.createdAt }.prefix(limit))
+    }
+
+    func enqueue(event: NostrEvent, rawJson: String, relays: [String], error: String?) {
+        lock.lock(); defer { lock.unlock() }
+        var items = loadLocked()
+        if items.contains(where: { $0.eventId == event.id }) { return }
+        let canonicalRelays = Array(NSOrderedSet(array: relays).compactMap { $0 as? String }).filter { !$0.isEmpty }
+        items.append(Item(
+            id: UUID().uuidString,
+            eventId: event.id,
+            rawJson: rawJson,
+            relays: canonicalRelays,
+            createdAt: Int64(Date().timeIntervalSince1970),
+            attempts: 0,
+            lastError: error
+        ))
+        saveLocked(Array(items.suffix(200)))
+    }
+
+    func remove(id: String) {
+        lock.lock(); defer { lock.unlock() }
+        saveLocked(loadLocked().filter { $0.id != id })
+    }
+
+    func markFailed(id: String, error: String) {
+        lock.lock(); defer { lock.unlock() }
+        var items = loadLocked()
+        if let idx = items.firstIndex(where: { $0.id == id }) {
+            items[idx].attempts += 1
+            items[idx].lastError = error
+            saveLocked(items)
+        }
+    }
+
+    private func loadLocked() -> [Item] {
+        guard let data = defaults.data(forKey: key) else { return [] }
+        return (try? decoder.decode([Item].self, from: data)) ?? []
+    }
+
+    private func saveLocked(_ items: [Item]) {
+        if items.isEmpty {
+            defaults.removeObject(forKey: key)
+            return
+        }
+        if let data = try? encoder.encode(items) {
+            defaults.set(data, forKey: key)
+        }
     }
 }
 

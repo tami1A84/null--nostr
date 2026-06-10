@@ -130,6 +130,15 @@ class AppPreferences(context: Context) {
         get() = plainPrefs.getStringSet(KEY_RELAYS, DEFAULT_RELAYS.toSet()) ?: DEFAULT_RELAYS.toSet()
         set(value) = plainPrefs.edit().putStringSet(KEY_RELAYS, value).apply()
 
+
+    /** Public news source pubkeys for the News tab. Non-sensitive user preference. */
+    var newsSources: List<String>
+        get() {
+            val jsonStr = plainPrefs.getString(KEY_NEWS_SOURCES, "[]") ?: "[]"
+            return try { Json.decodeFromString<List<String>>(jsonStr) } catch (_: Exception) { emptyList() }
+        }
+        set(value) = plainPrefs.edit().putString(KEY_NEWS_SOURCES, Json.encodeToString(value.distinct())).apply()
+
     var uploadServer: String
         get() = plainPrefs.getString(KEY_UPLOAD_SERVER, "nostr.build") ?: "nostr.build"
         set(value) = plainPrefs.edit().putString(KEY_UPLOAD_SERVER, value).apply()
@@ -419,6 +428,7 @@ class AppPreferences(context: Context) {
         private const val KEY_NIP65_RELAYS = "nip65_relays"
         private const val KEY_MAIN_RELAY = "main_relay"
         private const val KEY_PLAIN_MIGRATED = "plain_migrated_v1"
+        private const val KEY_NEWS_SOURCES = "news_sources"
         private const val KEY_NOTIFICATION_KINDS = "notification_enabled_kinds"
         private const val KEY_NOTIFICATION_SENDER_SCOPE = "notification_sender_scope"
         private const val KEY_NOTIFICATION_KNOWN_FOLLOWERS = "notification_known_followers"

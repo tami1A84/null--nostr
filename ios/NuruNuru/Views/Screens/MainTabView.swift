@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 
 /// 4-tab navigation shell — ホーム / トーク / タイムライン / ミニアプリ.
 /// App Store submission build: ろくなな / diVine short-video related UI is commented out.
@@ -10,7 +11,7 @@ struct MainTabView: View {
 
     @Environment(\.nuruTheme) private var theme
     @Environment(\.scenePhase) private var scenePhase
-    @State private var activeTab:          BottomTab  = .timeline
+    @State private var activeTab:          BottomTab  = .home
     @State private var showPostSheet:      Bool       = false
     @State private var showNotifications:  Bool       = false
     @State private var searchRoute:        SearchSheetRoute? = nil
@@ -30,8 +31,6 @@ struct MainTabView: View {
     @State private var timelineVM:    TimelineViewModel
     @State private var homeVM:        HomeViewModel
     @State private var talkVM:        TalkViewModel
-    // App Store submission build: ろくなな / diVine short-video ViewModel is disabled.
-    // @State private var rokunanaVM:    RokunanaViewModel
     @State private var connectionVM:  ConnectionViewModel
 
     init(pubkeyHex: String, authViewModel: AuthViewModel) {
@@ -45,15 +44,12 @@ struct MainTabView: View {
         let repo = NostrRepository(
             keyManager:     authViewModel.keyManager,
             prefs:          authViewModel.prefs,
-            mlsClient:      mlsClient,
-            externalSigner: authViewModel.externalSigner
+            mlsClient:      mlsClient
         )
         _repository     = State(initialValue: repo)
         _timelineVM     = State(initialValue: TimelineViewModel(repository: repo, pubkeyHex: pubkeyHex))
         _homeVM         = State(initialValue: HomeViewModel(repository: repo, myPubkeyHex: pubkeyHex))
         _talkVM         = State(initialValue: TalkViewModel(repository: repo, myPubkeyHex: pubkeyHex))
-        // App Store submission build: ろくなな / diVine short-video ViewModel is disabled.
-        // _rokunanaVM     = State(initialValue: RokunanaViewModel(repository: repo, pubkeyHex: pubkeyHex))
         _connectionVM   = State(initialValue: ConnectionViewModel(repository: repo))
     }
 
@@ -116,17 +112,6 @@ struct MainTabView: View {
             tabContent(for: .talk) {
                 TalkView(viewModel: talkVM)
             }
-
-            // App Store submission build: ろくなな / diVine short-video tab is disabled.
-            //
-            // // ROKUNANA / diVine short videos (keep alive)
-            // tabContent(for: .rokunana) {
-            //     RokunanaView(
-            //         viewModel: rokunanaVM,
-            //         onProfileTap: { viewingProfile = ProfileID($0) },
-            //         onZap: { zapTarget = $0 }
-            //     )
-            // }
 
             // MINIAPP (recreated on demand)
             if activeTab == .miniapp {
@@ -231,9 +216,12 @@ struct MainTabView: View {
             )
         }
         .task {
-            timelineVM.startInitialLoadIfNeeded()
+            // Start the compact relay pool first. Timeline/Home are local-first, so
+            // this does not block first paint; it prevents their remote refreshes
+            // from racing into many fetchRecovery joins during cold startup.
             await repository.connect()
-            startNotificationDotPollingIfNeeded()
+            timelineVM.startInitialLoadIfNeeded()
+            startNotificationDotPollingIfNeeded(initialDelaySeconds: 12)
         }
         .onChange(of: showNotifications) { _, showing in
             if !showing { markNotificationsSeen() }
@@ -256,9 +244,12 @@ struct MainTabView: View {
     }
 
 
-    private func startNotificationDotPollingIfNeeded() {
+    private func startNotificationDotPollingIfNeeded(initialDelaySeconds: UInt64 = 0) {
         guard notificationPollTask == nil else { return }
         notificationPollTask = Task {
+            if initialDelaySeconds > 0 {
+                try? await Task.sleep(nanoseconds: initialDelaySeconds * 1_000_000_000)
+            }
             var lastSeen = UserDefaults.standard.integer(forKey: "nuru_last_seen_notification_created_at")
             while !Task.isCancelled {
                 let result = await repository.fetchNotificationsWithContext(pubkey: pubkeyHex, skipCache: false)
@@ -322,15 +313,11 @@ struct MainTabView: View {
     private func bottomTabItem(_ tab: BottomTab) -> some View {
         let selected = activeTab == tab
         let iconColor = selected ? NuruColors.lineGreen : theme.textTertiary
-        // App Store submission build: ろくなな selected white icon styling is disabled.
-        // let iconColor = (tab == .rokunana && selected) ? Color.white : (selected ? NuruColors.lineGreen : theme.textTertiary)
         return Button {
             if activeTab == tab {
                 switch tab {
                 case .timeline: Task { await timelineVM.refreshFollowing() }
                 case .home:     Task { await homeVM.refresh() }
-                // App Store submission build: ろくなな refresh is disabled.
-                // case .rokunana: Task { await rokunanaVM.refresh() }
                 default: break
                 }
             }
@@ -346,8 +333,6 @@ struct MainTabView: View {
                     switch tab {
                     case .home:     HomeIcon(filled: selected)
                     case .talk:     TalkIcon(filled: selected)
-                    // App Store submission build: ろくなな tab icon is disabled.
-                    // case .rokunana: ShortVideoTabIcon(filled: selected)
                     case .timeline: TimelineIcon(filled: selected)
                     case .miniapp:  GridIcon(filled: selected)
                     }
@@ -364,6 +349,7 @@ struct MainTabView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -384,16 +370,12 @@ struct EventID: Identifiable {
 // MARK: - Bottom Tab Enum
 
 enum BottomTab: CaseIterable {
-    // App Store submission build: ろくなな tab is disabled.
-    // case rokunana
     case home, talk, timeline, miniapp
 
     var label: String {
         switch self {
         case .home:     return "ホーム"
         case .talk:     return "トーク"
-        // App Store submission build: ろくなな tab label is disabled.
-        // case .rokunana: return "ろくなな"
         case .timeline: return "タイムライン"
         case .miniapp:  return "ミニアプリ"
         }
@@ -403,8 +385,6 @@ enum BottomTab: CaseIterable {
         switch self {
         case .home:     return NuruIcons.home(filled: true)
         case .talk:     return NuruIcons.talk(filled: true)
-        // App Store submission build: ろくなな icon is disabled.
-        // case .rokunana: return "67"
         case .timeline: return NuruIcons.timeline(filled: true)
         case .miniapp:  return NuruIcons.grid(filled: true)
         }
@@ -414,8 +394,6 @@ enum BottomTab: CaseIterable {
         switch self {
         case .home:     return NuruIcons.home(filled: false)
         case .talk:     return NuruIcons.talk(filled: false)
-        // App Store submission build: ろくなな icon is disabled.
-        // case .rokunana: return "67"
         case .timeline: return NuruIcons.timeline(filled: false)
         case .miniapp:  return NuruIcons.grid(filled: false)
         }

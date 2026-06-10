@@ -22,7 +22,7 @@ ios/NuruNuru/
 
 - `NostrRepository` は `actor`。
 - ViewModel は `@Observable`。Combine / `ObservableObject` は使わない。
-- NIP-46 を外部署名に使う。iOS では NIP-55 を使わない。
+- NIP-46 signer は廃止。iOS では NIP-55 も使わない。signer は internal nsec/Keychain または Passkey/Nosskey を使う。
 - 秘密鍵は Keychain のみ。`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`。
 - body text は LINE Seed JP のみ。system font fallback を避ける。
 - timeline は `.id(post.event.id)` を使い、entrance animation を避ける。
@@ -41,20 +41,20 @@ As of 2026-06-02, the iOS Rust FFI work relevant to the current release-planning
 Important boundaries:
 
 - Internal nsec sessions may later use Rust signing through a Swift EventSigner adapter.
-- NIP-46 external signing and Passkey/Nosskey remain platform signer paths; Rust may create unsigned events and publish signed raw events, but must not replace the platform authorization UX.
+- NIP-46 external signing is removed from the iOS app signer path by ADR-0023. Passkey/Nosskey remains a platform signer path; Rust may create unsigned events and publish signed raw events around supported signers, but must not replace the platform authorization UX.
 - Private keys remain Keychain-only in app code; generated private_key_hex / nsec values must not be logged or stored outside secure storage / explicit backup UX.
 
 
 ## Rust FFI write-path migration
 
-As of 2026-06-01, iOS has the first write-path wiring for Full Rust FFI. nsec onboarding prefers Rust generateKeypair with Swift fallback. RustInternalSigner implements EventSigner and delegates NIP-01 signing to Rust signEventJson while NIP-04/NIP-44 remain Swift fallback methods. NostrRepository.publishEventAndReturnSigned can publish signed raw JSON through Rust FFI when iosRustFfiPublishEnabled is enabled, otherwise it falls back to NostrClient. NIP-46 external signing and Passkey/Nosskey remain platform signer paths; Rust may create unsigned events and publish signed raw events around them.
+As of 2026-06-01, iOS has the first write-path wiring for Full Rust FFI. nsec onboarding prefers Rust generateKeypair with Swift fallback. RustInternalSigner implements EventSigner and delegates NIP-01 signing to Rust signEventJson while NIP-04/NIP-44 remain Swift fallback methods. NostrRepository.publishEventAndReturnSigned can publish signed raw JSON through Rust FFI when iosRustFfiPublishEnabled is enabled, otherwise it falls back to NostrClient. NIP-46 external signing is removed by ADR-0023; Passkey/Nosskey remains a platform signer path, and Rust may create unsigned events / publish signed raw events around supported signers.
 
 Rollout flags live in AppPreferences: iosRustFfiKeygenEnabled default on, iosRustFfiSigningEnabled default off, and iosRustFfiPublishEnabled default off.
 
 
 ## Rust FFI write-path rollout
 
-As of 2026-06-01, iOS has Phase 2-5 implementation wiring for the Rust write path. Phase 3 keygen uses Rust generateKeypair first for nsec onboarding and falls back to Swift keygen. Phase 4 signing has RustInternalSigner behind a feature flag; NIP-01 plus Rust NIP-04/NIP-44 helpers are used when the Rust client is available, with Swift fallback. Phase 5 publishing can route signed raw JSON through Rust FFI and fall back to NostrClient. Relay-targeted fanout also uses the Rust path when enabled. NIP-46 and Passkey/Nosskey stay platform signer paths.
+As of 2026-06-01, iOS has Phase 2-5 implementation wiring for the Rust write path. Phase 3 keygen uses Rust generateKeypair first for nsec onboarding and falls back to Swift keygen. Phase 4 signing has RustInternalSigner behind a feature flag; NIP-01 plus Rust NIP-04/NIP-44 helpers are used when the Rust client is available, with Swift fallback. Phase 5 publishing can route signed raw JSON through Rust FFI and fall back to NostrClient. Relay-targeted fanout also uses the Rust path when enabled. Passkey/Nosskey stays a platform signer path; NIP-46 signer is removed on iOS.
 
 Rollout switches are visible in the security section: Rust keygen is default-on; Rust signing and Rust publish are default-off until real-device QA.
 
@@ -77,14 +77,14 @@ This fixes the observed post-account-switch failure mode where Settings could sh
 
 ## Rust FFI account-switch recovery note
 
-Passkey/Nosskey sessions are not nsec-backed even though `isExternalSigner` is false. MLS FFI initialization must use the read-only encrypted constructor with a pubkey-scoped SQLCipher key, not the internal nsec constructor. This avoids `Rust FFI: 未接続` after account switching when no Keychain nsec exists.
+Passkey/Nosskey sessions are not nsec-backed. MLS FFI initialization must use the read-only encrypted constructor with a pubkey-scoped SQLCipher key, not the internal nsec constructor. This avoids `Rust FFI: 未接続` after account switching when no Keychain nsec exists.
 
 
 ## Account-scoped Rust FFI DB paths
 
 The iOS Rust FFI MLS database base path is account-scoped as nurunuru_ndb_<pubkey>. This is required because internal nsec accounts derive different SQLCipher keys from their nsec; sharing one encrypted DB across accounts can make non-owning accounts fail to open the DB and show Rust FFI unavailable.
 
-NostrRepository.ensureMlsClient() and ensureRustNostrClient() both use the active account's scoped DB path, including read-only fallback paths for NIP-46, Passkey/Nosskey, and locked nsec sessions.
+NostrRepository.ensureMlsClient() and ensureRustNostrClient() both use the active account's scoped DB path, including read-only fallback paths for Passkey/Nosskey and locked nsec sessions. Legacy NIP-46 session handling is migration-only after ADR-0023.
 
 ## Rust structured publish / outbox diagnostics
 
@@ -100,6 +100,12 @@ Repository accessors expose `retryPendingPublishOutbox()`, `getRelayHealthSnapsh
 - It also shows Rust `RelayRouter` health snapshots (availability, role, success/failure counts) for up to five relays.
 - Diagnostics stay local and sanitized; raw event content is not displayed.
 - Source: `ios/NuruNuru/Views/MiniApps/RelaySettingsView.swift`, `ios/NuruNuru/Data/NostrRepository.swift`, `ios/NuruNuru/Data/NuruNuruFFILiveClient.swift`.
+
+## Phase 0 zero-base audit (2026-06-09)
+
+- iOS root navigation target is 4 tabs: ホーム / トーク / タイムライン / ミニアプリ.
+- NIP-46 signer is removed from the iOS app path; NIP-55 remains forbidden.
+- Startup relay connection duplication is a P0 performance/stability issue. See [[ios-phase0-audit]].
 
 ## Source references
 

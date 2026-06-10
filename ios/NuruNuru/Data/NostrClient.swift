@@ -54,6 +54,10 @@ actor NostrClient {
 
     private var connections: [String: SingleRelayClient] = [:]
     private let authEventSigner: AuthEventSigner?
+    /// Guardrail: background/global relay pool must stay small for startup speed,
+    /// battery, and relay friendliness. Explicit per-relay fetch/publish paths can
+    /// still create temporary target connections when the user performs an action.
+    private let maxGlobalConnections = 4
 
     init(authEventSigner: AuthEventSigner? = nil) {
         self.authEventSigner = authEventSigner
@@ -105,11 +109,11 @@ actor NostrClient {
             guard seenRelayUrls.insert(url).inserted else { return nil }
             return url
         }
-        AppLogger.log("Relay", "Connecting to \(relayUrls.count) relays: \(relayUrls.joined(separator: ", "))")
-
-        // Prepare connections map first (actor-isolated)
+        // Prepare connections map first (actor-isolated). Do not let a broad NIP-65
+        // or saved-relay refresh expand the background pool beyond the iOS guardrail.
         var toConnect: [SingleRelayClient] = []
         var toWait:    [SingleRelayClient] = []  // .connecting 状態のものは完了待ち
+        var deferredRelayUrls: [String] = []
         for urlStr in relayUrls {
             if let existing = connections[urlStr] {
                 let state = await existing.connectionState
@@ -118,10 +122,23 @@ actor NostrClient {
                 toConnect.append(existing)
                 continue
             }
+            if connections.count >= maxGlobalConnections {
+                deferredRelayUrls.append(urlStr)
+                continue
+            }
             guard let url = URL(string: urlStr) else { continue }
             let conn = SingleRelayClient(relayURL: url)
             connections[conn.canonicalURLString] = conn
             toConnect.append(conn)
+        }
+
+        if !deferredRelayUrls.isEmpty {
+            AppLogger.log("Relay", "Deferred \(deferredRelayUrls.count) relays due maxGlobalConnections=\(maxGlobalConnections): \(deferredRelayUrls.prefix(6).joined(separator: ", "))")
+        }
+        if !toConnect.isEmpty {
+            AppLogger.log("Relay", "Connecting to \(toConnect.count) relays: \(toConnect.map(\.canonicalURLString).joined(separator: ", "))")
+        } else if !toWait.isEmpty {
+            AppLogger.log("Relay", "Waiting for \(toWait.count) in-flight relays")
         }
 
         // Connect all in parallel (each waits for handshake independently)

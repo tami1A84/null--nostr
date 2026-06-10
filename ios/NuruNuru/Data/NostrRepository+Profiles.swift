@@ -98,28 +98,60 @@ extension NostrRepository {
             return UserProfile(pubkey: event.pubkey)
         }
 
-        // 取りこぼした pubkey は個別取得で補完（大量 authors クエリ時の欠落対策）
-        let fetchedSet = Set(fetched.map(\.pubkey))
-        let unresolved = missing.filter { !fetchedSet.contains($0) }
-        if !unresolved.isEmpty {
-            for pk in unresolved {
-                if let p = await fetchProfile(pubkey: pk) {
-                    fetched.append(p)
-                }
-            }
-        }
-
+        // Do not serially fetch every unresolved pubkey here. Startup has several
+        // Timeline/Home/Search enrich callers; the old per-pubkey fallback could turn
+        // one batch miss into dozens of Kind-0 requests in the first seconds. Missing
+        // profiles keep their cached/minimal display and are refreshed from explicit
+        // profile surfaces or later user-driven loads.
         fetched.forEach { cacheProfilePreservingFields($0) }
         return result + fetched
     }
 
     /// pubkey を指定して単一プロフィールを取得する。
-    /// プロフィール画面用: キャッシュがあっても必ずリレーから Kind 0 を取得し、
-    /// バナー等の最新情報を反映する。キャッシュはフォールバックとして使用。
+    ///
+    /// Startup-safe: multiple callers asking for the same pubkey join one in-flight
+    /// Kind-0 request, and a recently refreshed cached profile is reused for a short
+    /// window. This prevents Home/Timeline/Profile enrichment from issuing repeated
+    /// `fetchProfile Kind 0` requests for the same account during app launch.
     /// Android: NostrRepository.fetchProfile() に対応。
     func fetchProfile(pubkey: String) async -> UserProfile? {
-        let cached = cache.getCachedProfile(pubkey)
+        let normalized = pubkey.lowercased()
+        let cached = cache.getCachedProfile(normalized) ?? cache.getCachedProfile(pubkey)
+        let now = Date()
 
+        if let cached,
+           let last = profileFetchLastAttemptAt[normalized],
+           now.timeIntervalSince(last) < 60 {
+            AppLogger.log("Profile", "fetchProfile cooldown cache hit — pubkey: \(normalized.prefix(16))…")
+            return cached
+        }
+
+        if cached == nil,
+           let last = profileFetchLastAttemptAt[normalized],
+           now.timeIntervalSince(last) < 30 {
+            AppLogger.log("Profile", "fetchProfile cooldown miss — pubkey: \(normalized.prefix(16))…")
+            return nil
+        }
+
+        if let task = profileFetchTasks[normalized] {
+            AppLogger.log("Profile", "fetchProfile joined in-flight — pubkey: \(normalized.prefix(16))…")
+            return await task.value ?? cached
+        }
+
+        profileFetchLastAttemptAt[normalized] = now
+        let task = Task { [weak self] () -> UserProfile? in
+            guard let self else { return cached }
+            return await self.fetchProfileNetworkOnly(pubkey: normalized, cached: cached)
+        }
+        profileFetchTasks[normalized] = task
+        let result = await task.value
+        profileFetchTasks[normalized] = nil
+        return result ?? cached
+    }
+
+    /// Actual relay read for a single Kind-0 profile. Call `fetchProfile(pubkey:)`
+    /// from product code so in-flight de-dupe and cooldown are honored.
+    private func fetchProfileNetworkOnly(pubkey: String, cached: UserProfile?) async -> UserProfile? {
         // リレーから Kind 0 (user metadata) を直接取得
         // NIP-01: kind 0 = set_metadata (replaceable event)
         let filter = NostrFilter(authors: [pubkey], kinds: [NostrKind.metadata], limit: 5)
@@ -143,7 +175,7 @@ extension NostrRepository {
                 return loose
             }
 
-            // decode 失敗時も pubkey ベースの最小プロフィールを返し、表示崩れを防ぐ
+            // decode 失敗時も pubkey ベースの最小プロフィールで表示崩れを防ぐ
             let fallback = UserProfile(pubkey: event.pubkey)
             cacheProfilePreservingFields(fallback)
             AppLogger.log("Profile", "fetchProfile decode failed — fallback minimal profile")
@@ -884,14 +916,15 @@ private struct ProfileContent: Decodable {
 
 
 extension NostrRepository {
-    func prefetchProfilesAndBadges(pubkeys: [String], limit: Int = 80) async {
-        let targets = Array(Set(pubkeys).prefix(limit))
+    func prefetchProfilesAndBadges(pubkeys: [String], limit: Int = 32) async {
+        // Startup-friendly profile warmup. Badges are intentionally cache-only here:
+        // fetching NIP-58 for many authors during launch created a large request storm.
+        let unique = Array(NSOrderedSet(array: pubkeys).compactMap { $0 as? String })
+        let targets = unique.filter { pk in
+            guard let cached = cache.getCachedProfile(pk) else { return true }
+            return !isDisplayProfileResolved(cached)
+        }.prefix(limit)
         guard !targets.isEmpty else { return }
-        _ = await fetchProfiles(pubkeys: targets)
-        await withTaskGroup(of: Void.self) { group in
-            for pk in targets.prefix(30) {
-                group.addTask { _ = await self.fetchBadges(pubkeyHex: pk) }
-            }
-        }
+        _ = await fetchProfiles(pubkeys: Array(targets))
     }
 }

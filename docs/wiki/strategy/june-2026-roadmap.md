@@ -2,14 +2,14 @@
 
 ## Summary
 
-2026年6月は、5月に制度化した ThemaDAY / Nuruh IP / Monday Release System を、製品の主要タブ再設計に落とし込む月。ユーザー決定により、6月の中心構成は **ホーム / トーク / ニュース / ミニアプリ** の4タブへ寄せる。ただし、既存の「ろくなな」機能は完全削除はせず、**コードはリポジトリにキープしつつ、6月中は UI 動線を一切持たない (dead-but-preserved)** 扱いとする (ADR-0018 amendment 2026-06-01)。
+2026年6月は、5月に制度化した ThemaDAY / Nuruh IP / Monday Release System を、製品の主要タブ再設計に落とし込む月。当初は News を含む4タブ案があったが、2026-06-09 の iOS zero-base 決定により、iOS root target は **ホーム / トーク / タイムライン / ミニアプリ** の4タブへ更新された。既存の「ろくなな」機能は完全削除せず、**コードはリポジトリにキープしつつ UI 動線を持たない (dead-but-preserved)** 扱いとする (ADR-0018 / ADR-0022)。
 
 ## Monthly objective (確定 2026-06-01 ThemaDAY)
 
 > **「オンボーディング改善を主軸に、リレーフィードを廃止し、ホーム/ニュース/ミニアプリの 4タブ骨格を 3 プラットフォーム同等で安全に立ち上げる月」**
 
 - 主文: **オンボーディング改善**。新規ユーザーの最初の 5 分を 3 プラットフォーム同等で磨く。
-- 並走: 4タブ骨格 (ホーム / トーク / ニュース / ミニアプリ) + リレーフィード廃止 + 2-hop 信頼グラフ。
+- 並走: 4タブ骨格 (iOS zero-base: ホーム / トーク / タイムライン / ミニアプリ) + リレーフィード廃止 + 2-hop 信頼グラフ。
 - 計測: ADR-0014 に従い local-first metrics は実装しない。manual real-device QA を一次情報とする。
 - DAU / WAU / 対応 NIP 数のような短期数値は目的にしない (Charter not-doing 既決)。
 
@@ -27,10 +27,17 @@
 ### 2026-06-02 ThemaDAY update
 
 - **リレーフィード削除は完了済み**。Theme 0 は未完了リスクではなく、verification / dead-code cleanup の対象として扱う。
-- **iOS Rust FFI は現行スコープ完了済み**。6/8 release train の blocker ではなく、Keychain / NIP-46 / Passkey/Nosskey 境界を守った状態で完了済みとして記録する。
+- **iOS Rust FFI は現行スコープ完了済み**。6/8 release train の blocker ではなく、Keychain / Passkey/Nosskey 境界を守った状態で完了済みとして記録する。NIP-46 signer は 2026-06-09 に廃止方針へ更新。
 - Home renewal は、LINE Home renewal 2026 を参照し、Home body を **「アクティビティ」/「コンテンツ」** の2層構造に変更する。
 - 既存 Home のプロフィール、自分の投稿一覧、いいね一覧は、Home header 位置に置く account/profile icon 内へ移設する。
 - 既存 Timeline のフォローフィードは、Home の **コンテンツ** エリアへ移設する。
+
+### 2026-06-09 iOS zero-base update
+
+- iOS root navigation target is **ホーム / トーク / タイムライン / ミニアプリ** (ADR-0022).
+- News is no longer an iOS root tab in the zero-base target; any News code is feature/history or future non-root surface until re-decided.
+- iOS NIP-46 signer is removed (ADR-0023). NIP-55 remains forbidden.
+- Startup relay connection dedupe is a P0 performance/stability follow-up (ADR-0024).
 
 ## User decisions recorded on 2026-05-31
 
@@ -53,7 +60,7 @@
 
 ## Current behavior
 
-- 既存ルートタブは AGENTS.md 上では 5 タブ: ホーム / トーク / ろくなな / タイムライン / ミニアプリ。
+- iOS zero-base root target is 4 tabs: ホーム / トーク / タイムライン / ミニアプリ. Older AGENTS/wiki text mentioned 5-tab or News-root variants and is superseded by ADR-0022.
 - リレーフィード削除は完了済み。Android/iOS/Web の主要導線では任意リレー生フィードを扱わない。
 - NIP-23 long-form content と NIP-32 labels は既にプロダクト内で扱う前提がある。
 - ミニアプリタブは現状、設定系ミニアプリも混ざるハブになっている。

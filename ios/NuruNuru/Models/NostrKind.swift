@@ -31,7 +31,6 @@ enum NostrKind {
     static let blossomUserServerList = 10063
     static let nsiteRoot        = 15128  // NIP-5A root nsite manifest
     static let clientAuth       = 22242  // NIP-42 relay authentication
-    static let nostrConnect     = 24133  // NIP-46 / Nostr Connect
     static let zapRequest       = 9734
     static let zapReceipt       = 9735
     static let muteList         = 10000

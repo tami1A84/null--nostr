@@ -20,7 +20,7 @@ jailbroken device, USB backup, forensic image).
 | Signer | Derivation | Persistence | Recovery |
 |---|---|---|---|
 | Internal (nsec held by app) | HKDF-SHA256 over the nsec, info=`"mdk-sqlite-db-key"`, salt=`"io.nurunuru.mdk.v1"` | none (regenerable) | Survives reinstall as long as the user has their nsec backed up. |
-| External (Amber / NIP-46) | `SecRandomCopyBytes` / `SecureRandom` 32 bytes, scoped by pubkey hex | Android: `EncryptedSharedPreferences` + `MasterKey` (AES256_GCM); iOS: Keychain with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` | Lost on factory reset / app reinstall — keys are device-bound by design. |
+| External / non-nsec sessions (Android Amber, legacy iOS NIP-46, Passkey/Nosskey read-only fallback where no app-held nsec exists) | `SecRandomCopyBytes` / `SecureRandom` 32 bytes, scoped by pubkey hex | Android: `EncryptedSharedPreferences` + `MasterKey` (AES256_GCM); iOS: Keychain with `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` | Lost on factory reset / app reinstall — keys are device-bound by design. |
 
 ### Engine guard rails
 

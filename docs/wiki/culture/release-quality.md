@@ -37,7 +37,7 @@
 
 | 時間帯 | Platform | 目的 | 備考 |
 |---|---|---|---|
-| 09:00-11:30 | iOS 実機 | iPhone / iOS 固有の Keychain、NIP-46、SwiftUI sheet、safe area、push / share 動線を確認 | TestFlight / local build のどちらで確認したかを記録 |
+| 09:00-11:30 | iOS 実機 | iPhone / iOS 固有の Keychain、Passkey/Nosskey、NIP-46 廃止後の再ログイン移行、SwiftUI sheet、safe area、push / share 動線を確認 | TestFlight / local build のどちらで確認したかを記録 |
 | 11:30-12:00 | iOS Andon 整理 | STOP / HOLD / minor defect を分類 | 午前中に Android を混ぜない |
 | 13:00-15:30 | Android 実機 | Android 固有の passkey / nsec fallback、外部署名、CameraX、Media3、Compose、Play build 動線を確認 | debug / release / internal test のどれで確認したかを記録 |
 | 15:30-16:00 | Android Andon 整理 | STOP / HOLD / minor defect を分類 | iOS の未整理 defect と混ぜない |
@@ -92,7 +92,7 @@ Release candidate ごとに、少なくとも以下の test cases を platform �
 | IOS-05 | タイムライン読み込み / load more | stable identity、no entrance animation、重複や突然の巻き戻りなし |
 | IOS-06 | Talk 送受信 / MLS catch-up | optimistic bubble、送信、受信、catch-up、retry が仕様通り |
 | IOS-07 | 通知 / sheets / share | fullScreenCover / sheet / share URL が iOS guardrails に沿う |
-| IOS-08 | NIP-46 / 外部署名 | secret を露出せず、署名失敗時の復帰が可能 |
+| IOS-08 | NIP-46 廃止 / signer migration | 旧 NIP-46 セッションが安全に再ログインへ誘導され、secret を露出しない |
 
 ### Android 実機
 

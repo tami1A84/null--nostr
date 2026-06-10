@@ -2,13 +2,13 @@
 
 ## Summary
 
-NIP-44 is the preferred encrypted payload primitive for NIP-17 DMs, NIP-46 remote signing requests, and private list/encryption helpers where supported.
+NIP-44 is the preferred encrypted payload primitive for NIP-17 DMs, Web NIP-46 remote signing requests, and private list/encryption helpers where supported. iOS NIP-46 signer support is removed by ADR-0023.
 
 ## Current behavior
 
 - Web uses NIP-44 for encrypted DMs and NIP-46 request/response encryption.
 - Android internal/external signers include NIP-44 encrypt/decrypt APIs.
-- iOS NIP-46 remote signing uses NIP-44-encrypted request/response payloads.
+- Legacy iOS NIP-46 code used NIP-44-encrypted request/response payloads, but the iOS signer path is removed by ADR-0023.
 - Rust FFI exposes NIP-44 encryption/decryption helpers.
 - Native Talk's main MLS payload encryption is Marmot/MLS, not simply NIP-44 DMs.
 
@@ -21,7 +21,7 @@ NIP-44 is the preferred encrypted payload primitive for NIP-17 DMs, NIP-46 remot
 
 ### iOS
 
-- `ExternalSigner.swift` implements NIP-46 remote signing and uses NIP-44 encrypted content.
+- `ExternalSigner.swift` is legacy NIP-46 removal/migration debt after ADR-0023.
 - Internal signing/key storage remains Keychain-backed; avoid logging encrypted session secrets.
 
 ### Web

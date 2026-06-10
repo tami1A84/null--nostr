@@ -36,10 +36,9 @@ struct AccountSecuritySettingsView: View {
     var body: some View {
         VStack(spacing: NuruSpacing.space4) {
             profileCard
-            if !prefs.isExternalSigner {
-                securitySection
-            } else {
-                externalSignerPlaceholder
+            securitySection
+            if prefs.isExternalSigner {
+                legacyExternalSignerNotice
             }
         }
         .task {
@@ -79,7 +78,7 @@ struct AccountSecuritySettingsView: View {
                 Image(systemName: NuruIcons.lock).font(.system(size: 20)).foregroundStyle(.white)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(prefs.isExternalSigner ? "外部署名でログイン中" : "ログイン中")
+                Text("ログイン中")
                     .font(NuruFont.bodyMedium()).fontWeight(.bold).foregroundStyle(theme.textPrimary).lineLimit(1)
                 Text(npub).font(NuruFont.bodySmall()).foregroundStyle(theme.textTertiary).lineLimit(1)
             }
@@ -99,19 +98,19 @@ struct AccountSecuritySettingsView: View {
         .background(RoundedRectangle(cornerRadius: NuruSpacing.radiusXl).fill(theme.bgSecondary))
     }
 
-    private var externalSignerPlaceholder: some View {
+    private var legacyExternalSignerNotice: some View {
         HStack(spacing: NuruSpacing.space3) {
-            Image(systemName: "key.horizontal")
+            Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(theme.textSecondary)
+                .foregroundStyle(NuruColors.colorWarning)
                 .frame(width: 32, height: 32)
                 .background(theme.bgTertiary)
                 .clipShape(Circle())
             VStack(alignment: .leading, spacing: 2) {
-                Text("外部署名の設定")
+                Text("Nostr Connectログインは終了しました")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(theme.textPrimary)
-                Text("署名・秘密鍵の管理は接続中の外部アプリで行います。")
+                Text("パスキー、またはnsecでログインし直してください。")
                     .font(.system(size: 12))
                     .foregroundStyle(theme.textTertiary)
                     .lineLimit(2)

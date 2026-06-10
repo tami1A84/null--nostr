@@ -31,7 +31,7 @@
 
 - 秘密鍵を `window.*` / UserDefaults / 平文ファイル / ログに出さない。
 - 「技術的に正しいが怖い UI」を放置しない (例: 鍵バックアップ確認なしのエクスポート)。
-- 外部署名フローを iOS で NIP-55 (Amber) として実装しない (iOS は NIP-46 / [[../decisions/adr-0003-ios-external-signing-uses-nip46|ADR-0003]])。
+- 外部署名フローを iOS で NIP-55 (Amber) として実装しない。iOS NIP-46 signer も ADR-0023 で廃止し、internal nsec/Keychain と Passkey/Nosskey に整理する。
 
 ## 設計判断 (Design discipline)
 

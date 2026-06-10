@@ -2,6 +2,8 @@
 
 ## Summary
 
+> 2026-06-09 update: iOS NIP-46 signer references in this historical meeting note are superseded by ADR-0023; iOS signer paths now target internal nsec/Keychain and Passkey/Nosskey.
+
 2026-06-02 の ThemaDAY では、製品開発・エンジニアリング・デザインの3リーダー視点で、6月の Home renewal 実行方針を再同期した。
 
 ユーザー決定により、前回まで未完了扱いだった以下の前提を更新する。
@@ -37,7 +39,7 @@ Relay feed removal is complete. Future planning should not spend W23/W24 capacit
 
 ### iOS Rust FFI
 
-The iOS Rust FFI work relevant to the current release-planning discussion is complete. It remains subject to the permanent guardrails: Keychain-only private keys, NIP-46 for external signing, Passkey/Nosskey platform authorization, and no secret leakage into logs or global state.
+The iOS Rust FFI work relevant to the current release-planning discussion is complete. Historical 2026-06-02 guardrails included NIP-46 for external signing; as of ADR-0023 (2026-06-09), the current iOS signer boundary is Keychain-only private keys plus Passkey/Nosskey platform authorization, with no NIP-46 signer and no secret leakage into logs or global state.
 
 ### Home tab
 

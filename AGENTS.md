@@ -191,7 +191,7 @@ ios/NuruNuru/
 ```
 - `NostrRepository` is an `actor` — single data access point (same pattern as Android)
 - `@Observable` ViewModels (iOS 17 Observation framework, not Combine)
-- NIP-46 (Nostr Connect) replaces NIP-55 (Amber) for external signing on iOS
+- iOS signer paths are internal nsec/Keychain and Passkey/Nosskey; NIP-46 signer is removed and NIP-55/Amber is not used on iOS
 - `NuruNuruFFIBridge` protocol + `NuruNuruFFIStub` fallback — Rust FFI は Phase 1 で統合予定
 - Design must match Android pixel-for-pixel. See [ios/GUARDRAILS.md](./ios/GUARDRAILS.md)
 
@@ -237,7 +237,7 @@ android/app/src/main/kotlin/io/nurunuru/app/
 | `ui/components/ReactionEmojiPicker.kt` | Reaction picker (NIP-25). Uses shared `EmojiPickerCache` + `fetchAndCacheEmojis` from `EmojiPicker.kt`. |
 | `ui/screens/MiniAppsScreen.kt` | Mini Apps hub (search, favorites, categories, built-in/external mini apps). Account/security settings live in Home settings. |
 | `data/NostrRepository.kt` | All Nostr I/O. Notifications include Kind 6 (repost) and Kind 1 #p (reply/mention). `enrichPosts()` tracks `myLikeEventId`/`myRepostEventId` for toggle-undo. |
-| `ui/screens/MainScreen.kt` | Root navigation. Current sync target is 5 tabs: ホーム / トーク / ろくなな / タイムライン / ミニアプリ. |
+| `ui/screens/MainScreen.kt` | Root navigation. Current sync target is 4 tabs: ホーム / トーク / タイムライン / ミニアプリ. |
 
 ### Web
 
@@ -285,11 +285,11 @@ android/app/src/main/kotlin/io/nurunuru/app/
 - Full-screen modals: `.fullScreenCover` for image viewer, `.sheet` for everything else
 - `NostrRepository` must be an `actor` for thread-safe access
 - `@Observable` for all ViewModels (iOS 17+). No Combine/ObservableObject
-- NIP-46 (Nostr Connect) for external signing (no NIP-55 on iOS)
+- NIP-46 signer is removed on iOS; do not add NIP-55/Amber. Use internal nsec/Keychain or Passkey/Nosskey signer paths
 - SPM only for dependencies. Minimize third-party (prefer Apple frameworks)
 - Minimum deployment target: iOS 17.0
 - Tab bar: `.safeAreaInset(edge: .bottom, spacing: 0)` — do NOT use ZStack+ignoresSafeArea pattern
-- Bottom nav icons: house/message/67/newspaper/square.grid.2x2 (NOT person.crop.circle for home)
+- Bottom nav icons for the 4-tab target: house/message/newspaper/square.grid.2x2 (NOT person.crop.circle for home; no 67 or News root tab)
 - PostActions: no reply button. Current code shows like / repost / zap and may also show bookmark when a bookmark handler is supplied; like icon = thumbs-up (not heart).
 - Collapse text: "もっと見る" / "閉じる" (NOT "続きを読む") — matches Android exact copy
 - For pixel-perfect sync notes, see [docs/wiki/ui/android-ios-sync.md](./docs/wiki/ui/android-ios-sync.md)

@@ -4,6 +4,10 @@
 
 `Accepted` (2026-05-22) — Android verified live on device, iOS bindings + build succeeded.
 
+## Amendment — 2026-06-09 iOS signer update
+
+ADR-0023 removes the iOS NIP-46 signer path. The random per-pubkey MLS DB key derivation described here remains relevant for Android Amber and for iOS non-nsec/read-only fallback cases such as Passkey/Nosskey sessions without an app-held nsec. References to iOS NIP-46 in this ADR are historical.
+
 ## Context
 
 Issue #181 reported that the Marmot MLS SQLite storage was plaintext on
@@ -29,7 +33,7 @@ The fix has to satisfy:
 - No forensic recovery of key material from the device after-the-fact.
 - Continued ability for users to back up their identity via the **nsec**
   alone (no extra key material the user has to manage).
-- For external signers (Amber / NIP-46 bunker) where the nsec is never
+- For non-nsec signer sessions (Amber on Android, legacy NIP-46 bunker on iOS before ADR-0023, and Passkey/Nosskey read-only fallback cases) where the nsec is never
   exposed to this process, a different derivation strategy is needed.
 - Backwards compatibility: existing installs have a plaintext DB on disk
   that the new SQLCipher ctor cannot open (header mismatch).
@@ -46,7 +50,7 @@ The fix has to satisfy:
      the nsec with `info = "mdk-sqlite-db-key"` and
      `salt = "io.nurunuru.mdk.v1"`. No additional persistence — the key
      is regenerable from the nsec.
-   - **External signer** (Amber on Android, NIP-46 bunker on iOS): random
+   - **External / non-nsec signer** (Amber on Android, legacy NIP-46 bunker on iOS before ADR-0023, and Passkey/Nosskey read-only fallback cases): random
      32 bytes via `SecRandomCopyBytes` / `SecureRandom`, scoped by pubkey
      hex, persisted in Keychain
      (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`) on iOS or
@@ -114,7 +118,7 @@ The fix has to satisfy:
 - Threat surface shrinks meaningfully on lost/stolen devices.
 
 **Bad / technical debt:**
-- External-signer users (Amber / NIP-46) will lose their MLS group state
+- External/non-nsec signer users (Amber, legacy NIP-46 before ADR-0023, Passkey/Nosskey fallback cases) will lose their MLS group state
   on factory reset or reinstall — the device-bound random key is gone.
   This must be communicated in release notes (issue #181 M6 — pending).
 - One-time data loss for all existing users on the first patched build —

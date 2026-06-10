@@ -45,6 +45,7 @@ final class AppPreferences {
         static let elevenLabsApiKey   = "nurunuru_elevenlabs_api_key"
         static let elevenLabsLanguage = "nurunuru_elevenlabs_language"
         static let favoriteApps       = "nurunuru_favorite_apps"
+        static let newsSources        = "nurunuru_news_sources"
         static let externalApps       = "nurunuru_external_apps"
         static let userLat            = "nurunuru_user_lat"
         static let userLon            = "nurunuru_user_lon"
@@ -217,6 +218,19 @@ final class AppPreferences {
     var elevenLabsLanguage: String {
         get { defaults.string(forKey: Keys.elevenLabsLanguage) ?? "jpn" }
         set { defaults.set(newValue, forKey: Keys.elevenLabsLanguage) }
+    }
+
+    /// Public news source pubkeys for the News tab. Non-sensitive user preference.
+    var newsSources: [String] {
+        get {
+            guard let data = defaults.data(forKey: Keys.newsSources),
+                  let list = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+            return list
+        }
+        set {
+            let unique = Array(NSOrderedSet(array: newValue)) as? [String] ?? newValue
+            if let data = try? JSONEncoder().encode(unique) { defaults.set(data, forKey: Keys.newsSources) }
+        }
     }
 
     /// IDs of favourite mini-apps (shown in マイミニアプリ horizontal row).

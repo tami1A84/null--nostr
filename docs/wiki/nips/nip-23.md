@@ -2,13 +2,14 @@
 
 ## Summary
 
-NIP-23 long-form articles use kind `30023`. null--nostr fetches and renders long-form posts alongside other timeline content where platform code supports it.
+NIP-23 long-form articles use kind 30023. null--nostr fetches and renders long-form posts in timeline contexts and now uses published long-form articles as the News tab content source.
 
 ## Current behavior
 
 - `NostrKind.longForm` / `LONG_FORM` is `30023`.
 - Android fast timeline paths include long-form events with text notes, short video, and reposts.
 - iOS has a dedicated `LongFormPostItem` renderer.
+- News fetches kind 30023 only; kind 30024 drafts are intentionally hidden from News.
 - Long-form support is read/render oriented in the documented code paths; publishing details should be checked before claiming composer support.
 
 ## Platform notes

@@ -7,7 +7,7 @@ import SwiftUI
 /// Flow:
 ///   1. Initial → shows 新規登録 / ログイン buttons
 ///   2. ログイン tapped → shows nsec input + ログインボタン
-///   3. その他のログイン方法 → NIP-46 Nostr Connect button (collapsible)
+///   3. パスキーでログイン
 ///   4. 新規登録 → SignUpSheet
 struct LoginView: View {
 
@@ -18,8 +18,6 @@ struct LoginView: View {
     @State private var showKey            = false
     @State private var showSignUp         = false
     @State private var showNsecLogin      = false
-    @State private var showOtherMethods   = false
-    @State private var showNostrConnect   = false
     @State private var showTermsAgreement = false
     @State private var pendingTermsAction: TermsStartAction?
     @State private var logoScale: CGFloat = 0.95
@@ -46,10 +44,6 @@ struct LoginView: View {
         }
         .sheet(isPresented: $showSignUp) {
             SignUpSheet(isPresented: $showSignUp)
-                .environment(viewModel)
-        }
-        .sheet(isPresented: $showNostrConnect) {
-            NostrConnectSheet(isPresented: $showNostrConnect)
                 .environment(viewModel)
         }
         .sheet(isPresented: $showTermsAgreement) {
@@ -174,6 +168,7 @@ struct LoginView: View {
                 }
                 if let msg = errorMessage {
                     inlineErrorMessage(msg)
+                    legacyExternalSignerMigrationButton
                 }
                 loginToggleButton
             }
@@ -226,6 +221,24 @@ struct LoginView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, NuruSpacing.space2)
             .transition(.opacity)
+    }
+
+
+    @ViewBuilder
+    private var legacyExternalSignerMigrationButton: some View {
+        if viewModel.prefs.isExternalSigner {
+            Button {
+                viewModel.clearLegacyExternalSignerSession()
+            } label: {
+                Text("旧ログイン情報を消してやり直す")
+                    .font(NuruFont.bodySmall())
+                    .foregroundStyle(theme.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, NuruSpacing.space2)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("旧Nostr Connectログイン情報を消してやり直す")
+        }
     }
 
     private var loginToggleButton: some View {
@@ -306,14 +319,10 @@ struct LoginView: View {
             // Login button
             loginButton
 
-            // Collapsible: その他のログイン方法
-            otherMethodsSection
-
             // Cancel
             Button("キャンセル") {
                 withAnimation(.easeInOut(duration: NuruSpacing.durationNormal)) {
                     showNsecLogin = false
-                    showOtherMethods = false
                     nsecInput = ""
                     viewModel.clearError()
                 }
@@ -381,52 +390,6 @@ struct LoginView: View {
         }
         .buttonStyle(NuruPrimaryButtonStyle(isDisabled: nsecInput.isEmpty || isLoading))
         .disabled(nsecInput.isEmpty || isLoading)
-    }
-
-    // MARK: - Other Login Methods (Collapsible)
-
-    private var otherMethodsSection: some View {
-        VStack(spacing: NuruSpacing.space3) {
-            Button {
-                withAnimation(.easeInOut(duration: NuruSpacing.durationNormal)) {
-                    showOtherMethods.toggle()
-                }
-            } label: {
-                HStack(spacing: NuruSpacing.space2) {
-                    Text("その他のログイン方法")
-                        .font(NuruFont.bodyMedium())
-                        .foregroundStyle(theme.textTertiary)
-                    Image(systemName: showOtherMethods ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 14))
-                        .foregroundStyle(theme.textTertiary)
-                }
-                .frame(maxWidth: .infinity)
-            }
-
-            if showOtherMethods {
-                // NIP-46 Nostr Connect button (iOS equivalent of Amber/NIP-55)
-                nostrConnectButton
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-    }
-
-    private var nostrConnectButton: some View {
-        Button {
-            showNostrConnect = true
-        } label: {
-            HStack(spacing: NuruSpacing.space3) {
-                Image(systemName: "network")
-                    .font(.system(size: NuruSpacing.iconMd))
-                    .foregroundStyle(NuruColors.lineGreen)
-                Text("Nostr Connectでログイン")
-                    .font(NuruFont.buttonMedium())
-                    .foregroundStyle(theme.textPrimary)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-        }
-        .buttonStyle(NuruOutlineButtonStyle(theme: theme))
     }
 
     // MARK: - Footer
@@ -1628,201 +1591,6 @@ private struct SignUpIconBox: View {
             Image(systemName: systemName)
                 .font(.system(size: 28))
                 .foregroundStyle(iconColor)
-        }
-    }
-}
-
-// MARK: - Nostr Connect Sheet (NIP-46)
-
-struct NostrConnectSheet: View {
-    @Binding var isPresented: Bool
-    @Environment(AuthViewModel.self) private var viewModel
-    @Environment(\.nuruTheme) private var theme
-
-    @State private var bunkerInput = ""
-    @State private var connectState: ConnectState = .input
-    @State private var errorMessage: String?
-
-    private enum ConnectState {
-        case input
-        case connecting
-        case success(pubkeyHex: String)
-    }
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                theme.bgPrimary.ignoresSafeArea()
-
-                VStack(spacing: NuruSpacing.space5) {
-                    switch connectState {
-                    case .input:
-                        inputView
-                    case .connecting:
-                        connectingView
-                    case .success:
-                        successView
-                    }
-                }
-                .padding(NuruSpacing.space5)
-            }
-            .navigationTitle("Nostr Connect")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") {
-                        isPresented = false
-                    }
-                    .foregroundStyle(theme.textSecondary)
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-
-    // MARK: - Input View
-
-    private var inputView: some View {
-        VStack(spacing: NuruSpacing.space5) {
-            Image(systemName: "network")
-                .font(.system(size: 48))
-                .foregroundStyle(NuruColors.lineGreen)
-
-            Text("リモートサイナーに接続")
-                .font(NuruFont.titleMedium())
-                .foregroundStyle(theme.textPrimary)
-
-            Text("Nostr Connectに対応したアプリ（nsecBunker等）からbunker:// URIを取得してください。")
-                .font(NuruFont.bodySmall())
-                .foregroundStyle(theme.textSecondary)
-                .multilineTextAlignment(.center)
-
-            // URI input
-            VStack(alignment: .leading, spacing: NuruSpacing.space2) {
-                TextField("bunker://...", text: $bunkerInput)
-                    .font(NuruFont.bodyMedium())
-                    .foregroundStyle(theme.textPrimary)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .padding(NuruSpacing.space4)
-                    .background(theme.bgSecondary)
-                    .cornerRadius(NuruSpacing.radiusXl)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: NuruSpacing.radiusXl)
-                            .stroke(
-                                errorMessage != nil ? NuruColors.colorError
-                                    : (bunkerInput.isEmpty ? theme.borderColor : NuruColors.lineGreen),
-                                lineWidth: 1.5
-                            )
-                    )
-
-                if let err = errorMessage {
-                    Text(err)
-                        .font(NuruFont.bodySmall())
-                        .foregroundStyle(NuruColors.colorError)
-                        .padding(.horizontal, NuruSpacing.space2)
-                }
-            }
-
-            // Paste from clipboard
-            Button {
-                if let clipboardText = UIPasteboard.general.string {
-                    bunkerInput = clipboardText
-                }
-            } label: {
-                HStack(spacing: NuruSpacing.space2) {
-                    Image(systemName: "doc.on.clipboard")
-                        .font(.system(size: 16))
-                    Text("クリップボードから貼り付け")
-                        .font(NuruFont.bodySmall())
-                }
-                .foregroundStyle(NuruColors.lineGreen)
-            }
-
-            // Connect button
-            Button {
-                Task { await startConnect() }
-            } label: {
-                Text("接続する")
-                    .font(NuruFont.buttonMedium())
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-            }
-            .buttonStyle(NuruPrimaryButtonStyle(isDisabled: bunkerInput.isEmpty))
-            .disabled(bunkerInput.isEmpty)
-        }
-    }
-
-    // MARK: - Connecting View
-
-    private var connectingView: some View {
-        VStack(spacing: NuruSpacing.space5) {
-            ProgressView()
-                .progressViewStyle(.circular)
-                .scaleEffect(1.5)
-                .tint(NuruColors.lineGreen)
-
-            Text("接続中...")
-                .font(NuruFont.titleMedium())
-                .foregroundStyle(theme.textPrimary)
-
-            Text("リモートサイナーからの承認を待っています。\nサイナーアプリで接続を承認してください。")
-                .font(NuruFont.bodySmall())
-                .foregroundStyle(theme.textSecondary)
-                .multilineTextAlignment(.center)
-        }
-    }
-
-    // MARK: - Success View
-
-    private var successView: some View {
-        VStack(spacing: NuruSpacing.space5) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(NuruColors.lineGreen)
-
-            Text("接続完了")
-                .font(NuruFont.titleMedium())
-                .foregroundStyle(theme.textPrimary)
-
-            if case .success(let pubkeyHex) = connectState {
-                let npub = NostrKeyUtils.shortenPubkey(pubkeyHex)
-                Text(npub)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(theme.textSecondary)
-                    .padding(NuruSpacing.space3)
-                    .background(theme.bgSecondary)
-                    .cornerRadius(NuruSpacing.radiusMd)
-            }
-
-            Button {
-                if case .success(let pubkeyHex) = connectState {
-                    viewModel.loginWithExternalSigner(pubkeyHex: pubkeyHex)
-                }
-                isPresented = false
-            } label: {
-                Text("ログインする")
-                    .font(NuruFont.buttonMedium())
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-            }
-            .buttonStyle(NuruPrimaryButtonStyle())
-        }
-    }
-
-    // MARK: - Connect Logic
-
-    @MainActor
-    private func startConnect() async {
-        errorMessage = nil
-        connectState = .connecting
-
-        do {
-            let pubkeyHex = try await viewModel.connectExternalSigner(uri: bunkerInput)
-            connectState = .success(pubkeyHex: pubkeyHex)
-        } catch {
-            connectState = .input
-            errorMessage = error.localizedDescription
         }
     }
 }

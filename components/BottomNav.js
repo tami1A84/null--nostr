@@ -41,8 +41,17 @@ const tabs = [
     )
   },
   {
+    id: 'news',
+    label: 'ニュース',
+    icon: (active) => (
+      <svg className="w-6 h-6" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 1.8}>
+        {active ? <path d="M4 4h14a2 2 0 012 2v14l-4-2H4a2 2 0 01-2-2V6a2 2 0 012-2zm3 4v2h10V8H7zm0 4v2h8v-2H7z"/> : <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h14a2 2 0 012 2v14l-4-2H4a2 2 0 01-2-2V6a2 2 0 012-2zM7 8h10M7 12h8"/>}
+      </svg>
+    )
+  },
+  {
     id: 'miniapp',
-    label: 'ミニアプリ',
+    label: 'ミニ',
     icon: (active) => (
       <svg className="w-6 h-6" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={active ? 0 : 1.8}>
         {active ? (

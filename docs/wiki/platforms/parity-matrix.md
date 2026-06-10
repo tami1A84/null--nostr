@@ -9,6 +9,7 @@ This matrix tracks broad feature and protocol parity across Web, Android, iOS, a
 | Area | Web | Android | iOS | Notes |
 |---|---|---|---|---|
 | Timeline | Yes | Yes | Yes | Native timelines include follow/recommended flows; rendering details differ by platform. |
+| News | Yes | Yes | Yes | NIP-23 kind 30023 articles, null.news.category category filtering, source settings, no ranking tab. |
 | Post composer | Yes | Yes | Yes | 140-char behavior is strict on native; Web collapse threshold is also 140 with links excluded from count. |
 | Target relay publish | Partial | Yes | Yes | Android/iOS composer/repository support explicit target relays; Web has relay list helpers and generic publish. |
 | NIP-70 protected posts | Helpers | Yes | Yes | `['-']` tag before signing. |
@@ -21,7 +22,7 @@ This matrix tracks broad feature and protocol parity across Web, Android, iOS, a
 | Notifications | Partial | Yes | Yes | Android/iOS have notification sheets/modals; exact coverage differs. |
 | Search | Yes | Yes | Yes | Android has advanced parser/routing; Web/iOS include search helpers. |
 | Talk / messaging | NIP-17 helpers | Marmot MLS | Marmot MLS | Do not confuse Web NIP-17 helper support with native Talk behavior. |
-| External signing | NIP-07 / NIP-46 / Amber bridge helpers | NIP-55 Amber | NIP-46 | iOS does not use NIP-55. |
+| External signing | NIP-07 / NIP-46 / Amber bridge helpers | NIP-55 Amber | Removed remote signer; internal nsec + Passkey/Nosskey | iOS uses no NIP-46 signer and no NIP-55. |
 | Relay management | Yes | Yes | Yes | NIP-65/outbox helpers and settings exist; connection pooling strongest on Web. |
 | ろくなな short video | Partial/constants | Yes | Yes | kind 34236 / OpenVine-compatible flow. |
 
@@ -30,7 +31,7 @@ This matrix tracks broad feature and protocol parity across Web, Android, iOS, a
 | Protocol | Web | Android | iOS | Rust |
 |---|---|---|---|---|
 | NIP-17 | Active helpers | Legacy/native boundary | Legacy/native boundary | Legacy helpers |
-| NIP-46 | Yes | Not main native path | Yes | Supports unsigned/publish primitives |
+| NIP-46 | Yes | Not main native path | Removed as iOS signer | Rust supports unsigned/publish primitives; Web may retain NIP-46. |
 | NIP-55 | Amber bridge helpers | Yes | No | N/A |
 | NIP-57 | Yes | Yes | Yes | Filters/helpers |
 | NIP-65 | Yes | Yes | Yes | Filters/helpers |

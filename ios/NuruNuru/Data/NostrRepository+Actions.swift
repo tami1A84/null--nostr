@@ -6,7 +6,7 @@ import Foundation
 /// 制約:
 ///   - 140 文字制限は UI 層 (PostSheet) で強制。Repository は制限を課さない。
 ///   - NIP-70 protection: nip70Protected = true のとき ["-"] タグを付与。
-///   - NIP-46 外部サイナー: create_unsigned_* → signUnsignedEventJson → publish_raw_event。
+///   - Passkey/Nosskey: Rustで未署名イベントを作り、platform signerで署名してpublish_raw_event。
 extension NostrRepository {
 
     // MARK: - Publish Note (Kind 1)
@@ -172,14 +172,15 @@ extension NostrRepository {
     ///   - eventId:      リアクション対象のイベント ID。
     ///   - authorPubkey: 対象イベントの作者 pubkey。
     ///   - emoji:        絵文字またはカスタム絵文字 (デフォルト "+")。
-    func publishReaction(to eventId: String, authorPubkey: String, content: String = "+", emojiUrl: String? = nil) async throws {
+    @discardableResult
+    func publishReaction(to eventId: String, authorPubkey: String, content: String = "+", emojiUrl: String? = nil) async throws -> NostrEvent {
         var tags: [[String]] = [["e", eventId], ["p", authorPubkey]]
         // NIP-30 カスタム絵文字: ":shortcode:" 形式の content + ["emoji", shortcode, url] タグ
         if let url = emojiUrl, content.hasPrefix(":") && content.hasSuffix(":") {
             let shortcode = String(content.dropFirst().dropLast())
             tags.append(["emoji", shortcode, url])
         }
-        try await publishEvent(kind: NostrKind.reaction, tags: tags, content: content)
+        return try await publishEventAndReturnSigned(kind: NostrKind.reaction, tags: tags, content: content)
     }
 
     /// リポストを発行する (kind 6, NIP-18)。
@@ -346,8 +347,7 @@ extension NostrRepository {
     /// 未署名イベント JSON (Rust FFI `create_unsigned_*` が返す形式) に内部署名を施して返す。
     ///
     /// - 内部サイナー: `InternalSigner` で秘密鍵による Schnorr 署名。
-    /// - 外部サイナー (NIP-46): 本メソッドは内部署名で代用する。
-    ///   NIP-46 実装完了後は外部サイナー経由に差し替えること。
+    /// - Passkey/Nosskey: platform signer側で署名する。iOS NIP-46 signerは廃止済み。
     ///
     /// - Parameter unsignedJson: Rust FFI `create_unsigned_*` が生成した未署名イベント JSON。
     /// - Returns: 署名済みイベント JSON (リレーに発行可能な形式)。

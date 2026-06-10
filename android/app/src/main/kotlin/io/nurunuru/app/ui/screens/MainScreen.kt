@@ -44,7 +44,8 @@ enum class BottomTab(val label: String) {
     HOME("ホーム"),
     TALK("トーク"),
     TIMELINE("タイムライン"),
-    MINIAPP("ミニアプリ")
+    NEWS("ニュース"),
+    MINIAPP("ミニ")
 }
 
 @Composable
@@ -53,6 +54,7 @@ fun BottomTab.getIcon(isSelected: Boolean): ImageVector {
         BottomTab.HOME -> io.nurunuru.app.ui.icons.NuruIcons.Home(isSelected)
         BottomTab.TALK -> io.nurunuru.app.ui.icons.NuruIcons.Talk(isSelected)
         BottomTab.TIMELINE -> io.nurunuru.app.ui.icons.NuruIcons.Timeline(isSelected)
+        BottomTab.NEWS -> Icons.Default.Article
         BottomTab.MINIAPP -> io.nurunuru.app.ui.icons.NuruIcons.Grid(isSelected)
     }
 }
@@ -154,6 +156,11 @@ fun MainScreen(
         key = "connection-$pubkeyHex-${app.prefs.loginMethod ?: "unknown"}",
         factory = ConnectionViewModel.Factory(context.applicationContext, activeRelays)
     )
+    val newsVM: NewsViewModel = viewModel(
+        NewsViewModel::class.java,
+        key = "news-$pubkeyHex-${app.prefs.loginMethod ?: "unknown"}",
+        factory = NewsViewModel.Factory(repository, app.prefs)
+    )
 
     fun performLogout() {
         // Reset in-process UI/session state before AuthState switches to LoggedOut.
@@ -234,6 +241,7 @@ fun MainScreen(
                                                 BottomTab.TIMELINE -> timelineVM.refresh()
                                                 BottomTab.TALK -> talkVM.loadGroups()
                                                 BottomTab.HOME -> homeVM.refresh()
+                                                BottomTab.NEWS -> newsVM.refresh()
                                                 BottomTab.MINIAPP -> {}
                                             }
                                         }
@@ -341,6 +349,16 @@ fun MainScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 TalkScreen(viewModel = talkVM, myPubkeyHex = pubkeyHex, repository = repository)
+            }
+
+            // ── NEWS ─────────────────────────────────────────────────────────
+            androidx.compose.animation.AnimatedVisibility(
+                visible = activeTab == BottomTab.NEWS,
+                enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(120)),
+                exit  = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                NewsScreen(viewModel = newsVM)
             }
 
             // ── MINIAPP (Settings) — 軽量なため都度レンダリングで問題なし ────

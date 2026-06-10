@@ -90,7 +90,7 @@ Android remains write-capable through `PostModal.kt` and repository publish path
 
 ### iOS
 
-iOS remains write-capable through `PostSheet.swift` and repository publish paths. Key material stays in Keychain / platform signer flows; iOS external signing remains NIP-46.
+iOS remains write-capable through `PostSheet.swift` and repository publish paths. Key material stays in Keychain / supported platform signer flows; ADR-0023 removes the iOS NIP-46 signer path and NIP-55 remains unsupported.
 
 ## Open questions
 

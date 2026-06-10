@@ -226,20 +226,16 @@ extension NostrRepository {
             return
         }
 
-        // Save full NIP-65 relay list (used by getSavedRelayUrls)
+        // Save full NIP-65 relay list for explicit relay/settings surfaces, but do not
+        // rewrite selectedRelays here. Rewriting selectedRelays during background sync
+        // made later generic connect calls fan out to 10+ relays after startup.
         prefs.nip65Relays = relays
 
         let writeUrls = relays
             .filter { $0.permission == .write || $0.permission == .readWrite }
             .map(\.url)
 
-        guard !writeUrls.isEmpty else { return }
-
-        prefs.selectedRelays = writeUrls
-        if let first = writeUrls.first, first != prefs.mainRelay {
-            prefs.mainRelay = first
-        }
-        AppLogger.log("NIP65", "Synced \(writeUrls.count) write relays, \(relays.count) total")
+        AppLogger.log("NIP65", "Synced NIP-65 metadata write=\(writeUrls.count) total=\(relays.count); selectedRelays unchanged")
     }
 
     // MARK: - Update Profile (Kind 0)

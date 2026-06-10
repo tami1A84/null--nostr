@@ -87,7 +87,6 @@ enum EngagementWeight {
 enum ErrorMessages {
     static let noSigningMethod     = "署名機能が利用できません"
     static let signingFailed       = "署名に失敗しました"
-    static let bunkerSigningFailed = "Nostr Connectでの署名に失敗しました。再接続してください。"
     static let connectionFailed    = "接続に失敗しました"
     static let requestTimeout      = "リクエストがタイムアウトしました"
     static let statusOffline       = "オフライン"

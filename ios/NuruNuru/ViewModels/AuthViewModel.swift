@@ -43,7 +43,6 @@ final class AuthViewModel {
 
     let keyManager: SecureKeyManager
     let prefs: AppPreferences
-    let externalSigner: ExternalSigner
     /// Passkey / nosskey "PRF direct" manager. Hidden behind `@MainActor` because
     /// `ASAuthorizationController` is UIKit-bound. Only used on iOS 18+.
     let nosskeyManager: NosskeyManager
@@ -57,11 +56,9 @@ final class AuthViewModel {
 
     init(keyManager: SecureKeyManager = SecureKeyManager(),
          prefs: AppPreferences = AppPreferences(),
-         externalSigner: ExternalSigner = ExternalSigner(),
          nosskeyManager: NosskeyManager? = nil) {
         self.keyManager = keyManager
         self.prefs = prefs
-        self.externalSigner = externalSigner
         // NosskeyManager.init is @MainActor — fall back to MainActor.assumeIsolated
         // when no instance is injected. We're called from the app start-up path
         // which is already main-thread.
@@ -83,7 +80,11 @@ final class AuthViewModel {
         }
 
         if prefs.isExternalSigner {
-            state = .loggedIn(pubkeyHex: pubkey)
+            // ADR-0023: iOS NIP-46 / Nostr Connect signer support was removed.
+            // Do not silently keep a legacy remote-signer session write-capable.
+            // Keep the stored pubkey/flag until the user explicitly logs in again
+            // or logs out, so migration copy can be shown safely.
+            state = .error("Nostr Connectログインは終了しました。パスキー、またはnsecでログインし直してください。")
             return
         }
 
@@ -252,8 +253,7 @@ final class AuthViewModel {
             tempPrefs.mainRelay = tempPrefs.selectedRelays.first ?? "wss://yabu.me"
             let repo = NostrRepository(
                 keyManager: keyManager,
-                prefs: tempPrefs,
-                externalSigner: prefs.isExternalSigner ? externalSigner : nil
+                prefs: tempPrefs
             )
             await repo.client.connect(relayUrls: tempPrefs.selectedRelays)
             try? await Task.sleep(nanoseconds: 1_200_000_000)
@@ -274,8 +274,7 @@ final class AuthViewModel {
             let repo = NostrRepository(
                 keyManager: keyManager,
                 prefs: tempPrefs,
-                signer: await currentSessionSigner(),
-                externalSigner: prefs.isExternalSigner ? externalSigner : nil
+                signer: await currentSessionSigner()
             )
             await repo.client.connect(relayUrls: tempPrefs.selectedRelays)
             try? await Task.sleep(nanoseconds: 1_200_000_000)
@@ -423,21 +422,18 @@ final class AuthViewModel {
         return nil  // caller will default to InternalSigner
     }
 
-    // MARK: - NIP-46 Nostr Connect
+    // MARK: - Legacy Signer Migration
 
-    /// Connect to a remote signer via bunker:// URI.
-    /// Returns the user's public key hex on success.
-    func connectExternalSigner(uri: String) async throws -> String {
-        let pubkeyHex = try await externalSigner.connect(uri: uri)
-        return pubkeyHex
-    }
-
-    /// Complete login after successful NIP-46 connection.
-    func loginWithExternalSigner(pubkeyHex: String) {
-        NostrRepository.resetSharedRustFfiForAccountSwitch()
-        prefs.publicKeyHex = pubkeyHex
-        prefs.isExternalSigner = true
-        state = .loggedIn(pubkeyHex: pubkeyHex)
+    /// Clear the old iOS NIP-46 session after the user has acknowledged the
+    /// migration or chosen a new login path. This never creates a replacement
+    /// account and never attempts to export remote-signer material.
+    func clearLegacyExternalSignerSession() {
+        if prefs.isExternalSigner {
+            NostrRepository.resetSharedRustFfiForAccountSwitch()
+            prefs.isExternalSigner = false
+            prefs.publicKeyHex = nil
+            state = .loggedOut
+        }
     }
 
     // MARK: - Deep Link Login
@@ -481,9 +477,6 @@ final class AuthViewModel {
     // MARK: - Logout
 
     func logout() {
-        Task {
-            await externalSigner.disconnect()
-        }
         // Issue #181: drop the per-pubkey SQLCipher key from Keychain
         // *before* `prefs.clear()` wipes the pubkey we need to scope it.
         // Internal-signer path is deterministic (HKDF over nsec) so no
@@ -545,8 +538,7 @@ final class AuthViewModel {
             let repo = NostrRepository(
                 keyManager: tempKeyManager,
                 prefs: tempPrefs,
-                signer: sessionSigner,
-                externalSigner: prefs.isExternalSigner ? externalSigner : nil
+                signer: sessionSigner
             )
 
             // 接続 — 一時リポジトリの client に直接接続
@@ -653,8 +645,7 @@ final class AuthViewModel {
             let repo = NostrRepository(
                 keyManager: keyManager,
                 prefs: tempPrefs,
-                signer: sessionSigner,
-                externalSigner: prefs.isExternalSigner ? externalSigner : nil
+                signer: sessionSigner
             )
 
             await repo.client.connect(relayUrls: targetRelayUrls)
